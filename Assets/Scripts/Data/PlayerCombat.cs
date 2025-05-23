@@ -17,15 +17,13 @@ public class PlayerCombat : MonoBehaviour
     public Vector2 targetPos = new Vector2(3.74f, -2.39f);
 
     [Header("Defensor")]
-    public Animator defenderAnimator;
+    [Tooltip("AnimationController do personagem que sofrerá o dano")]
+    public AnimationController defenderAnimationController;
 
     private void Start()
     {
-        // Posiciona no ponto inicial
         transform.position = startPos;
-        // Já equipa a primeira arma (índice 0)
         weaponHandler?.EquipNext();
-        // Mostra Idle até o turno iniciar
         animationController?.SetIdle(true);
     }
 
@@ -39,33 +37,38 @@ public class PlayerCombat : MonoBehaviour
         if (animationController != null && movement != null)
             yield return animationController.PlayRun(targetPos, settings.runSpeed, movement);
 
-        // 3) Slashing
+        // 3) Slashing + agendamento do Hurt
         if (animationController != null)
-            yield return animationController.PlaySlash(settings.slashingDuration);
-
-        // 4) Defensor sofre Hurt
-        if (defenderAnimator != null)
         {
-            defenderAnimator.SetBool("Hurt", true);
-            yield return new WaitForSeconds(settings.hurtDuration);
-            defenderAnimator.SetBool("Hurt", false);
+            // dispara o Hurt no defensor após o atraso
+            if (defenderAnimationController != null)
+                StartCoroutine(DelayedHurt());
+
+            // dispara o Slashing e aguarda o término
+            yield return animationController.PlaySlash(settings.slashingDuration);
         }
 
-        // 5) Delay antes do salto
+        // 4) Delay antes do salto
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
 
-        // 6) JumpStart
+        // 5) JumpStart
         if (animationController != null)
             yield return animationController.PlayJumpStart(settings.jumpStartDuration);
 
-        // 7) Salto em arco de volta ao startPos
+        // 6) Salto em arco de volta
         if (movement != null)
             yield return movement.JumpTo(targetPos, startPos, settings.runSpeed, settings.jumpHeight);
 
-        // 8) Prepara próxima arma (próximo índice) antes do próximo turno
+        // 7) Prepara próxima arma
         weaponHandler?.EquipNext();
 
-        // 9) Volta ao Idle aguardando próximo turno
+        // 8) Idle aguardando próximo turno
         animationController?.SetIdle(true);
+    }
+
+    private IEnumerator DelayedHurt()
+    {
+        yield return new WaitForSeconds(settings.hurtTriggerDelay);
+        yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
     }
 }
