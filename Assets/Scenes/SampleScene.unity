@@ -127,11 +127,6 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 1154517427754006, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
   m_PrefabInstance: {fileID: 1294674956}
   m_PrefabAsset: {fileID: 0}
---- !u!95 &45243665 stripped
-Animator:
-  m_CorrespondingSourceObject: {fileID: 95291653629502288, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
-  m_PrefabInstance: {fileID: 1294674956}
-  m_PrefabAsset: {fileID: 0}
 --- !u!114 &45243667
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -196,7 +191,7 @@ MonoBehaviour:
   settings: {fileID: 11400000, guid: eede40793fdb00f41a0a71939dda4524, type: 2}
   startPos: {x: 6.3, y: -2.39}
   targetPos: {x: -3.63, y: -2.39}
-  defenderAnimator: {fileID: 45243665}
+  defenderAnimationController: {fileID: 1571555331}
 --- !u!114 &45243677
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -780,11 +775,6 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 534406163}
   m_SourcePrefab: {fileID: 100100000, guid: 927828765a1dfce40ad37a9e0b167b7b, type: 3}
---- !u!95 &1571555325 stripped
-Animator:
-  m_CorrespondingSourceObject: {fileID: 95721117640942010, guid: 927828765a1dfce40ad37a9e0b167b7b, type: 3}
-  m_PrefabInstance: {fileID: 1571555324}
-  m_PrefabAsset: {fileID: 0}
 --- !u!114 &1571555331
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -827,7 +817,7 @@ MonoBehaviour:
   settings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   startPos: {x: -6.3, y: -2.39}
   targetPos: {x: 3.74, y: -2.39}
-  defenderAnimator: {fileID: 1571555325}
+  defenderAnimationController: {fileID: 45243677}
 --- !u!1 &1976368726
 GameObject:
   m_ObjectHideFlags: 0

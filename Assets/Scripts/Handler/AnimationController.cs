@@ -7,6 +7,7 @@ public class AnimationController : MonoBehaviour
     private Animator anim;
 
     private void Awake() => anim = GetComponent<Animator>();
+
     public IEnumerator PlayIdle(float duration)
     {
         anim.SetBool("Idle", true);
@@ -23,26 +24,30 @@ public class AnimationController : MonoBehaviour
 
     public IEnumerator PlaySlash(float duration)
     {
-        anim.SetTrigger("Slashing");          // dispara uma vez
+        anim.SetTrigger("Slashing");
         yield return new WaitForSeconds(duration);
-        anim.ResetTrigger("Slashing");        // garante que o trigger seja limpo
+        anim.ResetTrigger("Slashing");
     }
 
-    /// <summary>
-    /// Ativa o bool JumpStart por `duration` segundos.
-    /// </summary>
     public IEnumerator PlayJumpStart(float duration)
     {
         anim.SetBool("JumpStart", true);
         yield return new WaitForSeconds(duration);
         anim.SetBool("JumpStart", false);
     }
+
     /// <summary>
-    /// Ajusta diretamente o parâmetro Idle (útil para estados de espera).
+    /// Dispara uma única vez a animação de Hurt (Trigger) e aguarda a duração.
     /// </summary>
+    public IEnumerator PlayHurt(float duration)
+    {
+        Debug.Log($"[PlayHurt] Triggering Hurt for {duration}s");  // debug
+        anim.SetTrigger("Hurt");
+        yield return new WaitForSeconds(duration);
+    }
+
     public void SetIdle(bool state)
     {
         anim.SetBool("Idle", state);
     }
-
 }
