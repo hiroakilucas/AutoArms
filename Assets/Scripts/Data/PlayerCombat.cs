@@ -16,10 +16,16 @@ public class PlayerCombat : MonoBehaviour
     public Vector2 startPos = new Vector2(-6.3f, -2.39f);
     public Vector2 targetPos = new Vector2(3.74f, -2.39f);
 
+    public Animator animator;
+
     [Header("Defensor")]
     [Tooltip("AnimationController do personagem que sofrerá o dano")]
     public AnimationController defenderAnimationController;
-
+    private void Awake()
+    {
+        weaponHandler = GetComponent<WeaponHandler>();
+        animator = GetComponent<Animator>();
+    }
     private void Start()
     {
         transform.position = startPos;
@@ -37,15 +43,30 @@ public class PlayerCombat : MonoBehaviour
         if (animationController != null && movement != null)
             yield return animationController.PlayRun(targetPos, settings.runSpeed, movement);
 
-        // 3) Slashing + agendamento do Hurt
+        // 3) Slashing — escolhe trigger conforme arma
         if (animationController != null)
         {
-            // dispara o Hurt no defensor após o atraso
+            switch (weaponHandler.currentType)
+            {
+                case WeaponType.Sword:
+                    animator.SetTrigger("Slashing");
+                    break;
+                case WeaponType.Heavy:
+                    animator.SetTrigger("SlashingHeavy");
+                    break;
+                case WeaponType.Dagger:
+                    animator.SetTrigger("SlashingDagger");
+                    break;
+            }
+
+            // agenda Hurt no defensor
             if (defenderAnimationController != null)
                 StartCoroutine(DelayedHurt());
 
-            // dispara o Slashing e aguarda o término
-            yield return animationController.PlaySlash(settings.slashingDuration);
+            // aguarda duração genérica (ou use settings.slashingDuration)
+            yield return new WaitForSeconds(settings.slashingDuration);
+
+            // opcional: limpar trigger (não obrigatório com Trigger)
         }
 
         // 4) Delay antes do salto
