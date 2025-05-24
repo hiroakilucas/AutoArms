@@ -7,8 +7,8 @@ public class WeaponHandler : MonoBehaviour
     public Transform handBone;
     public Vector3 positionOffset, rotationOffset;
     public float zOffset;
-    public string sortingLayer;
-    public int sortingOrder;
+    public string sortingLayer = "Weapon";
+    public int sortingOrder = 0;
 
     private GameObject current;
 
