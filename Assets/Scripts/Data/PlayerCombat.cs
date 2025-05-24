@@ -81,7 +81,7 @@ public class PlayerCombat : MonoBehaviour
             yield return movement.JumpTo(targetPos, startPos, settings.runSpeed, settings.jumpHeight);
 
         // 7) Prepara próxima arma
-        //weaponHandler?.EquipNext();
+        weaponHandler?.EquipNext();
 
         // 8) Idle aguardando próximo turno
         animationController?.SetIdle(true);
