@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Animator))]
 public class PlayerCombat : MonoBehaviour
@@ -9,7 +10,7 @@ public class PlayerCombat : MonoBehaviour
     public MovementController movement;
     public AnimationController animationController;
 
-    [Header("Configurações de Ataque (tempos e velocidades)")]
+    [Header("Configurações de Ataque")]
     public AttackSettings settings;
 
     [Header("Posições de Turno")]
@@ -17,58 +18,112 @@ public class PlayerCombat : MonoBehaviour
     public Vector2 targetPos = new Vector2(3.74f, -2.39f);
 
     [Header("Defensor")]
-    [Tooltip("AnimationController do personagem que sofrerá o dano")]
+    public PlayerCombat defender;
     public AnimationController defenderAnimationController;
+
+    private Animator animator;
+    private List<SpriteRenderer> allRenderers;
+
+    // para restaurar após o turno
+    private string defaultCharLayer;
+    private int defaultCharOrder;
+
+    private void Awake()
+    {
+        animator = GetComponent<Animator>();
+        weaponHandler = GetComponent<WeaponHandler>();
+
+        // captura todos os SpriteRenderers deste personagem
+        allRenderers = new List<SpriteRenderer>(GetComponentsInChildren<SpriteRenderer>());
+
+        // guarda camada e order originais
+        if (allRenderers.Count > 0)
+        {
+            defaultCharLayer = allRenderers[0].sortingLayerName;
+            defaultCharOrder = allRenderers[0].sortingOrder;
+        }
+    }
 
     private void Start()
     {
+        // 1) Posição inicial e arma já equipada
         transform.position = startPos;
-        weaponHandler?.EquipNext();
-        animationController?.SetIdle(true);
+        weaponHandler.EquipNext();
+
+        // 2) Garante que a arma recém-instanciada já fique em Weapons/0
+        SetWeaponLayerAndOrder(weaponHandler, "Weapons", 0);
+
+        // 3) Idle inicial
+        animationController.SetIdle(true);
     }
 
     public IEnumerator AttackRoutine()
     {
-        // 1) Idle
-        if (animationController != null)
-            yield return animationController.PlayIdle(settings.idleDuration);
+        // 1) Prepara renderização do turno
+        SetCharacterLayerAndOrder(allRenderers, "Characters", 4);
+        SetWeaponLayerAndOrder(weaponHandler, "Weapons", 3);
 
-        // 2) Corrida até targetPos
-        if (animationController != null && movement != null)
-            yield return animationController.PlayRun(targetPos, settings.runSpeed, movement);
-
-        // 3) Slashing + agendamento do Hurt
-        if (animationController != null)
+        if (defender != null)
         {
-            // dispara o Hurt no defensor após o atraso
-            if (defenderAnimationController != null)
-                StartCoroutine(DelayedHurt());
-
-            // dispara o Slashing e aguarda o término
-            yield return animationController.PlaySlash(settings.slashingDuration);
+            SetCharacterLayerAndOrder(defender.allRenderers, "Characters2", 2);
+            SetWeaponLayerAndOrder(defender.weaponHandler, "Weapons2", 1);
         }
 
-        // 4) Delay antes do salto
+        // **pequena pausa para o Unity aplicar os novos sorting layers**
+        yield return null;
+
+        // 2) Idle
+        yield return animationController.PlayIdle(settings.idleDuration);
+
+        // 3) Run
+        yield return animationController.PlayRun(targetPos, settings.runSpeed, movement);
+
+        // 4) Slashing
+        switch (weaponHandler.currentType)
+        {
+            case WeaponType.Sword: animator.SetTrigger("Slashing"); break;
+            case WeaponType.Heavy: animator.SetTrigger("SlashingHeavy"); break;
+            case WeaponType.Dagger: animator.SetTrigger("SlashingDagger"); break;
+        }
+        yield return new WaitForSeconds(settings.slashingDuration);
+
+        // 5) Hurt imediato no defensor
+        if (defenderAnimationController != null)
+            yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
+
+        // 6) Delay antes do salto
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
 
-        // 5) JumpStart
-        if (animationController != null)
-            yield return animationController.PlayJumpStart(settings.jumpStartDuration);
+        // 7) JumpStart e salto de volta
+        yield return animationController.PlayJumpStart(settings.jumpStartDuration);
+        yield return movement.JumpTo(targetPos, startPos, settings.runSpeed, settings.jumpHeight);
 
-        // 6) Salto em arco de volta
-        if (movement != null)
-            yield return movement.JumpTo(targetPos, startPos, settings.runSpeed, settings.jumpHeight);
+        // 8) Restaura estado de renderização
+        SetCharacterLayerAndOrder(allRenderers, defaultCharLayer, defaultCharOrder);
+        if (defender != null)
+            SetCharacterLayerAndOrder(defender.allRenderers, defaultCharLayer, defaultCharOrder);
 
-        // 7) Prepara próxima arma
-        //weaponHandler?.EquipNext();
+        // 9) Idle final
+        animationController.SetIdle(true);
 
-        // 8) Idle aguardando próximo turno
-        animationController?.SetIdle(true);
     }
 
-    private IEnumerator DelayedHurt()
+    private void SetCharacterLayerAndOrder(List<SpriteRenderer> rends, string layerName, int order)
     {
-        yield return new WaitForSeconds(settings.hurtTriggerDelay);
-        yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
+        foreach (var sr in rends)
+        {
+            sr.sortingLayerName = layerName;
+            sr.sortingOrder = order;
+        }
+    }
+
+    private void SetWeaponLayerAndOrder(WeaponHandler handler, string layerName, int order)
+    {
+        var w = handler.CurrentWeapon;
+        if (w == null) return;
+
+        var sr = w.GetComponent<SpriteRenderer>();
+        sr.sortingLayerName = layerName;
+        sr.sortingOrder = order;
     }
 }
