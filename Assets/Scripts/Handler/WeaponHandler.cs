@@ -17,6 +17,9 @@ public class WeaponHandler : MonoBehaviour
     public int sortingOrder = 0;
 
     private GameObject current;
+
+    public GameObject CurrentWeapon => current;
+
     public WeaponType currentType { get; private set; }
 
     public void EquipNext()
@@ -43,4 +46,5 @@ public class WeaponHandler : MonoBehaviour
         sr.sortingLayerName = sortingLayer;
         sr.sortingOrder = sortingOrder;
     }
+
 }
