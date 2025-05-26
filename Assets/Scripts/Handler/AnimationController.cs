@@ -41,7 +41,6 @@ public class AnimationController : MonoBehaviour
     /// </summary>
     public IEnumerator PlayHurt(float duration)
     {
-        Debug.Log($"[PlayHurt] Triggering Hurt for {duration}s");  // debug
         anim.SetTrigger("Hurt");
         yield return new WaitForSeconds(duration);
     }

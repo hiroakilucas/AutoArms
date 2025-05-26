@@ -68,11 +68,9 @@ public class PlayerCombat : MonoBehaviour
 
     private void EquipAndSpawn()
     {
-
         weaponHandler.EquipNext();
         SetWeaponLayerAndOrder(weaponHandler,
-            isPlayer1 ? "Weapons" : "Weapons2",
-            isPlayer1 ? 3 : 1
+            isPlayer1 ? "Weapons" : "Weapons2"
         );
     }
 
@@ -86,31 +84,35 @@ public class PlayerCombat : MonoBehaviour
         // 2) calcula offset por tipo de arma
         float reach = weaponHandler.currentType switch
         {
-            WeaponType.Dagger => 0.5f,
-            WeaponType.Heavy => 2.0f,
-            _ => 1.0f  // Sword
+            WeaponType.Dagger => 1.5f,
+            WeaponType.Heavy => 2.8f,
+            _ => 2.0f  // Sword
         };
 
         // direção até o defensor e posição de ataque ajustada
         Vector2 dir = (rawTargetPos - (Vector2)transform.position).normalized;
         attackTargetPos = rawTargetPos - dir * reach;
 
-        // 3) Prepara renderização
-        SetCharacterLayerAndOrder(allRenderers,
-            isPlayer1 ? "Characters" : "Characters2",
-            isPlayer1 ? 4 : 2
-        );
-        SetWeaponLayerAndOrder(weaponHandler,
-            isPlayer1 ? "Weapons" : "Weapons2",
-            isPlayer1 ? 3 : 1
-        );
+        // 3) Ajusta sorting layers do personagem e da arma
+        // Atacante
+        SetCharacterLayerAndOrder(allRenderers, "Characters");
+        if (weaponHandler.CurrentWeapon != null)
+        {
+            var srAtt = weaponHandler.CurrentWeapon.GetComponent<SpriteRenderer>();
+            srAtt.sortingLayerName = "Weapons";
+        }
+        // Defensor
         if (defender != null)
-            SetCharacterLayerAndOrder(defender.allRenderers,
-                isPlayer1 ? "Characters2" : "Characters",
-                isPlayer1 ? 2 : 4
-            );
+        {
+            SetCharacterLayerAndOrder(defender.allRenderers, "Characters2");
+            if (defender.weaponHandler.CurrentWeapon != null)
+            {
+                var srDef = defender.weaponHandler.CurrentWeapon.GetComponent<SpriteRenderer>();
+                srDef.sortingLayerName = "Weapons2";
+            }
+        }
 
-        yield return null; // aplica sorting
+        yield return null; // aplica sorting // aplica sorting
 
         // 4) Idle e Run até o ponto de ataque
         yield return animationController.PlayIdle(settings.idleDuration);
@@ -159,31 +161,29 @@ public class PlayerCombat : MonoBehaviour
             settings.jumpHeight
         );
 
-        // 8) Restaura renderização
-        SetCharacterLayerAndOrder(allRenderers, defaultCharLayer, defaultCharOrder);
+        //// 8) Restaura renderização
+        SetCharacterLayerAndOrder(allRenderers, defaultCharLayer);
         if (defender != null)
-            SetCharacterLayerAndOrder(defender.allRenderers, defaultCharLayer, defaultCharOrder);
+            SetCharacterLayerAndOrder(defender.allRenderers, defaultCharLayer);
 
         // 9) Idle final e reposiciona para próxima rodada
         animationController.SetIdle(true);
         EquipAndSpawn();
     }
 
-    private void SetCharacterLayerAndOrder(List<SpriteRenderer> rends, string layerName, int order)
+    private void SetCharacterLayerAndOrder(List<SpriteRenderer> rends, string layerName)
     {
         foreach (var sr in rends)
         {
             sr.sortingLayerName = layerName;
-            sr.sortingOrder = order;
         }
     }
 
-    private void SetWeaponLayerAndOrder(WeaponHandler handler, string layerName, int order)
+    private void SetWeaponLayerAndOrder(WeaponHandler handler, string layerName)
     {
         var w = handler.CurrentWeapon;
         if (w == null) return;
         var sr = w.GetComponent<SpriteRenderer>();
         sr.sortingLayerName = layerName;
-        sr.sortingOrder = order;
     }
 }
