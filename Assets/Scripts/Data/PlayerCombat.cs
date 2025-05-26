@@ -13,9 +13,9 @@ public class PlayerCombat : MonoBehaviour
     [Header("Configurações de Ataque")]
     public AttackSettings settings;
 
-    [Header("Posições de Turno")]
-    public Vector2 startPos = new Vector2(-6.3f, -2.39f);
-    public Vector2 targetPos = new Vector2(3.74f, -2.39f);
+    [Header("Identificação")]
+    [Tooltip("Marcar verdadeiro para Player1, falso para Player2")]
+    public bool isPlayer1;
 
     [Header("Defensor")]
     public PlayerCombat defender;
@@ -28,15 +28,16 @@ public class PlayerCombat : MonoBehaviour
     private string defaultCharLayer;
     private int defaultCharOrder;
 
+    // posição inicial e alvo dinâmicos
+    private Vector2 initialPosition;
+    private Vector2 rawTargetPos, attackTargetPos;
+
     private void Awake()
     {
         animator = GetComponent<Animator>();
         weaponHandler = GetComponent<WeaponHandler>();
 
-        // captura todos os SpriteRenderers deste personagem
         allRenderers = new List<SpriteRenderer>(GetComponentsInChildren<SpriteRenderer>());
-
-        // guarda camada e order originais
         if (allRenderers.Count > 0)
         {
             defaultCharLayer = allRenderers[0].sortingLayerName;
@@ -46,66 +47,126 @@ public class PlayerCombat : MonoBehaviour
 
     private void Start()
     {
-        // 1) Posição inicial e arma já equipada
-        transform.position = startPos;
-        weaponHandler.EquipNext();
+        EquipAndSpawn();
 
-        // 2) Garante que a arma recém-instanciada já fique em Weapons/0
-        SetWeaponLayerAndOrder(weaponHandler, "Weapons", 0);
+        // spawn aleatório conforme jogador
+        if (isPlayer1)
+            initialPosition = new Vector2(
+                Random.Range(-7.25f, -4.79f),
+                Random.Range(-3.90f, -0.81f)
+            );
+        else
+            initialPosition = new Vector2(
+                Random.Range(7.25f, 4.79f),
+                Random.Range(-3.90f, -0.81f)
+            );
 
-        // 3) Idle inicial
+        transform.position = initialPosition;
+
         animationController.SetIdle(true);
+    }
+
+    private void EquipAndSpawn()
+    {
+
+        weaponHandler.EquipNext();
+        SetWeaponLayerAndOrder(weaponHandler,
+            isPlayer1 ? "Weapons" : "Weapons2",
+            isPlayer1 ? 3 : 1
+        );
     }
 
     public IEnumerator AttackRoutine()
     {
-        // 1) Prepara renderização do turno
-        SetCharacterLayerAndOrder(allRenderers, "Characters", 4);
-        SetWeaponLayerAndOrder(weaponHandler, "Weapons", 3);
+        // 1) define posição "crua" do defensor
+        rawTargetPos = defender != null
+            ? (Vector2)defender.transform.position
+            : initialPosition;
 
+        // 2) calcula offset por tipo de arma
+        float reach = weaponHandler.currentType switch
+        {
+            WeaponType.Dagger => 0.5f,
+            WeaponType.Heavy => 2.0f,
+            _ => 1.0f  // Sword
+        };
+
+        // direção até o defensor e posição de ataque ajustada
+        Vector2 dir = (rawTargetPos - (Vector2)transform.position).normalized;
+        attackTargetPos = rawTargetPos - dir * reach;
+
+        // 3) Prepara renderização
+        SetCharacterLayerAndOrder(allRenderers,
+            isPlayer1 ? "Characters" : "Characters2",
+            isPlayer1 ? 4 : 2
+        );
+        SetWeaponLayerAndOrder(weaponHandler,
+            isPlayer1 ? "Weapons" : "Weapons2",
+            isPlayer1 ? 3 : 1
+        );
         if (defender != null)
-        {
-            SetCharacterLayerAndOrder(defender.allRenderers, "Characters2", 2);
-            SetWeaponLayerAndOrder(defender.weaponHandler, "Weapons2", 1);
-        }
+            SetCharacterLayerAndOrder(defender.allRenderers,
+                isPlayer1 ? "Characters2" : "Characters",
+                isPlayer1 ? 2 : 4
+            );
 
-        // **pequena pausa para o Unity aplicar os novos sorting layers**
-        yield return null;
+        yield return null; // aplica sorting
 
-        // 2) Idle
+        // 4) Idle e Run até o ponto de ataque
         yield return animationController.PlayIdle(settings.idleDuration);
+        yield return animationController.PlayRun(attackTargetPos, settings.runSpeed, movement);
 
-        // 3) Run
-        yield return animationController.PlayRun(targetPos, settings.runSpeed, movement);
-
-        // 4) Slashing
-        switch (weaponHandler.currentType)
+        // 5) Slashing e sincronização do Hurt na metade
+        string trigger = weaponHandler.currentType switch
         {
-            case WeaponType.Sword: animator.SetTrigger("Slashing"); break;
-            case WeaponType.Heavy: animator.SetTrigger("SlashingHeavy"); break;
-            case WeaponType.Dagger: animator.SetTrigger("SlashingDagger"); break;
-        }
-        yield return new WaitForSeconds(settings.slashingDuration);
-
-        // 5) Hurt imediato no defensor
+            WeaponType.Heavy => "SlashingHeavy",
+            WeaponType.Dagger => "SlashingDagger",
+            _ => "Slashing"
+        };
+        animator.SetTrigger(trigger);
+        // metade da duração do slashing
+        yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+        // Hurt do defensor
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
+        // restante do slashing
+        yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
 
         // 6) Delay antes do salto
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
 
+
         // 7) JumpStart e salto de volta
         yield return animationController.PlayJumpStart(settings.jumpStartDuration);
-        yield return movement.JumpTo(targetPos, startPos, settings.runSpeed, settings.jumpHeight);
 
-        // 8) Restaura estado de renderização
+
+        // spawn aleatório conforme jogador
+        if (isPlayer1)
+            initialPosition = new Vector2(
+                Random.Range(-7.25f, -4.79f),
+                Random.Range(-3.90f, -0.81f)
+            );
+        else
+            initialPosition = new Vector2(
+                Random.Range(7.25f, 4.79f),
+                Random.Range(-3.90f, -0.81f)
+            );
+
+        yield return movement.JumpTo(
+            attackTargetPos,    // ponto de partida do salto
+            initialPosition,    // destino aleatório
+            settings.runSpeed,
+            settings.jumpHeight
+        );
+
+        // 8) Restaura renderização
         SetCharacterLayerAndOrder(allRenderers, defaultCharLayer, defaultCharOrder);
         if (defender != null)
             SetCharacterLayerAndOrder(defender.allRenderers, defaultCharLayer, defaultCharOrder);
 
-        // 9) Idle final
+        // 9) Idle final e reposiciona para próxima rodada
         animationController.SetIdle(true);
-
+        EquipAndSpawn();
     }
 
     private void SetCharacterLayerAndOrder(List<SpriteRenderer> rends, string layerName, int order)
@@ -121,7 +182,6 @@ public class PlayerCombat : MonoBehaviour
     {
         var w = handler.CurrentWeapon;
         if (w == null) return;
-
         var sr = w.GetComponent<SpriteRenderer>();
         sr.sortingLayerName = layerName;
         sr.sortingOrder = order;
