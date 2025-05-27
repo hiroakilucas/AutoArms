@@ -66,14 +66,6 @@ public class PlayerCombat : MonoBehaviour
         animationController.SetIdle(true);
     }
 
-    private void EquipAndSpawn()
-    {
-        weaponHandler.EquipNext();
-        SetWeaponLayerAndOrder(weaponHandler,
-            isPlayer1 ? "Weapons" : "Weapons2"
-        );
-    }
-
     public IEnumerator AttackRoutine()
     {
         // 1) define posição "crua" do defensor
@@ -81,19 +73,7 @@ public class PlayerCombat : MonoBehaviour
             ? (Vector2)defender.transform.position
             : initialPosition;
 
-        // 2) calcula offset por tipo de arma
-        float reach = weaponHandler.currentType switch
-        {
-            WeaponType.Dagger => 1.5f,
-            WeaponType.Heavy => 2.8f,
-            _ => 2.0f  // Sword
-        };
-
-        // direção até o defensor e posição de ataque ajustada
-        Vector2 dir = (rawTargetPos - (Vector2)transform.position).normalized;
-        attackTargetPos = rawTargetPos - dir * reach;
-
-        // 3) Ajusta sorting layers do personagem e da arma
+        // 2) Ajusta sorting layers do personagem e da arma
         // Atacante
         SetCharacterLayerAndOrder(allRenderers, "Characters");
         if (weaponHandler.CurrentWeapon != null)
@@ -111,8 +91,19 @@ public class PlayerCombat : MonoBehaviour
                 srDef.sortingLayerName = "Weapons2";
             }
         }
+        yield return null; // aplica sorting
 
-        yield return null; // aplica sorting // aplica sorting
+        //weaponHandler.CurrentWeapon
+        // 3) calcula tamanho por tipo de arma
+        float reach = weaponHandler.currentType switch
+        {
+            WeaponType.Dagger => 1.5f,
+            WeaponType.Heavy => 2.8f,
+            _ => 2.0f  // Sword
+        };
+        // direção até o defensor e posição de ataque ajustada
+        Vector2 dir = (rawTargetPos - (Vector2)transform.position).normalized;
+        attackTargetPos = rawTargetPos - dir * reach;
 
         // 4) Idle e Run até o ponto de ataque
         yield return animationController.PlayIdle(settings.idleDuration);
@@ -128,7 +119,7 @@ public class PlayerCombat : MonoBehaviour
         animator.SetTrigger(trigger);
         // metade da duração do slashing
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
-        // Hurt do defensor
+        //Hurt do defensor
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
         // restante do slashing
@@ -137,11 +128,8 @@ public class PlayerCombat : MonoBehaviour
         // 6) Delay antes do salto
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
 
-
         // 7) JumpStart e salto de volta
         yield return animationController.PlayJumpStart(settings.jumpStartDuration);
-
-
         // spawn aleatório conforme jogador
         if (isPlayer1)
             initialPosition = new Vector2(
@@ -153,7 +141,6 @@ public class PlayerCombat : MonoBehaviour
                 Random.Range(7.25f, 4.79f),
                 Random.Range(-3.90f, -0.81f)
             );
-
         yield return movement.JumpTo(
             attackTargetPos,    // ponto de partida do salto
             initialPosition,    // destino aleatório
@@ -161,14 +148,21 @@ public class PlayerCombat : MonoBehaviour
             settings.jumpHeight
         );
 
-        //// 8) Restaura renderização
+        // 8) Restaura renderização (alterna a ordem da camada de renderização)
         SetCharacterLayerAndOrder(allRenderers, defaultCharLayer);
         if (defender != null)
             SetCharacterLayerAndOrder(defender.allRenderers, defaultCharLayer);
 
         // 9) Idle final e reposiciona para próxima rodada
         animationController.SetIdle(true);
-        EquipAndSpawn();
+        //EquipAndSpawn();
+    }
+    private void EquipAndSpawn()
+    {
+        weaponHandler.EquipNext();
+        SetWeaponLayerAndOrder(weaponHandler,
+            isPlayer1 ? "Weapons" : "Weapons2"
+        );
     }
 
     private void SetCharacterLayerAndOrder(List<SpriteRenderer> rends, string layerName)
