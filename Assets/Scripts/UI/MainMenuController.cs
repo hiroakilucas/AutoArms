@@ -3,15 +3,23 @@ using UnityEngine.SceneManagement;
 
 public class MainMenuController : MonoBehaviour
 {
-    [SerializeField] private string selectCharacter = "02_SelectCharacter";
     [SerializeField] private string selectWeapons = "03_SelectWeapons";
-    [SerializeField] private string combatSceneName = "04_CombatScenePVP";
 
     public void OnPlayButton()
     {
-        SceneManager.LoadScene(combatSceneName);
+        if (SelectedProfileHolder.Instance?.selectedProfile == null)
+        {
+            Debug.LogWarning("Nenhum personagem foi selecionado.");
+            return;
+        }
+
+        SceneManager.LoadScene("04_CombatScenePVP");
     }
 
+    public void OnSelectCharacterButton()
+    {
+        SceneManager.LoadScene("02_SelectCharacter");
+    }
     public void OnOptionsButton()
     {
         // Aqui você pode abrir um painel de configurações

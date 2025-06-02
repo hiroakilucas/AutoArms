@@ -32,6 +32,8 @@ public class PlayerCombat : MonoBehaviour
     private Vector2 initialPosition;
     private Vector2 rawTargetPos, attackTargetPos;
 
+
+
     private void Awake()
     {
         animator = GetComponent<Animator>();
