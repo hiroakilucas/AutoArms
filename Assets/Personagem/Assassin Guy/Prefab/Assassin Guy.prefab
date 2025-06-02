@@ -379,6 +379,11 @@ GameObject:
   - component: {fileID: 4381821963079296}
   - component: {fileID: 95968985733260646}
   - component: {fileID: 114857087942215846}
+  - component: {fileID: -8747072483177379546}
+  - component: {fileID: 665938882183218212}
+  - component: {fileID: 2727797364252100987}
+  - component: {fileID: 4402295922481241886}
+  - component: {fileID: 5477883545963316090}
   m_Layer: 0
   m_Name: Assassin Guy
   m_TagString: Untagged
@@ -440,6 +445,83 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   sortingOrder: 0
   applySpriterZOrder: 0
+--- !u!114 &-8747072483177379546
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1492118923640976}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79b276cbec1046b4883166d7ad388348, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &665938882183218212
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1492118923640976}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9bd0d283e663558498473c87028cdef2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &2727797364252100987
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1492118923640976}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 12557e85129593a46a022fc8f245f128, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  loadout: {fileID: 11400000, guid: f0b1a3769f05ab14c97c17536e86a089, type: 2}
+  currentIndex: -1
+--- !u!114 &4402295922481241886
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1492118923640976}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2536b24d944d504428b30d4044de5d3c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  loadout: {fileID: 2727797364252100987}
+  swordBasePrefab: {fileID: 1429139606532536}
+  handBone: {fileID: 4908641329399726}
+  positionOffset: {x: 1, y: -1, z: 0}
+  rotationOffset: {x: 0, y: 0, z: 0}
+  zOffset: 0
+  sortingLayer: Weapon
+  sortingOrder: 0
+--- !u!114 &5477883545963316090
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1492118923640976}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8cffd1d15845937459436d974c4fc3df, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  weaponHandler: {fileID: 4402295922481241886}
+  movement: {fileID: -8747072483177379546}
+  animationController: {fileID: 665938882183218212}
+  settings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
+  isPlayer1: 1
+  defender: {fileID: 0}
+  defenderAnimationController: {fileID: 0}
 --- !u!1 &1505143171391790
 GameObject:
   m_ObjectHideFlags: 0
