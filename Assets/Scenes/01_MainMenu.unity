@@ -205,10 +205,10 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 11500000, guid: b194cf0b8dea1194883a3eda48e6ea4e, type: 3}
-        m_TargetAssemblyTypeName: UnityEngine.Object, UnityEngine
-        m_MethodName: set_name
-        m_Mode: 5
+      - m_Target: {fileID: 1078761890}
+        m_TargetAssemblyTypeName: MainMenuController, Assembly-CSharp
+        m_MethodName: OnPlayButton
+        m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
@@ -690,6 +690,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b194cf0b8dea1194883a3eda48e6ea4e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  selectCharacter: 02_SelectCharacter
+  selectWeapons: 03_SelectWeapons
   combatSceneName: CombatScene
 --- !u!4 &1078761891
 Transform:

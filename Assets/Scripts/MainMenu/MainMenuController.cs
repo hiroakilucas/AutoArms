@@ -3,8 +3,9 @@ using UnityEngine.SceneManagement;
 
 public class MainMenuController : MonoBehaviour
 {
-    // Nome exato da cena de combate (confira em Build Settings)
-    [SerializeField] private string combatSceneName = "CombatScene";
+    [SerializeField] private string selectCharacter = "02_SelectCharacter";
+    [SerializeField] private string selectWeapons = "03_SelectWeapons";
+    [SerializeField] private string combatSceneName = "04_CombatScenePVP";
 
     public void OnPlayButton()
     {
