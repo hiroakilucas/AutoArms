@@ -10,6 +10,7 @@ public class CharacterSelectUI : MonoBehaviour
     public PlayerProfile[] availableProfiles;
 
     private PlayerProfile selected;
+    [SerializeField] private SelectedProfileHolder selectedProfileHolder;
 
     void Start()
     {
@@ -38,7 +39,7 @@ public class CharacterSelectUI : MonoBehaviour
             return;
         }
 
-        SelectedProfileHolder.Instance.selectedProfile = selected;
+        selectedProfileHolder.currentProfile = selected;
         SceneManager.LoadScene("01_MainMenu");
     }
 

@@ -4,12 +4,13 @@ using UnityEngine.SceneManagement;
 public class MainMenuController : MonoBehaviour
 {
     [SerializeField] private string selectWeapons = "03_SelectWeapons";
+    [SerializeField] private SelectedProfileHolder selectedProfileHolder;
 
     public void OnPlayButton()
     {
-        if (SelectedProfileHolder.Instance?.selectedProfile == null)
+        if (selectedProfileHolder == null || selectedProfileHolder.currentProfile == null)
         {
-            Debug.LogWarning("Nenhum personagem foi selecionado.");
+            Debug.LogWarning("Nenhum personagem selecionado.");
             return;
         }
 

@@ -8,23 +8,39 @@ public class PlayerProfile : ScriptableObject
     public string profileName;
 
     [Header("Prefab e Imagem")]
-    [Tooltip("Prefab do personagem (deve conter todos os componentes de combate)")]
+    [Tooltip("Prefab do personagem (deve conter todos os componentes necessários para o combate)")]
     public GameObject characterPrefab;
 
-    [Tooltip("Ícone para UI de seleção")]
+    [Tooltip("Ícone utilizado na UI de seleção de personagens")]
     public Sprite previewIcon;
 
     [Header("Parâmetros de Combate")]
-    [Tooltip("ScriptableObject com as configurações de ataque")]
+    [Tooltip("Configurações de ataque e animação (velocidade, idle, delay etc.)")]
     public AttackSettings attackSettings;
 
-    [Tooltip("ScriptableObject com as armas que esse personagem vai usar")]
+    [Tooltip("Armas atribuídas para esse personagem")]
     public WeaponLoadout weaponLoadout;
 
     [Header("Instanciação")]
-    [Tooltip("Escala personalizada do personagem (opcional, se diferente de 1)")]
+    [Tooltip("Escala personalizada do personagem no momento da instância")]
     public Vector3 scale = Vector3.one;
 
-    [Tooltip("Posição inicial para o combate (usado no PvP)")]
+    [Tooltip("Posição de início no combate (usada no PvP, exemplo: lado esquerdo)")]
     public Vector2 startPos = new Vector2(-6.3f, -2.407897f);
+
+    [Header("Progresso")]
+    [Tooltip("Nível atual do personagem")]
+    public int level = 1;
+
+    [Tooltip("Taxa de vitória (0 a 100%)")]
+    [Range(0f, 100f)] public float winRate = 0f;
+
+    [Tooltip("Experiência atual")]
+    public int xpCurrent = 0;
+
+    [Tooltip("Experiência necessária para o próximo nível")]
+    public int xpRequired = 30;
+
+    [Tooltip("Lutas restantes (máximo por ciclo)")]
+    public int battlesRemaining = 6;
 }

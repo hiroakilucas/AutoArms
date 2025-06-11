@@ -6,11 +6,11 @@ public class CombatSceneLoader : MonoBehaviour
     public AttackSequencer attackSequencer;         // Referência ao sequenciador
     public Transform player1SpawnPoint;             // Posição inicial (opcional)
     [SerializeField] private GameObject player2ObjectInScene;
-    
+    [SerializeField] private SelectedProfileHolder selectedProfileHolder;
 
     void Start()
     {
-        var profile = SelectedProfileHolder.Instance?.selectedProfile;
+        var profile = selectedProfileHolder.currentProfile;
         if (profile == null)
         {
             Debug.LogError("[CombatSceneLoader] Nenhum PlayerProfile selecionado.");

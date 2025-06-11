@@ -4,15 +4,12 @@ public class MainMenuCharacterPreview : MonoBehaviour
 {
     public Transform spawnPoint;
     private GameObject currentCharacter;
+    [SerializeField] private SelectedProfileHolder selectedProfileHolder;
 
     void Start()
     {
-        var profile = SelectedProfileHolder.Instance?.selectedProfile;
-        if (profile == null)
-        {
-            Debug.Log("Nenhum personagem selecionado.");
-            return;
-        }
+        selectedProfileHolder = Resources.Load<SelectedProfileHolder>("SelectedProfileHolder");
+        var profile = selectedProfileHolder.currentProfile;
 
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
         currentCharacter.transform.localScale = profile.scale;

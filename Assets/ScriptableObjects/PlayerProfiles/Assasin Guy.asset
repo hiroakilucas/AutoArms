@@ -19,3 +19,8 @@ MonoBehaviour:
   weaponLoadout: {fileID: 11400000, guid: f0b1a3769f05ab14c97c17536e86a089, type: 2}
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
+  level: 1
+  winRate: 0
+  xpCurrent: 0
+  xpRequired: 30
+  battlesRemaining: 6

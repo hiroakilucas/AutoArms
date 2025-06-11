@@ -1,21 +1,17 @@
 using UnityEngine;
 
-public class SelectedProfileHolder : MonoBehaviour
+[CreateAssetMenu(fileName = "SelectedProfileHolder", menuName = "Game/Selected Profile Holder", order = 101)]
+public class SelectedProfileHolder : ScriptableObject
 {
-    public static SelectedProfileHolder Instance { get; private set; }
+    public PlayerProfile currentProfile;
 
-    [Header("Perfil Selecionado")]
-    public PlayerProfile selectedProfile;
-
-    private void Awake()
+    public void SetProfile(PlayerProfile profile)
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        currentProfile = profile;
+    }
 
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
+    public PlayerProfile GetProfile()
+    {
+        return currentProfile;
     }
 }
