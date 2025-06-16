@@ -1026,7 +1026,7 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 298169998}
-  m_CullTransparentMesh: 1
+  m_CullTransparentMesh: 0
 --- !u!1 &354007762
 GameObject:
   m_ObjectHideFlags: 0
@@ -1052,14 +1052,14 @@ RectTransform:
   m_GameObject: {fileID: 354007762}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 30, y: 30, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 608040326}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: -101}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &401353099
@@ -2182,7 +2182,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 925068126}
   m_Direction: 2
   m_Value: 0
-  m_Size: 0.07618418
+  m_Size: 0.99999654
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -2668,6 +2668,54 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Transition
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_NormalColor.a
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_NormalColor.b
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_NormalColor.g
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_NormalColor.r
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_PressedColor.a
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_DisabledColor.a
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_SelectedColor.a
+      value: 0.79607844
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_SelectedColor.b
+      value: 0.34353864
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_SelectedColor.g
+      value: 0.34353864
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_SelectedColor.r
+      value: 0.3773585
+      objectReference: {fileID: 0}
+    - target: {fileID: 8674288471950247588, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
+      propertyPath: m_Colors.m_HighlightedColor.a
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 9014444560790550187, guid: 0b51182c70804a94e897b3daa31618c8, type: 3}
       propertyPath: m_Name
       value: GridCharacters
@@ -3018,7 +3066,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.0000076293945, y: 78.20673}
+  m_AnchoredPosition: {x: 0.0000076293945, y: 0.0011412319}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &925068125

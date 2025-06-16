@@ -37,8 +37,9 @@ public class CharacterSelectController : MonoBehaviour
         {
             LoadPreviewData(selectedProfileHolder.currentProfile);
         }
-
+        previewPortrait.gameObject.SetActive(false);
         PopulateCharacterGrid();
+        
     }
 
     public void LoadPreviewData(PlayerProfile profile)
