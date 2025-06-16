@@ -17,7 +17,7 @@ public class CharacterCardUI : MonoBehaviour
 
         // Aqui ocorre o erro se 'icon' ou 'nameText' estiver null
         icon.sprite = profile.previewIcon;
-        nameText.text = profile.profileName;
+        //nameText.text = profile.profileName;
     }
 
     public void OnClick()
