@@ -588,7 +588,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 150.95, y: -364}
+  m_AnchoredPosition: {x: 120, y: -353}
   m_SizeDelta: {x: 154.832, y: 33.3309}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &184334467
@@ -635,9 +635,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: CharacterSelectUI, Assembly-CSharp
-        m_MethodName: OnConfirm
+      - m_Target: {fileID: 511599980}
+        m_TargetAssemblyTypeName: CharacterSelectController, Assembly-CSharp
+        m_MethodName: OnClickBackToCharacters
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -855,7 +855,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 336.27008, y: -364}
+  m_AnchoredPosition: {x: 318, y: -353}
   m_SizeDelta: {x: 154.832, y: 33.3309}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &237752117
@@ -902,9 +902,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: CharacterSelectUI, Assembly-CSharp
-        m_MethodName: OnConfirm
+      - m_Target: {fileID: 511599980}
+        m_TargetAssemblyTypeName: CharacterSelectController, Assembly-CSharp
+        m_MethodName: OnClickSelect
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1104,8 +1104,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 555.8601, y: -0.0024871826}
-  m_SizeDelta: {x: -254.27, y: 0}
+  m_AnchoredPosition: {x: 551.98, y: 0}
+  m_SizeDelta: {x: -240.04, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &401353101
 MonoBehaviour:
@@ -1396,7 +1396,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   previewPanel: {fileID: 608040325}
   gridPanel: {fileID: 1418901995}
-  detailPanel: {fileID: 401353099}
+  detailPanel: {fileID: 401353100}
+  rightPanel: {fileID: 1418901996}
+  slideDuration: 0.3
   previewPortrait: {fileID: 298170000}
   txtLevel: {fileID: 1356398753}
   txtWinRate: {fileID: 575905164}
@@ -2022,7 +2024,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Voltar
+  m_text: Sair
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -2182,7 +2184,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 925068126}
   m_Direction: 2
   m_Value: 0
-  m_Size: 0.99999654
+  m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -3066,7 +3068,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.0000076293945, y: 0.0011412319}
+  m_AnchoredPosition: {x: 0.0000076293945, y: 0.0003682743}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &925068125
@@ -3183,8 +3185,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0.0014877, y: 25.13}
-  m_SizeDelta: {x: 428.73, y: 341.74}
+  m_AnchoredPosition: {x: -0.00001049, y: 0.0000019073}
+  m_SizeDelta: {x: 428.73, y: 378}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &931848334
 MonoBehaviour:
@@ -4517,8 +4519,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 127.130066, y: 0}
-  m_SizeDelta: {x: -254.27, y: 0}
+  m_AnchoredPosition: {x: 121.63005, y: 0}
+  m_SizeDelta: {x: -243.27, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1418901997
 MonoBehaviour:
@@ -5028,7 +5030,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Agilitade
+  m_text: Agilidade
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -5352,7 +5354,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 670840524}
   m_HandleRect: {fileID: 670840523}
   m_Direction: 0
-  m_Value: 0
+  m_Value: 1
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:

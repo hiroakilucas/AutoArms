@@ -8,8 +8,17 @@ public class MainMenuCharacterPreview : MonoBehaviour
 
     void Start()
     {
-        selectedProfileHolder = Resources.Load<SelectedProfileHolder>("SelectedProfileHolder");
+
         var profile = selectedProfileHolder.currentProfile;
+
+        if (profile == null)
+        {
+            Debug.LogWarning("Nenhum personagem selecionado para o Main Menu.");
+            return;
+        }
+
+        //selectedProfileHolder = Resources.Load<SelectedProfileHolder>("SelectedProfileHolder");
+        //var profile = selectedProfileHolder.currentProfile;
 
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
         currentCharacter.transform.localScale = profile.scale;

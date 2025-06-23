@@ -8,9 +8,9 @@ public class MainMenuController : MonoBehaviour
 
     public void OnPlayButton()
     {
-        if (selectedProfileHolder == null || selectedProfileHolder.currentProfile == null)
+        if (selectedProfileHolder.currentProfile == null)
         {
-            Debug.LogWarning("Nenhum personagem selecionado.");
+            Debug.LogWarning("Nenhum personagem selecionado para o combate.");
             return;
         }
 

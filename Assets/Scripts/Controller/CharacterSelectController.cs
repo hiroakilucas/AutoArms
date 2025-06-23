@@ -2,13 +2,17 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 public class CharacterSelectController : MonoBehaviour
 {
     [Header("Referências principais")]
     public GameObject previewPanel;
     public GameObject gridPanel;
-    public GameObject detailPanel;
+    //public GameObject detailPanel;
+    public RectTransform detailPanel;
+    public RectTransform rightPanel;
+    public float slideDuration = 0.3f;
 
     [Header("Componentes do preview")]
     public Image previewPortrait;
@@ -95,20 +99,55 @@ public class CharacterSelectController : MonoBehaviour
 
     void ShowDetails(PlayerProfile profile)
     {
-        detailPanel.SetActive(true);
-        gridPanel.SetActive(false);
+        detailPanel.gameObject.SetActive(true);
+        //gridPanel.SetActive(false);
+
+        StartCoroutine(SlideDetailPanelIn());
+
         LoadPreviewData(profile);
     }
 
     public void OnClickBackToCharacters()
     {
-        detailPanel.SetActive(false);
-        gridPanel.SetActive(true);
+        rightPanel.gameObject.SetActive(true);
+        StartCoroutine(SlideDetailPanelOut());
     }
 
     public void OnClickSelect()
     {
         selectedProfileHolder.currentProfile = selectedProfile;
         SceneManager.LoadScene("01_MainMenu");
+    }
+
+    IEnumerator SlideDetailPanelIn()
+    {
+        Vector3 startPos = detailPanel.localPosition;
+        Vector3 targetPos = rightPanel.localPosition;
+
+        float elapsed = 0f;
+        while (elapsed < slideDuration)
+        {
+            detailPanel.localPosition = Vector3.Lerp(startPos, targetPos, elapsed / slideDuration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        detailPanel.localPosition = targetPos;
+        rightPanel.gameObject.SetActive(false);
+    }
+
+    IEnumerator SlideDetailPanelOut()
+    {
+        Vector3 startPos = detailPanel.localPosition;
+        Vector3 targetPos = new Vector3(1920, 0, 0); // Volta para fora da tela
+
+        float elapsed = 0f;
+        while (elapsed < slideDuration)
+        {
+            detailPanel.localPosition = Vector3.Lerp(startPos, targetPos, elapsed / slideDuration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        detailPanel.localPosition = targetPos;
+        detailPanel.gameObject.SetActive(false);
     }
 }

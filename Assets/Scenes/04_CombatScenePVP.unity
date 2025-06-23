@@ -370,9 +370,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e1e31778674a3ee499e15ea7c5d6ae54, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  player1: {fileID: 0}
-  player2: {fileID: 0}
-  interTurnDelay: 0.2
 --- !u!4 &867448816
 Transform:
   m_ObjectHideFlags: 0
@@ -781,6 +778,7 @@ MonoBehaviour:
   attackSequencer: {fileID: 904002941}
   player1SpawnPoint: {fileID: 0}
   player2ObjectInScene: {fileID: 45243663}
+  selectedProfileHolder: {fileID: 11400000, guid: 922f3509158987247abc4e20f118b45c, type: 2}
 --- !u!4 &1332891506
 Transform:
   m_ObjectHideFlags: 0
