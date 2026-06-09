@@ -15,6 +15,18 @@ public class AttackSequencer : MonoBehaviour
 
     private void Start()
     {
+        StartCoroutine(WaitForPlayersAndStart());
+    }
+
+    private IEnumerator WaitForPlayersAndStart()
+    {
+        // Espera até que ambos players estejam instanciados
+        while (player1 == null || player2 == null)
+        {
+            Debug.Log("[TurnManager] Aguardando instância dos dois jogadores...");
+            yield return null;
+        }
+
         StartCoroutine(MainLoop());
     }
 
