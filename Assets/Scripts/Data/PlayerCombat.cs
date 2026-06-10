@@ -20,6 +20,8 @@ public class PlayerCombat : MonoBehaviour
     public PlayerCombat defender;
     public AnimationController defenderAnimationController;
 
+    public bool IsDead => GetComponent<HealthSystem>()?.IsDead ?? false;
+
     private Animator animator;
     private List<SpriteRenderer> bodyRenderers;
     private string defaultSortingLayer;
@@ -69,10 +71,12 @@ public class PlayerCombat : MonoBehaviour
         };
         animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
-        yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+        defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData?.damage ?? 0);
 
+        yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
 
         yield return animationController.PlayJumpStart(settings.jumpStartDuration);

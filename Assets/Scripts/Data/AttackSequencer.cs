@@ -26,9 +26,17 @@ public class AttackSequencer : MonoBehaviour
         while (true)
         {
             yield return StartCoroutine(player1.AttackRoutine());
+            if (player2.IsDead) { OnCombatEnd(player1); yield break; }
             yield return new WaitForSeconds(interTurnDelay);
+
             yield return StartCoroutine(player2.AttackRoutine());
+            if (player1.IsDead) { OnCombatEnd(player2); yield break; }
             yield return new WaitForSeconds(interTurnDelay);
         }
+    }
+
+    private void OnCombatEnd(PlayerCombat winner)
+    {
+        Debug.Log($"[AttackSequencer] {winner.name} venceu o combate!");
     }
 }
