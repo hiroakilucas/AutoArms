@@ -55,11 +55,14 @@ public class CombatSceneLoader : MonoBehaviour
         player2Combat.defender  = player1Combat;
         player2Combat.defenderAnimationController = player1Anim;
 
-        // Inicializa sistema de vida de ambos os jogadores
-        player1Obj.AddComponent<HealthSystem>().Initialize(profile.maxHealth);
+        // Inicializa sistema de vida e HUD
+        var health1 = player1Obj.AddComponent<HealthSystem>();
+        health1.Initialize(profile.maxHealth);
 
         var health2 = player2Object.GetComponent<HealthSystem>() ?? player2Object.AddComponent<HealthSystem>();
         health2.Initialize(player2MaxHealth);
+
+        gameObject.AddComponent<CombatHUD>().Initialize(health1, health2);
 
         attackSequencer.player1 = player1Combat;
     }
