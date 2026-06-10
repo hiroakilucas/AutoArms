@@ -1,185 +1,130 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
 [RequireComponent(typeof(Animator))]
 public class PlayerCombat : MonoBehaviour
 {
-    [Header("Componentes de Apoio")]
+    [Header("Support Components")]
     public WeaponHandler weaponHandler;
     public MovementController movement;
     public AnimationController animationController;
 
-    [Header("Configurações de Ataque")]
+    [Header("Attack Settings")]
     public AttackSettings settings;
 
-    [Header("Identificação")]
-    [Tooltip("Marcar verdadeiro para Player1, falso para Player2")]
+    [Tooltip("True for Player1, false for Player2")]
     public bool isPlayer1;
 
-    [Header("Defensor")]
+    [Header("Defender")]
     public PlayerCombat defender;
     public AnimationController defenderAnimationController;
 
     private Animator animator;
-    private List<SpriteRenderer> allRenderers;
-
-    // para restaurar após o turno
-    private string defaultCharLayer;
-    private int defaultCharOrder;
-
-    // posição inicial e alvo dinâmicos
-    private Vector2 initialPosition;
-    private Vector2 rawTargetPos, attackTargetPos;
-
-
+    private List<SpriteRenderer> bodyRenderers;
+    private string defaultSortingLayer;
+    private Vector2 spawnPosition;
 
     private void Awake()
     {
         animator = GetComponent<Animator>();
         weaponHandler = GetComponent<WeaponHandler>();
-
-        allRenderers = new List<SpriteRenderer>(GetComponentsInChildren<SpriteRenderer>());
-        if (allRenderers.Count > 0)
-        {
-            defaultCharLayer = allRenderers[0].sortingLayerName;
-            defaultCharOrder = allRenderers[0].sortingOrder;
-        }
+        bodyRenderers = new List<SpriteRenderer>(GetComponentsInChildren<SpriteRenderer>());
+        if (bodyRenderers.Count > 0)
+            defaultSortingLayer = bodyRenderers[0].sortingLayerName;
     }
 
     private void Start()
     {
         EquipAndSpawn();
-
-        // spawn aleatório conforme jogador
-        if (isPlayer1)
-            initialPosition = new Vector2(
-                Random.Range(-7.25f, -4.79f),
-                Random.Range(-3.90f, -0.81f)
-            );
-        else
-            initialPosition = new Vector2(
-                Random.Range(7.25f, 4.79f),
-                Random.Range(-3.90f, -0.81f)
-            );
-
-        transform.position = initialPosition;
-
+        spawnPosition = RandomSpawnPosition();
+        transform.position = spawnPosition;
         animationController.SetIdle(true);
     }
 
     public IEnumerator AttackRoutine()
     {
-        // 1) define posição "crua" do defensor
-        rawTargetPos = defender != null
-            ? (Vector2)defender.transform.position
-            : initialPosition;
+        Vector2 targetPos = defender != null ? (Vector2)defender.transform.position : spawnPosition;
 
-        // 2) Ajusta sorting layers do personagem e da arma
-        // Atacante
-        SetCharacterLayerAndOrder(allRenderers, "Characters");
-        if (weaponHandler.CurrentWeapon != null)
-        {
-            var srAtt = weaponHandler.CurrentWeapon.GetComponent<SpriteRenderer>();
-            srAtt.sortingLayerName = "Weapons";
-        }
-        // Defensor
-        if (defender != null)
-        {
-            SetCharacterLayerAndOrder(defender.allRenderers, "Characters2");
-            if (defender.weaponHandler.CurrentWeapon != null)
-            {
-                var srDef = defender.weaponHandler.CurrentWeapon.GetComponent<SpriteRenderer>();
-                srDef.sortingLayerName = "Weapons2";
-            }
-        }
-        yield return null; // aplica sorting
+        SetAttackerLayers();
+        yield return null;
 
-        //weaponHandler.CurrentWeapon
-        // 3) calcula tamanho por tipo de arma
         float reach = weaponHandler.currentType switch
         {
             WeaponType.Dagger => 1.5f,
-            WeaponType.Heavy => 2.8f,
-            _ => 2.0f  // Sword
+            WeaponType.Heavy  => 2.8f,
+            _                 => 2.0f
         };
-        // direção até o defensor e posição de ataque ajustada
-        Vector2 dir = (rawTargetPos - (Vector2)transform.position).normalized;
-        attackTargetPos = rawTargetPos - dir * reach;
+        Vector2 dir = (targetPos - (Vector2)transform.position).normalized;
+        Vector2 attackPos = targetPos - dir * reach;
 
-        // 4) Idle e Run até o ponto de ataque
         yield return animationController.PlayIdle(settings.idleDuration);
-        yield return animationController.PlayRun(attackTargetPos, settings.runSpeed, movement);
+        yield return animationController.PlayRun(attackPos, settings.runSpeed, movement);
 
-        // 5) Slashing e sincronização do Hurt na metade
-        string trigger = weaponHandler.currentType switch
+        string slashTrigger = weaponHandler.currentType switch
         {
-            WeaponType.Heavy => "SlashingHeavy",
+            WeaponType.Heavy  => "SlashingHeavy",
             WeaponType.Dagger => "SlashingDagger",
-            _ => "Slashing"
+            _                 => "Slashing"
         };
-        animator.SetTrigger(trigger);
-        // metade da duração do slashing
+        animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
-        //Hurt do defensor
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
-        // restante do slashing
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
 
-        // 6) Delay antes do salto
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
 
-        // 7) JumpStart e salto de volta
         yield return animationController.PlayJumpStart(settings.jumpStartDuration);
-        // spawn aleatório conforme jogador
-        if (isPlayer1)
-            initialPosition = new Vector2(
-                Random.Range(-7.25f, -4.79f),
-                Random.Range(-3.90f, -0.81f)
-            );
-        else
-            initialPosition = new Vector2(
-                Random.Range(7.25f, 4.79f),
-                Random.Range(-3.90f, -0.81f)
-            );
-        yield return movement.JumpTo(
-            attackTargetPos,    // ponto de partida do salto
-            initialPosition,    // destino aleatório
-            settings.runSpeed,
-            settings.jumpHeight
-        );
+        spawnPosition = RandomSpawnPosition();
+        yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);
 
-        // 8) Restaura renderização (alterna a ordem da camada de renderização)
-        SetCharacterLayerAndOrder(allRenderers, defaultCharLayer);
-        if (defender != null)
-            SetCharacterLayerAndOrder(defender.allRenderers, defaultCharLayer);
-
-        // 9) Idle final e reposiciona para próxima rodada
+        RestoreDefaultLayers();
         animationController.SetIdle(true);
-        //EquipAndSpawn();
     }
+
     private void EquipAndSpawn()
     {
         weaponHandler.EquipNext();
-        SetWeaponLayerAndOrder(weaponHandler,
-            isPlayer1 ? "Weapons" : "Weapons2"
-        );
+        SetWeaponLayer(weaponHandler, isPlayer1 ? "Weapons" : "Weapons2");
     }
 
-    private void SetCharacterLayerAndOrder(List<SpriteRenderer> rends, string layerName)
+    private Vector2 RandomSpawnPosition()
     {
-        foreach (var sr in rends)
+        float x = isPlayer1 ? Random.Range(-7.25f, -4.79f) : Random.Range(4.79f, 7.25f);
+        float y = Random.Range(-3.90f, -0.81f);
+        return new Vector2(x, y);
+    }
+
+    private void SetAttackerLayers()
+    {
+        SetBodyLayer(bodyRenderers, "Characters");
+        SetWeaponLayer(weaponHandler, "Weapons");
+
+        if (defender != null)
         {
-            sr.sortingLayerName = layerName;
+            SetBodyLayer(defender.bodyRenderers, "Characters2");
+            SetWeaponLayer(defender.weaponHandler, "Weapons2");
         }
     }
 
-    private void SetWeaponLayerAndOrder(WeaponHandler handler, string layerName)
+    private void RestoreDefaultLayers()
     {
-        var w = handler.CurrentWeapon;
-        if (w == null) return;
-        var sr = w.GetComponent<SpriteRenderer>();
-        sr.sortingLayerName = layerName;
+        SetBodyLayer(bodyRenderers, defaultSortingLayer);
+        if (defender != null)
+            SetBodyLayer(defender.bodyRenderers, defaultSortingLayer);
+    }
+
+    private static void SetBodyLayer(List<SpriteRenderer> renderers, string layerName)
+    {
+        foreach (var sr in renderers)
+            sr.sortingLayerName = layerName;
+    }
+
+    private static void SetWeaponLayer(WeaponHandler handler, string layerName)
+    {
+        var weapon = handler.CurrentWeapon;
+        if (weapon == null) return;
+        weapon.GetComponent<SpriteRenderer>().sortingLayerName = layerName;
     }
 }

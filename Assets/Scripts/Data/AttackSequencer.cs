@@ -3,42 +3,30 @@ using System.Collections;
 
 public class AttackSequencer : MonoBehaviour
 {
-    [Header("Combatentes")]
-    [Tooltip("PlayerCombat do Player 1")]
+    [Header("Combatants")]
     public PlayerCombat player1;
-    [Tooltip("PlayerCombat do Player 2")]
     public PlayerCombat player2;
 
-    [Header("Configuração de Turnos")]
-    [Tooltip("Delay entre os turnos")]
+    [Header("Turn Settings")]
     public float interTurnDelay = 0.2f;
 
     private void Start()
     {
-        StartCoroutine(WaitForPlayersAndStart());
+        StartCoroutine(StartWhenReady());
     }
 
-    private IEnumerator WaitForPlayersAndStart()
+    private IEnumerator StartWhenReady()
     {
-        // Espera até que ambos players estejam instanciados
-        while (player1 == null || player2 == null)
-        {
-            Debug.Log("[TurnManager] Aguardando instância dos dois jogadores...");
-            yield return null;
-        }
-
-        StartCoroutine(MainLoop());
+        yield return new WaitUntil(() => player1 != null && player2 != null);
+        StartCoroutine(CombatLoop());
     }
 
-    private IEnumerator MainLoop()
+    private IEnumerator CombatLoop()
     {
         while (true)
         {
-            // Turno do Player 1
             yield return StartCoroutine(player1.AttackRoutine());
             yield return new WaitForSeconds(interTurnDelay);
-
-            // Turno do Player 2
             yield return StartCoroutine(player2.AttackRoutine());
             yield return new WaitForSeconds(interTurnDelay);
         }

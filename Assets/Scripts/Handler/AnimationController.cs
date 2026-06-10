@@ -22,13 +22,6 @@ public class AnimationController : MonoBehaviour
         anim.SetBool("Running", false);
     }
 
-    public IEnumerator PlaySlash(float duration)
-    {
-        anim.SetTrigger("Slashing");
-        yield return new WaitForSeconds(duration);
-        anim.ResetTrigger("Slashing");
-    }
-
     public IEnumerator PlayJumpStart(float duration)
     {
         anim.SetBool("JumpStart", true);
@@ -36,17 +29,11 @@ public class AnimationController : MonoBehaviour
         anim.SetBool("JumpStart", false);
     }
 
-    /// <summary>
-    /// Dispara uma única vez a animação de Hurt (Trigger) e aguarda a duração.
-    /// </summary>
     public IEnumerator PlayHurt(float duration)
     {
         anim.SetTrigger("Hurt");
         yield return new WaitForSeconds(duration);
     }
 
-    public void SetIdle(bool state)
-    {
-        anim.SetBool("Idle", state);
-    }
+    public void SetIdle(bool state) => anim.SetBool("Idle", state);
 }
