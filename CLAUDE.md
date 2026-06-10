@@ -112,3 +112,51 @@ To add a new selectable character: create a `PlayerProfile` in `Assets/Scriptabl
 
 - **Spriter2UnityDX** (`Assets/Spriter2UnityDX/`) — Converts Spriter `.scml` files to Unity prefabs/animators. Character prefabs use its `EntityRenderer` and `TextureController` runtime components.
 - **TextMesh Pro** — Used throughout UI; assets in `Assets/TextMesh Pro/`.
+
+## Roadmap
+
+### Fase 1 — Interface & Personagens (Prioridade Alta)
+- [ ] Melhorar interface da página inicial
+- [ ] Melhorar interface da tela de escolha de personagens
+- [ ] Criação do primeiro personagem masculino e feminino
+- [ ] Adicionar novos prefabs de personagens guardados
+- [ ] Atributos aleatórios ao criar personagem level 1 (vida, força, agilidade, velocidade)
+- [ ] Habilidades inspiradas no My Brute
+- [ ] Criar habilidades originais adicionais
+
+### Fase 2 — Combate Robusto (Core do Jogo)
+- [ ] Mecânicas My Brute: jogar arma, derrubar arma adversária, combo, troca de arma, crítico, esquiva, parry
+- [ ] Porcentagens fixas por arma para eventos de combate
+- [ ] Animação de knockback ao tomar hit
+- [ ] Barra de vida com dano baseado em status + dano da arma
+- [ ] Sistema de XP e level (vitória +2 XP, derrota +1 XP)
+- [ ] Curva de XP por nível crescente (sugestão: level × 20 XP necessário)
+- [ ] Ao subir de nível: escolher atributo, skill ou arma (igual My Brute)
+
+### Fase 3 — Armas & Itens (Conteúdo)
+- [ ] Criar mais armas com sprites e stats diferentes
+- [ ] Sistema de raridade de armas
+- [ ] Pets: cachorro, lobo, águia, urso
+- [ ] Magias (avaliar viabilidade)
+
+### Fase 4 — Monetização (Receita)
+- [ ] Sistema de diamantes (moeda premium)
+- [ ] Compra de energia para lutar mais vezes
+- [ ] Compra de personagens com diamante
+- [ ] Precificação dos pacotes
+
+### Fase 5 — Endgame & Social (Futuro)
+- [ ] Mapa PVE (avaliar viabilidade)
+- [ ] Torneio com premiação
+- [ ] Torneios 2v2 e 3v3
+- [ ] Guildas (avaliar viabilidade)
+
+### Fase 6 — Infraestrutura & Dados (Técnico)
+- [ ] Definir banco de dados para salvar personagens (Firebase ou PlayFab)
+- [ ] Integrar persistência de dados do personagem online
+- [ ] Criar cena 03_SelectWeapons (já referenciada no código)
+
+### Progresso
+- Total de tarefas: 29
+- Concluídas: 0
+- Ao concluir uma tarefa, marcar com [x] e atualizar o contador.
