@@ -9,7 +9,7 @@ public class CombatSceneLoader : MonoBehaviour
 
     [Header("Player 2")]
     [Tooltip("Vida maxima do Player2 (Medieval Warrior Girl). Ajustar conforme o perfil do personagem.")]
-    [SerializeField] private int player2MaxHealth = 100;
+    [SerializeField] private int player2MaxHealth = 15;
 
     void Start()
     {

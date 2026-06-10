@@ -74,7 +74,11 @@ public class PlayerCombat : MonoBehaviour
 
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
-        defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData?.damage ?? 0);
+
+        if (weaponHandler.CurrentWeaponData == null)
+            Debug.LogWarning($"[PlayerCombat] {name}: CurrentWeaponData é null — nenhum dano aplicado.");
+        else
+            defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData.damage);
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
         yield return new WaitForSeconds(settings.slashingToJumpDelay);

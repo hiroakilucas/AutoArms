@@ -29,6 +29,7 @@ public class HealthSystem : MonoBehaviour
         if (IsDead) return;
         CurrentHealth = Mathf.Max(0, CurrentHealth - damage);
         healthBar?.UpdateBar(CurrentHealth, MaxHealth);
+        Debug.Log($"[HealthSystem] {gameObject.name} tomou {damage} de dano. HP: {CurrentHealth}/{MaxHealth}");
         if (IsDead) OnDeath?.Invoke();
     }
 

@@ -30,7 +30,7 @@ public class PlayerProfile : ScriptableObject
 
     [Header("Combate")]
     [Tooltip("Vida máxima do personagem")]
-    public int maxHealth = 100;
+    public int maxHealth = 15;
 
     [Header("Progresso")]
     [Tooltip("N�vel atual do personagem")]
