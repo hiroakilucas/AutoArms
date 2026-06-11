@@ -88,14 +88,17 @@ public class PlayerCombat : MonoBehaviour
         yield return HitRoutine();
     }
 
-    // Hit de combo: sem movimento — apenas slash, knockback, hurt e dano.
+    // Hit de combo: pausa para o animator sair do estado Slashing, depois slash
+    // sem knockback — o defensor permanece no lugar durante todo o combo.
     private IEnumerator ComboStrikeRoutine()
     {
-        yield return HitRoutine();
+        yield return new WaitForSeconds(settings.slashingToJumpDelay);
+        yield return HitRoutine(applyKnockback: false);
     }
 
-    // Slash → knockback + Hurt (paralelo) → dano. Compartilhado por Strike e Combo.
-    private IEnumerator HitRoutine()
+    // Slash → (knockback opcional + Hurt em paralelo) → dano.
+    // Knockback ativo no ataque principal; desativado nos hits de combo.
+    private IEnumerator HitRoutine(bool applyKnockback = true)
     {
         string slashTrigger = weaponHandler.currentType switch
         {
@@ -106,7 +109,7 @@ public class PlayerCombat : MonoBehaviour
         animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
 
-        if (defender != null)
+        if (applyKnockback && defender != null)
         {
             Vector2 pushDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
             defender.StartCoroutine(defender.Knockback(pushDir, settings.knockbackDistance, settings.hurtDuration));
