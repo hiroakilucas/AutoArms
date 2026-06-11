@@ -3,20 +3,28 @@ using UnityEngine.UI;
 
 public class CombatHUD : MonoBehaviour
 {
-    private Image p1Fill;
-    private Image p2Fill;
+    private RectTransform p1FillRect;
+    private RectTransform p2FillRect;
 
     public void Initialize(HealthSystem health1, HealthSystem health2)
     {
         var canvas = CreateCanvas();
-        p1Fill = CreateBar(canvas, isLeft: true);
-        p2Fill = CreateBar(canvas, isLeft: false);
+        p1FillRect = CreateBar(canvas, isLeft: true);
+        p2FillRect = CreateBar(canvas, isLeft: false);
 
-        health1.OnHealthChanged += (cur, max) => p1Fill.fillAmount = (float)cur / max;
-        health2.OnHealthChanged += (cur, max) => p2Fill.fillAmount = (float)cur / max;
+        health1.OnHealthChanged += (cur, max) => SetFill(p1FillRect, cur, max, isLeft: true);
+        health2.OnHealthChanged += (cur, max) => SetFill(p2FillRect, cur, max, isLeft: false);
+    }
 
-        p1Fill.fillAmount = 1f;
-        p2Fill.fillAmount = 1f;
+    // P1: anchorMax.x = health% → barra encolhe da direita para a esquerda
+    // P2: anchorMin.x = 1 - health% → barra encolhe da esquerda para a direita
+    private static void SetFill(RectTransform rt, int cur, int max, bool isLeft)
+    {
+        float pct = max > 0 ? (float)cur / max : 0f;
+        if (isLeft)
+            rt.anchorMax = new Vector2(pct, rt.anchorMax.y);
+        else
+            rt.anchorMin = new Vector2(1f - pct, rt.anchorMin.y);
     }
 
     private static GameObject CreateCanvas()
@@ -33,53 +41,52 @@ public class CombatHUD : MonoBehaviour
         return go;
     }
 
-    // isLeft=true  → P1: fill drena da direita para esquerda (fillOrigin=Left)
-    // isLeft=false → P2: fill drena da esquerda para direita (fillOrigin=Right)
-    private static Image CreateBar(GameObject canvas, bool isLeft)
+    private static RectTransform CreateBar(GameObject canvas, bool isLeft)
     {
+        // Outer container — dark border
         var container = new GameObject(isLeft ? "P1Bar" : "P2Bar");
         container.transform.SetParent(canvas.transform, false);
-
-        var rt = container.AddComponent<RectTransform>();
-        rt.anchorMin = isLeft ? new Vector2(0.02f, 0.93f) : new Vector2(0.55f, 0.93f);
-        rt.anchorMax = isLeft ? new Vector2(0.45f, 0.99f) : new Vector2(0.98f, 0.99f);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-
-        // Dark border
+        var crt = container.AddComponent<RectTransform>();
+        crt.anchorMin = isLeft ? new Vector2(0.02f, 0.93f) : new Vector2(0.55f, 0.93f);
+        crt.anchorMax = isLeft ? new Vector2(0.45f, 0.99f) : new Vector2(0.98f, 0.99f);
+        crt.offsetMin = Vector2.zero;
+        crt.offsetMax = Vector2.zero;
         container.AddComponent<Image>().color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
 
-        // Red background — representa o dano acumulado
-        AddImage(container, "RedBackground", new Color(0.72f, 0.08f, 0.08f), inset: 3);
+        // Inner container — 3px inset, defines the bar area
+        var inner = new GameObject("Inner");
+        inner.transform.SetParent(container.transform, false);
+        var irt = inner.AddComponent<RectTransform>();
+        irt.anchorMin = Vector2.zero;
+        irt.anchorMax = Vector2.one;
+        irt.offsetMin = new Vector2(3, 3);
+        irt.offsetMax = new Vector2(-3, -3);
 
-        // Green fill — representa HP restante; encolhe revelando o vermelho
+        // Red background — always full width, reveals as green shrinks
+        AddImage(inner, "RedBg", new Color(0.72f, 0.08f, 0.08f));
+
+        // Green fill — width controlled via anchorMax.x (P1) or anchorMin.x (P2)
         var fillGo = new GameObject("Fill");
-        fillGo.transform.SetParent(container.transform, false);
-        var fill = fillGo.AddComponent<Image>();
-        fill.color = new Color(0.15f, 0.78f, 0.15f);
-        fill.type = Image.Type.Filled;
-        fill.fillMethod = Image.FillMethod.Horizontal;
-        fill.fillOrigin = isLeft
-            ? (int)Image.OriginHorizontal.Left
-            : (int)Image.OriginHorizontal.Right;
-        SetInset(fill.GetComponent<RectTransform>(), 3);
+        fillGo.transform.SetParent(inner.transform, false);
+        fillGo.AddComponent<Image>().color = new Color(0.15f, 0.78f, 0.15f);
+        var fillRt = fillGo.GetComponent<RectTransform>();
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        fillRt.offsetMin = Vector2.zero;
+        fillRt.offsetMax = Vector2.zero;
 
-        return fill;
+        return fillRt;
     }
 
-    private static void AddImage(GameObject parent, string name, Color color, float inset)
+    private static void AddImage(GameObject parent, string name, Color color)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent.transform, false);
         go.AddComponent<Image>().color = color;
-        SetInset(go.GetComponent<RectTransform>(), inset);
-    }
-
-    private static void SetInset(RectTransform rt, float px)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(px, px);
-        rt.offsetMax = new Vector2(-px, -px);
+        var r = go.GetComponent<RectTransform>();
+        r.anchorMin = Vector2.zero;
+        r.anchorMax = Vector2.one;
+        r.offsetMin = Vector2.zero;
+        r.offsetMax = Vector2.zero;
     }
 }
