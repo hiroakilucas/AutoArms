@@ -131,6 +131,20 @@ public class PlayerCombat : MonoBehaviour
         };
     }
 
+    // Impact (skill futura): adiciona +0.15f a este valor permanentemente.
+    private float DisarmChance()
+    {
+        if (weaponHandler.CurrentWeapon == null) return 0f;
+        return weaponHandler.currentType switch
+        {
+            WeaponType.Dagger => 0.20f,
+            WeaponType.Fast   => 0.15f,
+            WeaponType.Sword  => 0.10f,
+            WeaponType.Heavy  => 0.05f,
+            _                 => 0f
+        };
+    }
+
     // Sixth Sense (skill futura): adiciona +0.10f a este valor permanentemente.
     private float DodgeChance()
     {
@@ -208,12 +222,12 @@ public class PlayerCombat : MonoBehaviour
         Vector2 attackPos = AttackPosition();
         if (Vector2.Distance(transform.position, attackPos) > 0.3f)
             yield return animationController.PlayRun(attackPos, settings.runSpeed, movement);
-        yield return HitRoutine();
+        yield return HitRoutine(isCombo: true);
     }
 
-    // Slash → (knockback + Hurt em paralelo) → dano.
+    // Slash → (knockback + Hurt em paralelo) → dano → (se não combo) checar Desarmar.
     // Quando desarmado: usa "Slashing" (soco) com dano calculado por STR.
-    private IEnumerator HitRoutine(bool applyKnockback = true)
+    private IEnumerator HitRoutine(bool applyKnockback = true, bool isCombo = false)
     {
         string slashTrigger = weaponHandler.currentType switch
         {
@@ -272,6 +286,13 @@ public class PlayerCombat : MonoBehaviour
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.Spawn(popupPos, finalDamage, isCrit);
+        }
+
+        if (!isCombo && defender != null && !defender.IsDead
+            && defender.weaponHandler.CurrentWeapon != null
+            && Random.value < DisarmChance())
+        {
+            StartCoroutine(DropWeapon(defender));
         }
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
@@ -356,6 +377,47 @@ public class PlayerCombat : MonoBehaviour
             yield return new WaitForSeconds(settings.hurtDuration);
         }
 
+    }
+
+    private IEnumerator DropWeapon(PlayerCombat target)
+    {
+        var data = target.weaponHandler.CurrentWeaponData;
+        if (data?.inHandSprite == null) yield break;
+
+        var inHand = target.weaponHandler.CurrentWeapon;
+        Vector3 startPos  = inHand != null ? inHand.transform.position : target.transform.position + Vector3.up * 0.5f;
+        Vector3 worldScale = inHand != null ? inHand.transform.lossyScale : Vector3.one * data.scale;
+
+        target.weaponHandler.UnequipPermanent();
+
+        Vector3 popupPos = target.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
+        DamagePopup.SpawnDisarm(popupPos);
+
+        var fallen = new GameObject("FallenWeapon");
+        fallen.transform.position   = startPos;
+        fallen.transform.localScale = new Vector3(Mathf.Abs(worldScale.x), Mathf.Abs(worldScale.y), Mathf.Abs(worldScale.z));
+        var sr = fallen.AddComponent<SpriteRenderer>();
+        sr.sprite           = data.inHandSprite;
+        sr.sortingLayerName = "Weapons";
+        sr.sortingOrder     = 5;
+
+        float groundY   = target.transform.position.y - 1.5f;
+        float velocityY = 0f;
+        float elapsed   = 0f;
+
+        while (elapsed < 1.5f && fallen.transform.position.y > groundY)
+        {
+            velocityY -= 9.8f * Time.deltaTime;
+            fallen.transform.position += new Vector3(0f, velocityY * Time.deltaTime, 0f);
+            fallen.transform.Rotate(0f, 0f, 200f * Time.deltaTime);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (elapsed < 1.5f)
+            yield return new WaitForSeconds(1.5f - elapsed);
+
+        Destroy(fallen);
     }
 
     private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, bool rotate)

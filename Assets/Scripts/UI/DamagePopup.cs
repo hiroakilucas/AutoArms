@@ -39,6 +39,27 @@ public class DamagePopup : MonoBehaviour
         go.AddComponent<DamagePopup>().InitMiss();
     }
 
+    public static void SpawnDisarm(Vector3 worldPos)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitDisarm();
+    }
+
+    void InitDisarm()
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = "DISARM!";
+        label.fontSize       = 4f;
+        baseColor            = new Color(1f, 0.5f, 0f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void InitBlock()
     {
         label = gameObject.AddComponent<TextMeshPro>();

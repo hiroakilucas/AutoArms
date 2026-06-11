@@ -340,7 +340,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Parry: chance de bloquear dano com arma ou escudo
 - [x] Jogar arma: arremessar a arma no adversário
 - [x] Pegar arma: começar desarmado e pegar arma aleatória (40% chance) no início do turno com animação CatchWeapon
-- [ ] Desarmar: fazer o adversário soltar a arma
+- [x] Desarmar: fazer o adversário soltar a arma
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
 - [ ] Curva de XP: level × 20 XP necessário
 - [ ] Ao subir de nível: escolher atributo, skill ou arma
@@ -394,5 +394,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 49 tarefas | Concluídas: 9
-- Última atualização: 2026-06-11 (Pegar Arma concluída: começar desarmado, EquipRandom 40% + CatchWeapon animation; ThrowChance 60% para todos os tipos não-Thrown; miss no arremesso faz DodgeLeap)
+- Total: 49 tarefas | Concluídas: 10
+- Última atualização: 2026-06-11 (Desarmar: DisarmChance por tipo de arma, DropWeapon com gravidade, popup DISARM! laranja; só no primeiro hit do turno)
