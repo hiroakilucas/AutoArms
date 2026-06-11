@@ -82,6 +82,18 @@ public class PlayerCombat : MonoBehaviour
         _                 => 0.05f
     };
 
+    // Shield (skill futura): adiciona +0.45f a este valor permanentemente.
+    private float BlockChance()
+    {
+        if (defender == null || defender.weaponHandler.CurrentWeaponData == null) return 0f;
+        return defender.weaponHandler.currentType switch
+        {
+            WeaponType.Block => 0.25f,
+            WeaponType.Slow  => 0.05f,
+            _                => 0f
+        };
+    }
+
     // Sixth Sense (skill futura): adiciona +0.10f a este valor permanentemente.
     private float DodgeChance()
     {
@@ -152,6 +164,16 @@ public class PlayerCombat : MonoBehaviour
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.SpawnDodge(dodgePos);
+            yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+            yield break;
+        }
+
+        if (defender != null && Random.value < BlockChance())
+        {
+            Vector3 blockPos = defender.transform.position
+                + Vector3.up   * 1.5f
+                + Vector3.right * Random.Range(-0.3f, 0.3f);
+            DamagePopup.SpawnBlock(blockPos);
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }

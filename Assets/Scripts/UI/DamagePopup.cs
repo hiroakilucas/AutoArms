@@ -25,6 +25,27 @@ public class DamagePopup : MonoBehaviour
         go.AddComponent<DamagePopup>().InitDodge();
     }
 
+    public static void SpawnBlock(Vector3 worldPos)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitBlock();
+    }
+
+    void InitBlock()
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = "BLOCK!";
+        label.fontSize       = 4f;
+        baseColor            = new Color(1f, 0.84f, 0f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void InitDodge()
     {
         label = gameObject.AddComponent<TextMeshPro>();

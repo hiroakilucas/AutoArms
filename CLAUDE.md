@@ -178,6 +178,18 @@ Each agility point above 10 adds +1% (`defender.agility` field, default 10).
 When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4). Popup shows "ESQUIVA!" in blue. Combo continues normally.
 > Future skill **Sixth Sense**: +10% dodge permanente.
 
+### Block
+`BlockChance()` no atacante, lendo o tipo de arma do **defensor**:
+| WeaponType (defender) | Chance |
+|---|---|
+| Block | 25% |
+| Slow | 5% |
+| Sem arma (CurrentWeaponData == null) | 0% |
+| outros | 0% |
+
+Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal**. Quando block trigga: sem knockback, sem Hurt, sem dano. Defensor fica parado. Popup "BLOCK!" em dourado.
+> Future skill **Shield**: +45% block permanente.
+
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
 
@@ -263,7 +275,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Combo: atacante executa Slash adicional sem Run, sem limite de hits
 - [x] Crítico: 5% base, Dagger 8%, Sword 5%, Heavy 3% — dano × 2
 - [x] Esquiva: chance de desviar baseada em agilidade
-- [ ] Parry: chance de bloquear dano com arma ou escudo
+- [x] Parry: chance de bloquear dano com arma ou escudo
 - [ ] Jogar arma: arremessar a arma no adversário
 - [ ] Desarmar: fazer o adversário soltar a arma
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
@@ -319,5 +331,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 48 tarefas | Concluídas: 6
+- Total: 48 tarefas | Concluídas: 7
 - Última atualização: 2026-06-11 (esquiva, DodgeLeap, reposicionamento combo, knockback em todos os hits)
