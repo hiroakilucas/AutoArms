@@ -56,15 +56,20 @@ AttackSequencer
   └── loops: player1.AttackRoutine() → delay → player2.AttackRoutine()
 
 PlayerCombat.AttackRoutine()
-  ├── AnimationController  (Idle → Run → Slash → JumpStart → Hurt)
-  ├── MovementController   (MoveTo linear, JumpTo parabolic arc)
-  └── WeaponHandler        (equips next weapon from PlayerLoadout each round)
+  ├── StrikeRoutine()          → AttackPosition() → PlayRun → HitRoutine()
+  ├── ComboStrikeRoutine()     → delay → reposition if needed → HitRoutine()
+  ├── HitRoutine()             → slash trigger → dodge check → knockback+hurt+damage
+  ├── DodgeLeap()              → PlayJumpStart + JumpTo (fired on defender when dodge triggers)
+  ├── AnimationController      (Idle → Run → Slash → JumpStart → Hurt)
+  ├── MovementController       (MoveTo linear, JumpTo parabolic arc)
+  └── WeaponHandler            (equips next weapon from PlayerLoadout each round)
 ```
 
 - `AttackSequencer` — Runs the indefinite turn loop; waits for both `PlayerCombat` references before starting.
 - `PlayerCombat` — Owns `AttackRoutine`. Manages sorting layer swaps so the attacker renders above the defender during a strike.
 - `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach.
 - `PlayerLoadout` — Tracks `currentIndex` and advances round-robin through `WeaponLoadout.weapons[]`.
+- `DamagePopup` — World-space TextMeshPro floating text spawned at the defender's position. Three variants: normal (yellow), crit (red "CRIT!\n{damage}"), dodge (blue "ESQUIVA!").
 
 ### 04_CombatScenePVP Hierarchy
 
@@ -141,6 +146,40 @@ Use `animator.SetTrigger("SlashingDagger")` (no space), but `stateInfo.IsName("S
 
 ### Combo Architecture
 The combo fires `SetTrigger(slashTrigger)` from within the Slashing state. This works because the `Any State → Slashing` transitions have `CanTransitionToSelf=1`, allowing the animator to re-enter Slashing from itself with a 0.1s blend (restarts the animation). The `slashingToJumpDelay` pause in `ComboStrikeRoutine` controls rhythm between hits.
+
+`ComboStrikeRoutine` recalculates `AttackPosition()` on every hit and runs `PlayRun` to reposition if the attacker is more than 0.3 units away — this handles both knockback (defender was pushed back on previous hit) and dodge (defender jumped back). Every hit including combo applies knockback.
+
+## Combat Systems
+
+### Critical Hit
+`CritChance()` on the attacker, based on attacker's weapon type:
+| WeaponType | Chance |
+|---|---|
+| Dagger | 8% |
+| Sword | 5% |
+| Heavy | 3% |
+| others | 5% |
+
+On crit: `finalDamage = baseDamage × 2`. Popup shows "CRIT!\n{damage}" in red, font 5.
+> Future skill **Fierce Brute**: +10% crit permanente.
+
+### Dodge
+`DodgeChance()` on the attacker, reading the **defender's** weapon type:
+| WeaponType (defender) | Chance |
+|---|---|
+| Fast | 20% |
+| Dagger | 15% |
+| Sword | 10% |
+| Heavy | 5% |
+| others | 10% |
+
+Each agility point above 10 adds +1% (`defender.agility` field, default 10).
+
+When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4). Popup shows "ESQUIVA!" in blue. Combo continues normally.
+> Future skill **Sixth Sense**: +10% dodge permanente.
+
+### Knockback
+Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
 
 ## Third-Party Plugins
 
@@ -281,4 +320,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 48 tarefas | Concluídas: 6
-- Última atualização: 2026-06-11
+- Última atualização: 2026-06-11 (esquiva, DodgeLeap, reposicionamento combo, knockback em todos os hits)

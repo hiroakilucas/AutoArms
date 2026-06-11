@@ -98,33 +98,40 @@ public class PlayerCombat : MonoBehaviour
         return baseChance + agilityBonus;
     }
 
-    // Ataque principal: corre até o defensor e executa um hit completo.
-    private IEnumerator StrikeRoutine()
+    // Posição de ataque: imediatamente fora do alcance da arma, na direção do defensor.
+    private Vector2 AttackPosition()
     {
-        Vector2 targetPos = defender != null ? (Vector2)defender.transform.position : spawnPosition;
+        if (defender == null) return spawnPosition;
+        Vector2 defPos = (Vector2)defender.transform.position;
         float reach = weaponHandler.currentType switch
         {
             WeaponType.Dagger => 1.5f,
             WeaponType.Heavy  => 2.8f,
             _                 => 2.0f
         };
-        Vector2 dir = (targetPos - (Vector2)transform.position).normalized;
-        Vector2 attackPos = targetPos - dir * reach;
+        Vector2 dir = (defPos - (Vector2)transform.position).normalized;
+        return defPos - dir * reach;
+    }
 
-        yield return animationController.PlayRun(attackPos, settings.runSpeed, movement);
+    // Ataque principal: corre até o defensor e executa um hit completo.
+    private IEnumerator StrikeRoutine()
+    {
+        yield return animationController.PlayRun(AttackPosition(), settings.runSpeed, movement);
         yield return HitRoutine();
     }
 
-    // Hit de combo: Any State → Slashing (CanTransitionToSelf=1) no controller
-    // permite re-triggar do próprio estado Slashing sem precisar aguardar saída.
+    // Hit de combo: reposiciona se o defensor se moveu (knockback/esquiva), depois executa o hit.
+    // Any State → Slashing (CanTransitionToSelf=1) no controller permite re-entrar no Slashing após o run.
     private IEnumerator ComboStrikeRoutine()
     {
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
-        yield return HitRoutine(applyKnockback: false);
+        Vector2 attackPos = AttackPosition();
+        if (Vector2.Distance(transform.position, attackPos) > 0.3f)
+            yield return animationController.PlayRun(attackPos, settings.runSpeed, movement);
+        yield return HitRoutine();
     }
 
-    // Slash → (knockback opcional + Hurt em paralelo) → dano.
-    // Knockback ativo no ataque principal; desativado nos hits de combo.
+    // Slash → (knockback + Hurt em paralelo) → dano.
     private IEnumerator HitRoutine(bool applyKnockback = true)
     {
         string slashTrigger = weaponHandler.currentType switch
@@ -138,6 +145,9 @@ public class PlayerCombat : MonoBehaviour
 
         if (defender != null && Random.value < DodgeChance())
         {
+            Vector2 dodgeDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
+            defender.StartCoroutine(defender.DodgeLeap(dodgeDir, settings.knockbackDistance));
+
             Vector3 dodgePos = defender.transform.position
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
@@ -170,6 +180,16 @@ public class PlayerCombat : MonoBehaviour
         }
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+    }
+
+    // Salta para trás ao esquivar: JumpStart animation + arco parabólico na direção oposta ao ataque.
+    public IEnumerator DodgeLeap(Vector2 pushDirection, float distance)
+    {
+        Vector2 to = (Vector2)transform.position + pushDirection * distance;
+        float duration = settings.hurtDuration;
+        StartCoroutine(animationController.PlayJumpStart(duration));
+        yield return movement.JumpTo(to, distance / duration, 0.4f);
+        animationController.SetIdle(true);
     }
 
     // Desliza o personagem na direção pushDirection ao tomar um hit.
