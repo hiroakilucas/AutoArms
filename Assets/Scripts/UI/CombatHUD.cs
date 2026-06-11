@@ -12,8 +12,8 @@ public class CombatHUD : MonoBehaviour
         p1Fill = CreateBar(canvas, isLeft: true);
         p2Fill = CreateBar(canvas, isLeft: false);
 
-        health1.OnHealthChanged += (cur, max) => { Debug.Log($"[CombatHUD] P1 HP {cur}/{max}"); p1Fill.fillAmount = (float)cur / max; };
-        health2.OnHealthChanged += (cur, max) => { Debug.Log($"[CombatHUD] P2 HP {cur}/{max}"); p2Fill.fillAmount = (float)cur / max; };
+        health1.OnHealthChanged += (cur, max) => p1Fill.fillAmount = (float)cur / max;
+        health2.OnHealthChanged += (cur, max) => p2Fill.fillAmount = (float)cur / max;
 
         p1Fill.fillAmount = 1f;
         p2Fill.fillAmount = 1f;
@@ -30,7 +30,6 @@ public class CombatHUD : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
 
-        go.AddComponent<GraphicRaycaster>();
         return go;
     }
 

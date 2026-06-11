@@ -46,7 +46,6 @@ public class PlayerCombat : MonoBehaviour
 
     public IEnumerator AttackRoutine()
     {
-        Debug.Log($"[PlayerCombat] {name} inicia ataque → defender={defender?.name ?? "null"}");
         Vector2 targetPos = defender != null ? (Vector2)defender.transform.position : spawnPosition;
 
         SetAttackerLayers();
@@ -76,14 +75,7 @@ public class PlayerCombat : MonoBehaviour
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
 
-        var defHealth = defender != null ? defender.GetComponent<HealthSystem>() : null;
-        Debug.Log($"[PlayerCombat] {name} aplica dano → defHealth={defHealth != null}  weapon={weaponHandler.CurrentWeaponData?.weaponName ?? "null"}");
-        if (defHealth == null)
-            Debug.LogWarning($"[PlayerCombat] {name}: HealthSystem nulo no defensor '{defender?.name}'");
-        else if (weaponHandler.CurrentWeaponData == null)
-            Debug.LogWarning($"[PlayerCombat] {name}: CurrentWeaponData é null");
-        else
-            defHealth.TakeDamage(weaponHandler.CurrentWeaponData.damage);
+        defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData?.damage ?? 0);
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
