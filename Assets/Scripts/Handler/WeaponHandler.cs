@@ -28,6 +28,21 @@ public class WeaponHandler : MonoBehaviour
         var data = loadout.GetNextWeapon();
         if (data?.inHandSprite == null) return;
 
+        EquipData(data);
+    }
+
+    public void EquipRandom()
+    {
+        if (current) Destroy(current);
+
+        var data = loadout.GetRandomWeapon();
+        if (data?.inHandSprite == null) return;
+
+        EquipData(data);
+    }
+
+    private void EquipData(WeaponData data)
+    {
         currentType = data.type;
         CurrentWeaponData = data;
         current = Instantiate(swordBasePrefab, handBone);

@@ -24,6 +24,14 @@ public class PlayerLoadout : MonoBehaviour
         return runtimeWeapons[currentIndex];
     }
 
+    public WeaponData GetRandomWeapon()
+    {
+        EnsureRuntime();
+        if (runtimeWeapons.Count == 0) return null;
+        currentIndex = Random.Range(0, runtimeWeapons.Count);
+        return runtimeWeapons[currentIndex];
+    }
+
     // Permanently removes the weapon at currentIndex from this combat's loadout.
     // Validates that the slot still holds `expected` before removing — guards against index drift.
     // Does not affect the ScriptableObject asset.

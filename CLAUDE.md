@@ -129,6 +129,7 @@ Each character prefab has a Spriter2UnityDX-generated Animator Controller with a
 | `SlashingHeavy` | Trigger | Heavy weapon attack |
 | `Blocking` | Trigger | Block reaction (defense pose) |
 | `Throwing` | Trigger | Throw weapon animation |
+| `CatchWeapon` | Trigger | Pick up weapon animation (início do turno) |
 
 ### Key States and Transitions
 - **Running → Slashing/SlashingDagger/SlashingHeavy**: condition `Running=false + trigger`. These are the original transitions.
@@ -139,6 +140,8 @@ Each character prefab has a Spriter2UnityDX-generated Animator Controller with a
 - **Block → Idle**: `HasExitTime=1`, `ExitTime=0.75`, condition `Idle=true`. Auto-exits after playing ≥75% of the animation.
 - **Any State → Throwing** *(added for throw weapon)*: condition `Throwing` trigger, `HasExitTime=0`, `CanTransitionToSelf=0`. Fired by `ThrowRoutine` concurrently with `FlyWeapon`.
 - **Throwing → Idle**: `HasExitTime=1`, `ExitTime=0.75`, condition `Idle=true`.
+- **Idle state → Catch Weapon** *(added for pick-up)*: conditions `Idle=false AND CatchWeapon`, `HasExitTime=0`. Transition is in the **Idle state's own transitions** (NOT AnyState). Assassin Guy and Medieval Warrior Girl were correct from the start; Medieval Warrior required a manual fix (had it in AnyState + exit with `HasExitTime=1`).
+- **Catch Weapon → Idle**: condition `Idle=true`, `HasExitTime=0` (condition-only, fires as soon as Idle is set). Motion: `Catch Weapon.anim` from Assassin Guy's prefab folder (GUID `478bd109963d38d46b36266bc1679f0f`), compatible with all three character skeletons.
 
 `Block.anim` lives in each character's `Prefab/` folder (copied from Medieval Warrior original). Duration: `0.36666667s`. Animates arm/weapon bones into a raised-guard pose.
 
@@ -206,10 +209,10 @@ Fires after `ReturnToSpawn`, only if the defender is alive and the attacker has 
 | WeaponType | Chance |
 |---|---|
 | Thrown | 100% |
-| Dagger | 25% |
-| Fast | 15% |
-| Sword | 10% |
-| Heavy | 5% |
+| Dagger | 60% |
+| Fast | 60% |
+| Sword | 60% |
+| Heavy | 60% |
 | others / no weapon | 0% |
 
 Flow:
@@ -217,13 +220,19 @@ Flow:
 2. Create `FlyingWeapon` GameObject with the weapon's `inHandSprite`. `localScale = Vector3.one * weaponData.scale` for **all types** (same scale as the in-hand sprite).
 3. `SetTrigger("Throwing")` fires animator concurrently.
 4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Only `WeaponType.Thrown`** rotates (540°/s). All other types fly with fixed rotation.
-5. On landing: 80% hit (weapon damage + Hurt + knockback), 20% miss (gray "MISS!" popup).
-6. After result: **40% chance** to immediately `EquipNext()` (pick up next weapon); **60%** stays unarmed.
-7. At the start of the NEXT `AttackRoutine`, if still unarmed, `EquipNext()` is called (normal round advancement).
+5. On landing: 80% hit (weapon damage + Hurt + knockback), 20% miss — defender plays `DodgeLeap` (same animation as dodge) + gray "MISS!" popup.
 
 `PlayerLoadout.runtimeWeapons` is a `List<WeaponData>` initialized lazily on first `GetNextWeapon()` call (after `CombatSceneLoader` has assigned the loadout). `RemoveCurrentWeapon(expected)` removes the entry at `currentIndex` only if it matches `expected` (guards against index drift), then decrements `currentIndex` so the next `EquipNext()` gets the correct successor.
 `WeaponHandler.UnequipPermanent()` captures `CurrentWeaponData` before calling `Unequip()` (which clears it), then passes the reference to `RemoveCurrentWeapon(expected)` for validation.
 `DamagePopup.SpawnMiss(worldPos)` spawns a gray "MISS!" popup.
+
+### Pegar Arma (Início do Turno)
+Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, se `CurrentWeapon == null`:
+- **40%** de chance de executar `EquipRandom()` (pega uma arma aleatória do loadout) + animação `CatchWeapon` (0.6s) → ataca com a arma.
+- **60%** não pega → ataca desarmado (soco).
+
+`EquipRandom()` chama `loadout.GetRandomWeapon()` — seleciona aleatoriamente entre as armas disponíveis no runtime loadout (não ciclicamente). Se o loadout estiver vazio, o personagem permanece desarmado.
+`PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
 ### Unarmed Combat
 When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `1 + StrBonus()`.
@@ -242,11 +251,6 @@ When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch)
 Throw damage uses the same base values WITHOUT StrBonus (the weapon flies, not a melee hit).
 
 > Future skill **Iron Fist**: increases unarmed damage.
-
-### Post-Throw Action Return
-After `ThrowRoutine`, chance = `agility × 2%` (default agility=10 → 20%) to immediately:
-run to `AttackPosition()` → `HitRoutine()` → `ReturnToSpawn()`.
-This is a quick counter-strike with whatever weapon the attacker currently holds (might be unarmed punch if 60% case). Future skills can boost this chance.
 
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
@@ -335,6 +339,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Esquiva: chance de desviar baseada em agilidade
 - [x] Parry: chance de bloquear dano com arma ou escudo
 - [x] Jogar arma: arremessar a arma no adversário
+- [x] Pegar arma: começar desarmado e pegar arma aleatória (40% chance) no início do turno com animação CatchWeapon
 - [ ] Desarmar: fazer o adversário soltar a arma
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
 - [ ] Curva de XP: level × 20 XP necessário
@@ -389,5 +394,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 48 tarefas | Concluídas: 8
-- Última atualização: 2026-06-11 (Jogar Arma revisado: linha reta, Thrown exception, remoção permanente do loadout, 40% re-equip imediato, combate desarmado com STR, Heavy+STR)
+- Total: 49 tarefas | Concluídas: 9
+- Última atualização: 2026-06-11 (Pegar Arma concluída: começar desarmado, EquipRandom 40% + CatchWeapon animation; ThrowChance 60% para todos os tipos não-Thrown; miss no arremesso faz DodgeLeap)

@@ -35,6 +35,14 @@ public class AnimationController : MonoBehaviour
         yield return new WaitForSeconds(duration);
     }
 
+    public IEnumerator PlayCatchWeapon(float duration)
+    {
+        anim.ResetTrigger("Hurt");
+        anim.SetBool("Idle", false);
+        anim.SetTrigger("CatchWeapon");
+        yield return new WaitForSeconds(duration);
+    }
+
     public IEnumerator PlayHurt(float duration)
     {
         anim.SetTrigger("Hurt");

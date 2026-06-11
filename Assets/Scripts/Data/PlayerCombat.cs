@@ -42,7 +42,6 @@ public class PlayerCombat : MonoBehaviour
 
     private void Start()
     {
-        EquipAndSpawn();
         spawnPosition = RandomSpawnPosition();
         transform.position = spawnPosition;
         animationController.SetIdle(true);
@@ -56,7 +55,11 @@ public class PlayerCombat : MonoBehaviour
         if (weaponHandler.CurrentWeapon == null)
         {
             if (Random.value < 0.40f)
-                weaponHandler.EquipNext();
+            {
+                weaponHandler.EquipRandom();
+                if (weaponHandler.CurrentWeapon != null)
+                    yield return animationController.PlayCatchWeapon(0.6f);
+            }
         }
 
         SetAttackerLayers();
@@ -83,10 +86,10 @@ public class PlayerCombat : MonoBehaviour
         return weaponHandler.currentType switch
         {
             WeaponType.Thrown  => 1.00f,
-            WeaponType.Dagger  => 0.25f,
-            WeaponType.Fast    => 0.15f,
-            WeaponType.Sword   => 0.10f,
-            WeaponType.Heavy   => 0.05f,
+            WeaponType.Dagger  => 0.60f,
+            WeaponType.Fast    => 0.60f,
+            WeaponType.Sword   => 0.60f,
+            WeaponType.Heavy   => 0.60f,
             _                  => 0f
         };
     }
@@ -181,12 +184,13 @@ public class PlayerCombat : MonoBehaviour
     {
         if (defender == null) return spawnPosition;
         Vector2 defPos = (Vector2)defender.transform.position;
-        float reach = weaponHandler.currentType switch
-        {
-            WeaponType.Dagger => 1.5f,
-            WeaponType.Heavy  => 2.8f,
-            _                 => 2.0f
-        };
+        float reach = weaponHandler.CurrentWeapon == null ? 0.8f :
+            weaponHandler.currentType switch
+            {
+                WeaponType.Dagger => 1.5f,
+                WeaponType.Heavy  => 2.8f,
+                _                 => 2.0f
+            };
         Vector2 dir = (defPos - (Vector2)transform.position).normalized;
         return defPos - dir * reach;
     }
@@ -344,6 +348,11 @@ public class PlayerCombat : MonoBehaviour
             Vector3 missPos = (defender != null ? defender.transform.position : transform.position)
                 + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.SpawnMiss(missPos);
+            if (defender != null)
+            {
+                Vector2 dodgeDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
+                defender.StartCoroutine(defender.DodgeLeap(dodgeDir, settings.knockbackDistance));
+            }
             yield return new WaitForSeconds(settings.hurtDuration);
         }
 
@@ -396,12 +405,6 @@ public class PlayerCombat : MonoBehaviour
         spawnPosition = RandomSpawnPosition();
         yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);
         animationController.SetIdle(true);
-    }
-
-    private void EquipAndSpawn()
-    {
-        weaponHandler.EquipNext();
-        SetWeaponLayer(weaponHandler, isPlayer1 ? "Weapons" : "Weapons2");
     }
 
     private Vector2 RandomSpawnPosition()
