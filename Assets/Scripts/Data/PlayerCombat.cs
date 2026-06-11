@@ -66,9 +66,24 @@ public class PlayerCombat : MonoBehaviour
 
         yield return ReturnToSpawn();
 
+        bool didThrow = false;
         if (defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
             && Random.value < ThrowChance())
+        {
             yield return ThrowRoutine();
+            didThrow = true;
+        }
+
+        // Retorno de ação pós-arremesso: chance = agility × 2% (ex: 20% no padrão agility=10).
+        // Skill futura pode aumentar esse valor. Executa um ataque rápido sem idle/run extra.
+        if (didThrow && defender != null && !defender.IsDead
+            && Random.value < agility * 0.02f)
+        {
+            yield return new WaitForSeconds(settings.slashingToJumpDelay);
+            yield return animationController.PlayRun(AttackPosition(), settings.runSpeed, movement);
+            yield return HitRoutine();
+            yield return ReturnToSpawn();
+        }
 
         RestoreDefaultLayers();
 
@@ -146,16 +161,35 @@ public class PlayerCombat : MonoBehaviour
     }
 
     // Iron Fist (skill futura): aumenta dano desarmado.
-    // Heavy: dano base + bônus de STR. Outras armas: dano fixo. Desarmado: 1 + bônus de STR.
     private int StrBonus() => Mathf.Max(0, (str - 10) / 2);
 
+    // Dano base por tipo de arma (ataque normal em HitRoutine).
+    // Heavy recebe bônus de STR; outros tipos têm dano fixo por tipo.
     private int CalcDamage()
     {
         if (weaponHandler.CurrentWeapon == null)
-            return 1 + StrBonus();
-        if (weaponHandler.currentType == WeaponType.Heavy)
-            return (weaponHandler.CurrentWeaponData?.damage ?? 0) + StrBonus();
-        return weaponHandler.CurrentWeaponData?.damage ?? 0;
+            return 2 + StrBonus();
+        return weaponHandler.currentType switch
+        {
+            WeaponType.Heavy  => 10 + StrBonus(),
+            WeaponType.Sword  => 5,
+            WeaponType.Dagger => 3,
+            _                 => weaponHandler.CurrentWeaponData?.damage > 0
+                                 ? weaponHandler.CurrentWeaponData.damage : 3
+        };
+    }
+
+    // Dano do arremesso usa o mesmo valor base do tipo (sem bônus de STR).
+    private static int ThrowDamage(WeaponData data)
+    {
+        if (data == null) return 2;
+        return data.type switch
+        {
+            WeaponType.Heavy  => 10,
+            WeaponType.Sword  => 5,
+            WeaponType.Dagger => 3,
+            _                 => data.damage > 0 ? data.damage : 3
+        };
     }
 
     // Posição de ataque: imediatamente fora do alcance da arma, na direção do defensor.
@@ -263,10 +297,8 @@ public class PlayerCombat : MonoBehaviour
         var weaponData = weaponHandler.CurrentWeaponData;
         bool isThrown = weaponData?.type == WeaponType.Thrown;
 
-        // Captura posição, escala e rotação mundiais ANTES de destruir o objeto de arma.
-        // A arma equipada é filha de handBone num personagem com scale 0.3, então sua
-        // lossyScale já reflete o tamanho visual correto. Usar weaponData.scale diretamente
-        // resultaria num projétil ~3× maior por ignorar a escala hierárquica do personagem.
+        // Captura posição e escala mundiais ANTES de destruir o objeto de arma.
+        // lossyScale reflete o tamanho visual real (personagem com scale 0.3 aplicado).
         GameObject inHandWeapon = weaponHandler.CurrentWeapon;
         Vector3 launchPos = inHandWeapon != null
             ? inHandWeapon.transform.position
@@ -276,30 +308,32 @@ public class PlayerCombat : MonoBehaviour
         Vector3 projectileScale = inHandWeapon != null
             ? inHandWeapon.transform.lossyScale
             : (weaponHandler.handBone != null ? weaponHandler.handBone.lossyScale : Vector3.one) * (weaponData?.scale ?? 1f);
-        Quaternion projectileRotation = inHandWeapon != null
-            ? inHandWeapon.transform.rotation
-            : Quaternion.identity;
 
         if (isThrown)
             weaponHandler.Unequip();
         else
             weaponHandler.UnequipPermanent();
 
+        // targetPos calculado antes do flying weapon para usar no ângulo de rotação.
+        Vector3 targetPos = defender != null
+            ? defender.transform.position + Vector3.up * 0.3f
+            : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
+
+        // Orienta o sprite na direção do voo (evita ponta para baixo/diagonal da rotação in-hand).
+        Vector3 flightDir = (targetPos - launchPos).normalized;
+        float flightAngle = Mathf.Atan2(flightDir.y, flightDir.x) * Mathf.Rad2Deg;
+
         // Projétil pertence exclusivamente a este atacante. O weaponHandler do defensor nunca é tocado.
         var flyingWeapon = new GameObject("FlyingWeapon");
         flyingWeapon.transform.position = launchPos;
         flyingWeapon.transform.localScale = projectileScale;
-        flyingWeapon.transform.rotation = projectileRotation;
+        flyingWeapon.transform.rotation = Quaternion.Euler(0, 0, flightAngle);
         var sr = flyingWeapon.AddComponent<SpriteRenderer>();
         sr.sprite = weaponData?.inHandSprite;
         sr.sortingLayerName = "Weapons";
         sr.sortingOrder = 10;
 
         animator.SetTrigger("Throwing");
-
-        Vector3 targetPos = defender != null
-            ? defender.transform.position + Vector3.up * 0.3f
-            : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
 
         // Somente Thrown rotaciona; todos os outros voam com rotação fixa.
         bool rotate = weaponData?.type == WeaponType.Thrown;
@@ -311,7 +345,7 @@ public class PlayerCombat : MonoBehaviour
             Vector2 pushDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
             defender.StartCoroutine(defender.Knockback(pushDir, settings.knockbackDistance, settings.hurtDuration));
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
-            int damage = weaponData?.damage ?? 0;
+            int damage = ThrowDamage(weaponData);
             defender.GetComponent<HealthSystem>()?.TakeDamage(damage);
             Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.Spawn(popupPos, damage, false);

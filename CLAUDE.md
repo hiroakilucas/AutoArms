@@ -230,14 +230,23 @@ When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch)
 `ComboChance()` returns 10% while unarmed.
 
 ### STR Attribute
-`PlayerCombat.str` (default 10). Affects:
-| Situation | Damage formula |
+`PlayerCombat.str` (default 10). `StrBonus() = max(0, (str-10)/2)`.
+| Situation | Damage |
 |---|---|
-| Unarmed | `1 + max(0, (str-10)/2)` |
-| Heavy weapon | `weaponData.damage + max(0, (str-10)/2)` |
-| Other weapons | `weaponData.damage` (fixed) |
+| Unarmed (punch) | `2 + StrBonus()` |
+| Heavy weapon | `10 + StrBonus()` |
+| Sword | `5` (fixed) |
+| Dagger | `3` (fixed) |
+| Other types | `weaponData.damage` if > 0, else `3` |
+
+Throw damage uses the same base values WITHOUT StrBonus (the weapon flies, not a melee hit).
 
 > Future skill **Iron Fist**: increases unarmed damage.
+
+### Post-Throw Action Return
+After `ThrowRoutine`, chance = `agility × 2%` (default agility=10 → 20%) to immediately:
+run to `AttackPosition()` → `HitRoutine()` → `ReturnToSpawn()`.
+This is a quick counter-strike with whatever weapon the attacker currently holds (might be unarmed punch if 60% case). Future skills can boost this chance.
 
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
