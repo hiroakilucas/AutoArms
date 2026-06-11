@@ -15,7 +15,7 @@ MonoBehaviour:
   weaponName: Satyr1
   icon: {fileID: 21300000, guid: 76fa20137bbde014486015afde3a0d10, type: 3}
   inHandSprite: {fileID: 21300000, guid: 76fa20137bbde014486015afde3a0d10, type: 3}
-  damage: 1
+  damage: 3
   speedModifier: 1
   type: 2
   scale: 1.5
