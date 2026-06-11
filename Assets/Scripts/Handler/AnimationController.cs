@@ -29,6 +29,17 @@ public class AnimationController : MonoBehaviour
         anim.SetBool("JumpStart", false);
     }
 
+    // Levanta a arma do defensor (reutiliza animação de Slashing), depois retorna ao Idle via JumpStart.
+    public IEnumerator PlayBlockAnimation(string slashTrigger, float holdDuration)
+    {
+        anim.SetTrigger(slashTrigger);
+        yield return new WaitForSeconds(holdDuration);
+        anim.SetBool("JumpStart", true);
+        yield return new WaitForSeconds(0.05f);
+        anim.SetBool("JumpStart", false);
+        // Idle=true ainda está ativo (setado no fim do turno anterior), então Jump Start → Idle dispara.
+    }
+
     public IEnumerator PlayHurt(float duration)
     {
         anim.SetTrigger("Hurt");
