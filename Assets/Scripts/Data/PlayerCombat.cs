@@ -66,24 +66,9 @@ public class PlayerCombat : MonoBehaviour
 
         yield return ReturnToSpawn();
 
-        bool didThrow = false;
         if (defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
             && Random.value < ThrowChance())
-        {
             yield return ThrowRoutine();
-            didThrow = true;
-        }
-
-        // Retorno de ação pós-arremesso: chance = agility × 2% (ex: 20% no padrão agility=10).
-        // Skill futura pode aumentar esse valor. Executa um ataque rápido sem idle/run extra.
-        if (didThrow && defender != null && !defender.IsDead
-            && Random.value < agility * 0.02f)
-        {
-            yield return new WaitForSeconds(settings.slashingToJumpDelay);
-            yield return animationController.PlayRun(AttackPosition(), settings.runSpeed, movement);
-            yield return HitRoutine();
-            yield return ReturnToSpawn();
-        }
 
         RestoreDefaultLayers();
 
@@ -324,9 +309,14 @@ public class PlayerCombat : MonoBehaviour
         float flightAngle = Mathf.Atan2(flightDir.y, flightDir.x) * Mathf.Rad2Deg;
 
         // Projétil pertence exclusivamente a este atacante. O weaponHandler do defensor nunca é tocado.
+        // Usar Mathf.Abs no scale: personagens espelhados (Player 2) têm lossyScale.x negativo,
+        // o que causaria flip do sprite + ângulo invertido. O Atan2 já cuida da direção correta.
         var flyingWeapon = new GameObject("FlyingWeapon");
         flyingWeapon.transform.position = launchPos;
-        flyingWeapon.transform.localScale = projectileScale;
+        flyingWeapon.transform.localScale = new Vector3(
+            Mathf.Abs(projectileScale.x),
+            Mathf.Abs(projectileScale.y),
+            Mathf.Abs(projectileScale.z));
         flyingWeapon.transform.rotation = Quaternion.Euler(0, 0, flightAngle);
         var sr = flyingWeapon.AddComponent<SpriteRenderer>();
         sr.sprite = weaponData?.inHandSprite;
