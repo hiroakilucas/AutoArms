@@ -17,5 +17,6 @@ MonoBehaviour:
   slashingDuration: 0.5
   slashingToJumpDelay: 0.2
   jumpHeight: 2
+  knockbackDistance: 0.5
   startPos: {x: 6.3, y: -2.407897}
   targetPos: {x: 0, y: 0}
