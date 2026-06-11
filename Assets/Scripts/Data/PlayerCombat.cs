@@ -88,9 +88,12 @@ public class PlayerCombat : MonoBehaviour
         if (defender == null || defender.weaponHandler.CurrentWeaponData == null) return 0f;
         return defender.weaponHandler.currentType switch
         {
-            WeaponType.Block => 0.50f,
-            WeaponType.Slow  => 0.05f,
-            _                => 0f
+            WeaponType.Block  => 0.50f,
+            WeaponType.Slow   => 0.05f,
+            WeaponType.Dagger => 0.15f,
+            WeaponType.Sword  => 0.15f,
+            WeaponType.Heavy  => 0.15f,
+            _                 => 0f
         };
     }
 
