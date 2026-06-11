@@ -257,9 +257,22 @@ public class PlayerCombat : MonoBehaviour
         var weaponData = weaponHandler.CurrentWeaponData;
         bool isThrown = weaponData?.type == WeaponType.Thrown;
 
-        Vector3 launchPos = weaponHandler.handBone != null
-            ? weaponHandler.handBone.position
-            : transform.position + Vector3.up * 0.5f;
+        // Captura posição, escala e rotação mundiais ANTES de destruir o objeto de arma.
+        // A arma equipada é filha de handBone num personagem com scale 0.3, então sua
+        // lossyScale já reflete o tamanho visual correto. Usar weaponData.scale diretamente
+        // resultaria num projétil ~3× maior por ignorar a escala hierárquica do personagem.
+        GameObject inHandWeapon = weaponHandler.CurrentWeapon;
+        Vector3 launchPos = inHandWeapon != null
+            ? inHandWeapon.transform.position
+            : weaponHandler.handBone != null
+                ? weaponHandler.handBone.position
+                : transform.position + Vector3.up * 0.5f;
+        Vector3 projectileScale = inHandWeapon != null
+            ? inHandWeapon.transform.lossyScale
+            : (weaponHandler.handBone != null ? weaponHandler.handBone.lossyScale : Vector3.one) * (weaponData?.scale ?? 1f);
+        Quaternion projectileRotation = inHandWeapon != null
+            ? inHandWeapon.transform.rotation
+            : Quaternion.identity;
 
         if (isThrown)
             weaponHandler.Unequip();
@@ -269,7 +282,8 @@ public class PlayerCombat : MonoBehaviour
         // Projétil pertence exclusivamente a este atacante. O weaponHandler do defensor nunca é tocado.
         var flyingWeapon = new GameObject("FlyingWeapon");
         flyingWeapon.transform.position = launchPos;
-        flyingWeapon.transform.localScale = Vector3.one * (weaponData?.scale ?? 1f);
+        flyingWeapon.transform.localScale = projectileScale;
+        flyingWeapon.transform.rotation = projectileRotation;
         var sr = flyingWeapon.AddComponent<SpriteRenderer>();
         sr.sprite = weaponData?.inHandSprite;
         sr.sortingLayerName = "Weapons";
