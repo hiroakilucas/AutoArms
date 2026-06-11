@@ -50,9 +50,10 @@ public class PlayerCombat : MonoBehaviour
 
     public IEnumerator AttackRoutine()
     {
-        // 60% case: still unarmed from a previous throw — equip next weapon normally.
-        if (weaponHandler.CurrentWeapon == null)
-            weaponHandler.EquipNext();
+        // Se estava desarmado ao COMEÇAR este turno → luta desarmado (soco) este turno.
+        // Re-equipa só ao FINAL do turno desarmado, para que o próximo turno tenha arma.
+        // Se ficou desarmado DURANTE este turno (arremessou), ThrowRoutine cuida do 40/60%.
+        bool startedUnarmed = weaponHandler.CurrentWeapon == null;
 
         SetAttackerLayers();
         yield return null;
@@ -70,6 +71,11 @@ public class PlayerCombat : MonoBehaviour
             yield return ThrowRoutine();
 
         RestoreDefaultLayers();
+
+        // Turno desarmado concluído → pega próxima arma do loadout para o próximo turno.
+        // (Se foi arremesso neste turno, ThrowRoutine já tratou o 40/60% — não re-equipa aqui.)
+        if (startedUnarmed && weaponHandler.CurrentWeapon == null)
+            weaponHandler.EquipNext();
     }
 
     private float ThrowChance()
