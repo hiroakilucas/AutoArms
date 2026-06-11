@@ -219,15 +219,18 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Fase 2 — Combate Robusto
 - [x] Barra de vida com dano baseado em status + dano da arma
-- [x] Animação de knockback ao tomar hit (sem recuo físico, apenas animação Hurt + slide 0.5u)
-- [x] Mecânicas My Brute: combo (chance por tipo — Fast 40%, Dagger 35%, Sword 25%, Heavy 10%; hits encadeados sem movimento)
-- [x] Crítico: chance de dano dobrado por arma (Fast 25%, Dagger 20%, Sword 15%, Heavy 10%)
-- [x] Números de dano flutuantes com TextMesh Pro (amarelo normal, vermelho + "CRÍTICO!" em crit)
-- [ ] Mecânicas My Brute: esquiva, parry, jogar arma, desarmar, troca de arma
-- [ ] Porcentagens fixas por arma para eventos de combate
+- [x] Números de dano flutuantes com TextMesh Pro
+- [x] Animação de hit ao tomar dano (defensor permanece no lugar)
+- [x] Combo: atacante executa Slash adicional sem Run, sem limite de hits
+- [x] Crítico: 5% base, Dagger 8%, Sword 5%, Heavy 3% — dano × 2
+- [ ] Esquiva: chance de desviar baseada em agilidade
+- [ ] Parry: chance de bloquear dano com arma ou escudo
+- [ ] Jogar arma: arremessar a arma no adversário
+- [ ] Desarmar: fazer o adversário soltar a arma
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
-- [ ] Curva de XP por nível: level × 20 XP necessário
+- [ ] Curva de XP: level × 20 XP necessário
 - [ ] Ao subir de nível: escolher atributo, skill ou arma
+- [ ] Tela de fim de combate com resultado e XP ganho
 
 ### Fase 3 — Armas & Pets
 - [ ] Criar mais armas com sprites e stats (tipos: Fast, Slow, Heavy, Thrown, Block)
@@ -277,5 +280,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 45 tarefas | Concluídas: 6
+- Total: 48 tarefas | Concluídas: 5
 - Última atualização: 2026-06-11
