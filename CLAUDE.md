@@ -250,6 +250,30 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Definir banco de dados para salvar personagens (Firebase ou PlayFab)
 - [ ] Integrar persistência de dados online
 
+### Fase 7 — Plataformas & Distribuição
+- [ ] Instalar módulos Android e iOS no Unity Hub (Android SDK, NDK, OpenJDK)
+- [ ] Configurar Player Settings para Android (bundle ID, ícone, splash screen)
+- [ ] Configurar Player Settings para iOS (bundle ID, signing, capabilities)
+- [ ] Adaptar UI para telas mobile (safe area, resolução, touch input)
+- [ ] Testar build Android e resolver erros
+- [ ] Testar build iOS e resolver erros (requer Mac com Xcode)
+- [ ] Publicar na Google Play Store
+- [ ] Publicar na Apple App Store
+- [ ] Configurar build para Steam (Windows standalone)
+- [ ] Criar página na Steam (Steam Direct — taxa única de $100)
+- [ ] Publicar na Steam
+
+### Fase 8 — Segurança
+- [ ] Nunca armazenar dados críticos (XP, level, diamantes) só localmente — sempre validar no servidor
+- [ ] Validação server-side de compras (Google Play Billing / Apple StoreKit / Steam)
+- [ ] Ofuscar código C# com ferramentas como Obfuscator-ILLVM ou Beebyte
+- [ ] Não expor API keys no código — usar variáveis de ambiente ou Unity Cloud
+- [ ] Calcular resultado do combate no servidor (anti-cheat)
+- [ ] Rate limiting nas chamadas de API para evitar abuso
+- [ ] Autenticação segura do jogador (Firebase Auth ou PlayFab Auth)
+- [ ] SSL/HTTPS em todas as chamadas de rede
+- [ ] Validar integridade do save local com hash
+
 ### Progresso
-- Total: 32 tarefas | Concluídas: 3
+- Total: 43 tarefas | Concluídas: 3
 - Última atualização: 2026-06-11
