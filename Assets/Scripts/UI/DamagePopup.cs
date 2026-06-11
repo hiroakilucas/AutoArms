@@ -28,14 +28,14 @@ public class DamagePopup : MonoBehaviour
 
         if (isCrit)
         {
-            label.text     = $"CRÍTICO!\n{damage}";
-            label.fontSize = 12f;
+            label.text     = $"CRÍTICO! {damage}";
+            label.fontSize = 5f;
             baseColor      = Color.red;
         }
         else
         {
             label.text     = damage.ToString();
-            label.fontSize = 8f;
+            label.fontSize = 3.5f;
             baseColor      = new Color(1f, 0.92f, 0.2f);
         }
 

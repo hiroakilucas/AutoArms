@@ -70,13 +70,13 @@ public class PlayerCombat : MonoBehaviour
         _                 => 0.25f
     };
 
+    // Fierce Brute (skill futura): adiciona +0.10f a este valor permanentemente.
     private float CritChance() => weaponHandler.currentType switch
     {
-        WeaponType.Fast   => 0.25f,
-        WeaponType.Dagger => 0.20f,
-        WeaponType.Sword  => 0.15f,
-        WeaponType.Heavy  => 0.10f,
-        _                 => 0.15f
+        WeaponType.Dagger => 0.08f,
+        WeaponType.Sword  => 0.05f,
+        WeaponType.Heavy  => 0.03f,
+        _                 => 0.05f
     };
 
     // Ataque principal: corre até o defensor e executa um hit completo.
