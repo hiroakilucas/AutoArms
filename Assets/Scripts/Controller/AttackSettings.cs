@@ -12,6 +12,8 @@ public class AttackSettings : ScriptableObject
     public float hurtDuration = 0.1f;
     [Tooltip("Quando, dentro do Slashing, o defensor leva o golpe (em segundos)")]
     public float hurtTriggerDelay = 0.25f;
+    [Range(0f, 1f), Tooltip("Probabilidade de executar um golpe extra (combo) após o ataque principal")]
+    public float comboChance = 0.3f;
     public Vector2 startPos;
     public Vector2 targetPos;
 }

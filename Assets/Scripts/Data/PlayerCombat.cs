@@ -46,11 +46,32 @@ public class PlayerCombat : MonoBehaviour
 
     public IEnumerator AttackRoutine()
     {
-        Vector2 targetPos = defender != null ? (Vector2)defender.transform.position : spawnPosition;
-
         SetAttackerLayers();
         yield return null;
 
+        yield return animationController.PlayIdle(settings.idleDuration);
+
+        yield return StrikeRoutine();
+
+        // Combo: golpe extra se o defensor ainda estiver vivo
+        if (defender != null && !defender.IsDead && Random.value < settings.comboChance)
+            yield return StrikeRoutine();
+
+        yield return new WaitForSeconds(settings.slashingToJumpDelay);
+        yield return animationController.PlayJumpStart(settings.jumpStartDuration);
+        spawnPosition = RandomSpawnPosition();
+        yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);
+
+        RestoreDefaultLayers();
+        animationController.SetIdle(true);
+    }
+
+    // Um golpe completo: percorre até o defensor → slash → Hurt → dano.
+    // Sempre lê a posição atual do defensor, por isso funciona tanto no ataque
+    // principal quanto nos hits de combo.
+    private IEnumerator StrikeRoutine()
+    {
+        Vector2 targetPos = defender != null ? (Vector2)defender.transform.position : spawnPosition;
         float reach = weaponHandler.currentType switch
         {
             WeaponType.Dagger => 1.5f,
@@ -60,7 +81,6 @@ public class PlayerCombat : MonoBehaviour
         Vector2 dir = (targetPos - (Vector2)transform.position).normalized;
         Vector2 attackPos = targetPos - dir * reach;
 
-        yield return animationController.PlayIdle(settings.idleDuration);
         yield return animationController.PlayRun(attackPos, settings.runSpeed, movement);
 
         string slashTrigger = weaponHandler.currentType switch
@@ -78,14 +98,6 @@ public class PlayerCombat : MonoBehaviour
         defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData?.damage ?? 0);
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
-        yield return new WaitForSeconds(settings.slashingToJumpDelay);
-
-        yield return animationController.PlayJumpStart(settings.jumpStartDuration);
-        spawnPosition = RandomSpawnPosition();
-        yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);
-
-        RestoreDefaultLayers();
-        animationController.SetIdle(true);
     }
 
     private void EquipAndSpawn()
