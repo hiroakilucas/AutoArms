@@ -407,17 +407,25 @@ public class PlayerCombat : MonoBehaviour
         fallen.transform.localScale = new Vector3(Mathf.Abs(worldScale.x), Mathf.Abs(worldScale.y), Mathf.Abs(worldScale.z));
         var sr = fallen.AddComponent<SpriteRenderer>();
         sr.sprite           = data.inHandSprite;
-        sr.sortingLayerName = "Weapons";
-        sr.sortingOrder     = 5;
+        sr.sortingLayerName = "Default";
+        sr.sortingOrder     = 0;
 
         float groundY   = target.transform.position.y - 1.5f;
         float velocityY = 0f;
+        float t         = 0f;
+        float theta0    = Random.Range(60f, 100f); // amplitude inicial do pêndulo
+        const float omega = 10f;                   // frequência angular (rad/s)
+        const float gamma = 0.8f;                  // amortecimento
+
+        fallen.transform.rotation = Quaternion.Euler(0f, 0f, theta0);
 
         while (fallen.transform.position.y > groundY)
         {
             velocityY -= 9.8f * Time.deltaTime;
             fallen.transform.position += new Vector3(0f, velocityY * Time.deltaTime, 0f);
-            fallen.transform.Rotate(0f, 0f, 200f * Time.deltaTime);
+            t += Time.deltaTime;
+            float angle = theta0 * Mathf.Exp(-gamma * t) * Mathf.Cos(omega * t);
+            fallen.transform.rotation = Quaternion.Euler(0f, 0f, angle);
             yield return null;
         }
 
