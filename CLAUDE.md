@@ -128,7 +128,7 @@ To add a new selectable character: create a `PlayerProfile` in `Assets/Scriptabl
 - [ ] Mecânicas My Brute: jogar arma, derrubar arma adversária, combo, troca de arma, crítico, esquiva, parry
 - [ ] Porcentagens fixas por arma para eventos de combate
 - [ ] Animação de knockback ao tomar hit
-- [ ] Barra de vida com dano baseado em status + dano da arma
+- [x] Barra de vida com dano baseado em status + dano da arma
 - [ ] Sistema de XP e level (vitória +2 XP, derrota +1 XP)
 - [ ] Curva de XP por nível crescente (sugestão: level × 20 XP necessário)
 - [ ] Ao subir de nível: escolher atributo, skill ou arma (igual My Brute)
@@ -158,5 +158,5 @@ To add a new selectable character: create a `PlayerProfile` in `Assets/Scriptabl
 
 ### Progresso
 - Total de tarefas: 29
-- Concluídas: 0
+- Concluídas: 1
 - Ao concluir uma tarefa, marcar com [x] e atualizar o contador.
