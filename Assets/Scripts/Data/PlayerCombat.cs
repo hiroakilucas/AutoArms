@@ -50,25 +50,22 @@ public class PlayerCombat : MonoBehaviour
         yield return null;
 
         yield return animationController.PlayIdle(settings.idleDuration);
-
         yield return StrikeRoutine();
 
-        // Combo: golpe extra se o defensor ainda estiver vivo
+        // Combo: salta de volta ao spawn e carrega novamente — garante animação
+        // completa de corrida e slash sem conflito com o estado anterior do animator.
         if (defender != null && !defender.IsDead && Random.value < settings.comboChance)
+        {
+            yield return ReturnToSpawn();
             yield return StrikeRoutine();
+        }
 
-        yield return new WaitForSeconds(settings.slashingToJumpDelay);
-        yield return animationController.PlayJumpStart(settings.jumpStartDuration);
-        spawnPosition = RandomSpawnPosition();
-        yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);
-
+        yield return ReturnToSpawn();
         RestoreDefaultLayers();
-        animationController.SetIdle(true);
     }
 
-    // Um golpe completo: percorre até o defensor → slash → Hurt → dano.
-    // Sempre lê a posição atual do defensor, por isso funciona tanto no ataque
-    // principal quanto nos hits de combo.
+    // Corre até o defensor → slash → Hurt → dano. Reavalia a posição a cada
+    // chamada, portanto funciona no ataque principal e em cada hit de combo.
     private IEnumerator StrikeRoutine()
     {
         Vector2 targetPos = defender != null ? (Vector2)defender.transform.position : spawnPosition;
@@ -98,6 +95,16 @@ public class PlayerCombat : MonoBehaviour
         defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData?.damage ?? 0);
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+    }
+
+    // Pausa pós-golpe → animação de salto → move para novo spawn → idle.
+    private IEnumerator ReturnToSpawn()
+    {
+        yield return new WaitForSeconds(settings.slashingToJumpDelay);
+        yield return animationController.PlayJumpStart(settings.jumpStartDuration);
+        spawnPosition = RandomSpawnPosition();
+        yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);
+        animationController.SetIdle(true);
     }
 
     private void EquipAndSpawn()
