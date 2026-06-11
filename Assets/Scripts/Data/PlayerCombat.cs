@@ -170,6 +170,9 @@ public class PlayerCombat : MonoBehaviour
 
         if (defender != null && Random.value < BlockChance())
         {
+            Vector2 blockDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
+            defender.StartCoroutine(defender.Knockback(blockDir, settings.knockbackDistance * 0.5f, settings.hurtDuration));
+
             Vector3 blockPos = defender.transform.position
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
