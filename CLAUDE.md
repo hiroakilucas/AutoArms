@@ -214,15 +214,15 @@ Fires after `ReturnToSpawn`, only if the defender is alive and the attacker has 
 
 Flow:
 1. **Thrown** type: `Unequip()` only (stays in loadout, comes back next cycle). **All others**: `UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()` (removed from runtime loadout for this combat).
-2. Create `FlyingWeapon` GameObject with the weapon's `inHandSprite`. **Dagger**: `localScale = Vector3.one` (original dimensions). **Others**: `localScale = Vector3.one * weaponData.scale`.
+2. Create `FlyingWeapon` GameObject with the weapon's `inHandSprite`. `localScale = Vector3.one * weaponData.scale` for **all types** (same scale as the in-hand sprite).
 3. `SetTrigger("Throwing")` fires animator concurrently.
-4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Sword/Heavy**: no rotation. **Dagger/Fast/Thrown**: rotates 540°/s.
+4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Only `WeaponType.Thrown`** rotates (540°/s). All other types fly with fixed rotation.
 5. On landing: 80% hit (weapon damage + Hurt + knockback), 20% miss (gray "MISS!" popup).
 6. After result: **40% chance** to immediately `EquipNext()` (pick up next weapon); **60%** stays unarmed.
 7. At the start of the NEXT `AttackRoutine`, if still unarmed, `EquipNext()` is called (normal round advancement).
 
-`PlayerLoadout.runtimeWeapons` is a `List<WeaponData>` initialized lazily on first `GetNextWeapon()` call (after `CombatSceneLoader` has assigned the loadout). `RemoveCurrentWeapon()` removes the current entry and decrements `currentIndex` so the next `EquipNext()` gets the correct successor.
-`WeaponHandler.UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()`.
+`PlayerLoadout.runtimeWeapons` is a `List<WeaponData>` initialized lazily on first `GetNextWeapon()` call (after `CombatSceneLoader` has assigned the loadout). `RemoveCurrentWeapon(expected)` removes the entry at `currentIndex` only if it matches `expected` (guards against index drift), then decrements `currentIndex` so the next `EquipNext()` gets the correct successor.
+`WeaponHandler.UnequipPermanent()` captures `CurrentWeaponData` before calling `Unequip()` (which clears it), then passes the reference to `RemoveCurrentWeapon(expected)` for validation.
 `DamagePopup.SpawnMiss(worldPos)` spawns a gray "MISS!" popup.
 
 ### Unarmed Combat

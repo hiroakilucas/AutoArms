@@ -25,11 +25,13 @@ public class PlayerLoadout : MonoBehaviour
     }
 
     // Permanently removes the weapon at currentIndex from this combat's loadout.
+    // Validates that the slot still holds `expected` before removing — guards against index drift.
     // Does not affect the ScriptableObject asset.
-    public void RemoveCurrentWeapon()
+    public void RemoveCurrentWeapon(WeaponData expected = null)
     {
         EnsureRuntime();
         if (currentIndex < 0 || currentIndex >= runtimeWeapons.Count) return;
+        if (expected != null && runtimeWeapons[currentIndex] != expected) return;
         runtimeWeapons.RemoveAt(currentIndex);
         currentIndex--;
     }

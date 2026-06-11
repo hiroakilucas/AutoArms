@@ -50,10 +50,14 @@ public class WeaponHandler : MonoBehaviour
         CurrentWeaponData = null;
     }
 
-    // Unequip and remove permanently from the runtime loadout (thrown weapons that aren't Thrown type).
+    // Unequip and permanently remove this weapon from the runtime loadout for this combat.
+    // Captures CurrentWeaponData BEFORE Unequip() clears it, then passes it to RemoveCurrentWeapon
+    // so the loadout can verify it's removing the correct slot.
     public void UnequipPermanent()
     {
+        var data = CurrentWeaponData;
         Unequip();
-        loadout?.RemoveCurrentWeapon();
+        if (data != null)
+            loadout?.RemoveCurrentWeapon(data);
     }
 }

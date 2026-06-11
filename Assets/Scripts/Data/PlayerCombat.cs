@@ -266,11 +266,10 @@ public class PlayerCombat : MonoBehaviour
         else
             weaponHandler.UnequipPermanent();
 
+        // Projétil pertence exclusivamente a este atacante. O weaponHandler do defensor nunca é tocado.
         var flyingWeapon = new GameObject("FlyingWeapon");
         flyingWeapon.transform.position = launchPos;
-        // Dagger mantém escala original (1,1,1); outras armas usam o scale do WeaponData.
-        if (weaponData?.type != WeaponType.Dagger)
-            flyingWeapon.transform.localScale = Vector3.one * (weaponData?.scale ?? 1f);
+        flyingWeapon.transform.localScale = Vector3.one * (weaponData?.scale ?? 1f);
         var sr = flyingWeapon.AddComponent<SpriteRenderer>();
         sr.sprite = weaponData?.inHandSprite;
         sr.sortingLayerName = "Weapons";
@@ -282,10 +281,10 @@ public class PlayerCombat : MonoBehaviour
             ? defender.transform.position + Vector3.up * 0.3f
             : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
 
-        // Sword e Heavy voam sem rotação; todos os outros tipos rotacionam.
-        bool rotate = weaponData?.type != WeaponType.Sword && weaponData?.type != WeaponType.Heavy;
+        // Somente Thrown rotaciona; todos os outros voam com rotação fixa.
+        bool rotate = weaponData?.type == WeaponType.Thrown;
         yield return FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f, rotate);
-        Destroy(flyingWeapon);
+        Destroy(flyingWeapon);  // sempre destruído antes de resolver hit/miss
 
         if (defender != null && Random.value < 0.80f)
         {
