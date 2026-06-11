@@ -14,6 +14,8 @@ public class AttackSettings : ScriptableObject
     public float hurtTriggerDelay = 0.25f;
     [Range(0f, 1f), Tooltip("Probabilidade de executar um golpe extra (combo) após o ataque principal")]
     public float comboChance = 0.3f;
+    [Tooltip("Distância que o defensor recua ao tomar um hit")]
+    public float knockbackDistance = 1.2f;
     public Vector2 startPos;
     public Vector2 targetPos;
 }

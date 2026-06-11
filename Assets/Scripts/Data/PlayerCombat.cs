@@ -89,12 +89,34 @@ public class PlayerCombat : MonoBehaviour
         animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
 
+        if (defender != null)
+        {
+            Vector2 pushDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
+            defender.StartCoroutine(defender.Knockback(pushDir, settings.knockbackDistance, settings.hurtDuration));
+        }
+
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
 
         defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData?.damage ?? 0);
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+    }
+
+    // Desliza o personagem na direção pushDirection ao tomar um hit.
+    // Iniciado pelo atacante via StartCoroutine para rodar em paralelo com PlayHurt.
+    public IEnumerator Knockback(Vector2 pushDirection, float distance, float duration)
+    {
+        Vector2 from = transform.position;
+        Vector2 to   = from + pushDirection * distance;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            transform.position = Vector2.Lerp(from, to, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        transform.position = to;
     }
 
     // Pausa pós-golpe → animação de salto → move para novo spawn → idle.
