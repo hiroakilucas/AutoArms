@@ -15,7 +15,11 @@ public class WeaponData : ScriptableObject
 }
 public enum WeaponType
 {
-    Sword,
-    Heavy,
-    Dagger
+    Sword   = 0,
+    Heavy   = 1,
+    Dagger  = 2,
+    Fast    = 3,
+    Slow    = 4,
+    Thrown  = 5,
+    Block   = 6,
 }

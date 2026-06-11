@@ -12,6 +12,8 @@ public class AttackSettings : ScriptableObject
     public float hurtDuration = 0.1f;
     [Tooltip("Quando, dentro do Slashing, o defensor leva o golpe (em segundos)")]
     public float hurtTriggerDelay = 0.25f;
+    [Tooltip("Distância que o defensor recua ao tomar um hit")]
+    public float knockbackDistance = 0.5f;
     public Vector2 startPos;
     public Vector2 targetPos;
 }
