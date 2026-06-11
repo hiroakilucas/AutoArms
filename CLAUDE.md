@@ -113,9 +113,68 @@ To add a new selectable character: create a `PlayerProfile` in `Assets/Scriptabl
 - **Spriter2UnityDX** (`Assets/Spriter2UnityDX/`) — Converts Spriter `.scml` files to Unity prefabs/animators. Character prefabs use its `EntityRenderer` and `TextureController` runtime components.
 - **TextMesh Pro** — Used throughout UI; assets in `Assets/TextMesh Pro/`.
 
+## Game Vision
+
+AutoArms é inspirado no My Brute (jogo browser francês de 2008 da Motion Twin).
+Referência jogável: https://brute.eternaltwin.org/
+
+### Conceito central
+- Combate automático entre dois personagens — o jogador não controla as ações, apenas monta o personagem
+- Progressão por XP e level: ao subir de nível, o jogador escolhe 1 bônus (atributo, skill ou arma)
+- Personagem com stats aleatórios ao criar: vida, força, agilidade, velocidade
+- Limite de batalhas por dia (energia) — incentiva retorno diário
+
+### Mecânicas de combate inspiradas no My Brute
+- Combo: chance de atacar mais de uma vez seguida
+- Crítico: chance de causar dano dobrado
+- Esquiva: chance de desviar do ataque baseada em agilidade
+- Parry: chance de bloquear o dano com arma ou escudo
+- Knockback: ao tomar hit, personagem recua levemente
+- Jogar arma: chance de arremessar a arma no adversário
+- Derrubar arma: chance de desarmar o adversário no golpe
+- Troca de arma: personagem troca de arma durante o combate
+
+### Skills inspiradas no My Brute (42 skills no original)
+- Relentless: chance de atacar múltiplas vezes seguidas
+- Sixth Sense: aumenta chance de esquiva
+- Thief: rouba a arma do adversário
+- Iron Skin: reduz dano recebido
+- Shield: melhora chance de bloquear
+- Weapon Master: aumenta eficiência com qualquer arma
+- Pugnacious: chance de contra-atacar ao tomar hit
+- Impact: chance de desarmar no golpe
+- Fierce Brute: chance de causar dano duplo
+
+### Tipos de arma inspirados no My Brute (26 armas no original)
+- Fast: maior chance de ataque extra, mais difícil de esquivar
+- Slow: menor chance de ataque duplo e bloqueio
+- Heavy: alto dano, penalidade de velocidade
+- Thrown: pode ser arremessada no adversário
+- Block: chance de bloquear dano recebido
+
+### Pets planejados
+- Cachorro — meat shield inicial, combatente fraco
+- Lobo — versão mais forte do cachorro
+- Águia — ataque à distância
+- Urso — mais poderoso, alta vida própria
+
+### Progressão e XP
+- Vitória: +3 XP
+- Derrota: +1 XP
+- XP necessário por nível: level × 20 (ex: level 2→3 = 40 XP)
+- Ao subir de nível: escolher 1 entre 3 opções sorteadas (atributo, skill ou arma)
+
+### Monetização planejada
+- Diamantes: moeda premium
+- Energia: comprar recargas para lutar mais vezes
+- Personagens: desbloquear com diamante
+
 ## Roadmap
 
-### Fase 1 — Interface & Personagens (Prioridade Alta)
+### Como atualizar
+Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
+
+### Fase 1 — Interface & Personagens
 - [ ] Melhorar interface da página inicial
 - [ ] Melhorar interface da tela de escolha de personagens
 - [ ] Criação do primeiro personagem masculino e feminino
@@ -124,39 +183,38 @@ To add a new selectable character: create a `PlayerProfile` in `Assets/Scriptabl
 - [ ] Habilidades inspiradas no My Brute
 - [ ] Criar habilidades originais adicionais
 
-### Fase 2 — Combate Robusto (Core do Jogo)
-- [ ] Mecânicas My Brute: jogar arma, derrubar arma adversária, combo, troca de arma, crítico, esquiva, parry
-- [ ] Porcentagens fixas por arma para eventos de combate
-- [ ] Animação de knockback ao tomar hit
+### Fase 2 — Combate Robusto
 - [x] Barra de vida com dano baseado em status + dano da arma
-- [ ] Sistema de XP e level (vitória +2 XP, derrota +1 XP)
-- [ ] Curva de XP por nível crescente (sugestão: level × 20 XP necessário)
-- [ ] Ao subir de nível: escolher atributo, skill ou arma (igual My Brute)
+- [ ] Animação de knockback ao tomar hit
+- [ ] Mecânicas My Brute: combo, crítico, esquiva, parry, jogar arma, desarmar, troca de arma
+- [ ] Porcentagens fixas por arma para eventos de combate
+- [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
+- [ ] Curva de XP por nível: level × 20 XP necessário
+- [ ] Ao subir de nível: escolher atributo, skill ou arma
 
-### Fase 3 — Armas & Itens (Conteúdo)
-- [ ] Criar mais armas com sprites e stats diferentes
+### Fase 3 — Armas & Pets
+- [ ] Criar mais armas com sprites e stats (tipos: Fast, Slow, Heavy, Thrown, Block)
 - [ ] Sistema de raridade de armas
 - [ ] Pets: cachorro, lobo, águia, urso
-- [ ] Magias (avaliar viabilidade)
 
-### Fase 4 — Monetização (Receita)
+### Fase 4 — Monetização
 - [ ] Sistema de diamantes (moeda premium)
-- [ ] Compra de energia para lutar mais vezes
-- [ ] Compra de personagens com diamante
+- [ ] Sistema de energia com limite diário de batalhas
+- [ ] Compra de energia e personagens com diamante
 - [ ] Precificação dos pacotes
 
-### Fase 5 — Endgame & Social (Futuro)
-- [ ] Mapa PVE (avaliar viabilidade)
+### Fase 5 — Endgame & Social
+- [ ] Mapa PVE
 - [ ] Torneio com premiação
 - [ ] Torneios 2v2 e 3v3
-- [ ] Guildas (avaliar viabilidade)
+- [ ] Sistema de discípulos (recrutar amigos = bônus XP)
+- [ ] Guildas
 
-### Fase 6 — Infraestrutura & Dados (Técnico)
-- [ ] Definir banco de dados para salvar personagens (Firebase ou PlayFab)
-- [ ] Integrar persistência de dados do personagem online
+### Fase 6 — Infraestrutura
 - [ ] Criar cena 03_SelectWeapons (já referenciada no código)
+- [ ] Definir banco de dados para salvar personagens (Firebase ou PlayFab)
+- [ ] Integrar persistência de dados online
 
 ### Progresso
-- Total de tarefas: 29
-- Concluídas: 1
-- Ao concluir uma tarefa, marcar com [x] e atualizar o contador.
+- Total: 31 tarefas | Concluídas: 1
+- Última atualização: (preencher a cada commit)
