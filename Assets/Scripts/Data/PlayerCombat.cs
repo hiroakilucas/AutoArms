@@ -52,20 +52,26 @@ public class PlayerCombat : MonoBehaviour
         yield return animationController.PlayIdle(settings.idleDuration);
         yield return StrikeRoutine();
 
-        // Combo: salta de volta ao spawn e carrega novamente — garante animação
-        // completa de corrida e slash sem conflito com o estado anterior do animator.
-        if (defender != null && !defender.IsDead && Random.value < settings.comboChance)
-        {
-            yield return ReturnToSpawn();
-            yield return StrikeRoutine();
-        }
+        // Combo: hits encadeados sem movimento. O atacante permanece próximo ao
+        // defensor e executa apenas slash → dano → Hurt enquanto a chance triggrar.
+        while (defender != null && !defender.IsDead && Random.value < ComboChance())
+            yield return ComboStrikeRoutine();
 
         yield return ReturnToSpawn();
         RestoreDefaultLayers();
     }
 
-    // Corre até o defensor → slash → Hurt → dano. Reavalia a posição a cada
-    // chamada, portanto funciona no ataque principal e em cada hit de combo.
+    // Chance de combo por tipo de arma (calculada a cada hit independentemente).
+    private float ComboChance() => weaponHandler.currentType switch
+    {
+        WeaponType.Fast   => 0.40f,
+        WeaponType.Dagger => 0.35f,
+        WeaponType.Sword  => 0.25f,
+        WeaponType.Heavy  => 0.10f,
+        _                 => 0.25f
+    };
+
+    // Ataque principal: corre até o defensor e executa um hit completo.
     private IEnumerator StrikeRoutine()
     {
         Vector2 targetPos = defender != null ? (Vector2)defender.transform.position : spawnPosition;
@@ -79,7 +85,18 @@ public class PlayerCombat : MonoBehaviour
         Vector2 attackPos = targetPos - dir * reach;
 
         yield return animationController.PlayRun(attackPos, settings.runSpeed, movement);
+        yield return HitRoutine();
+    }
 
+    // Hit de combo: sem movimento — apenas slash, knockback, hurt e dano.
+    private IEnumerator ComboStrikeRoutine()
+    {
+        yield return HitRoutine();
+    }
+
+    // Slash → knockback + Hurt (paralelo) → dano. Compartilhado por Strike e Combo.
+    private IEnumerator HitRoutine()
+    {
         string slashTrigger = weaponHandler.currentType switch
         {
             WeaponType.Heavy  => "SlashingHeavy",
