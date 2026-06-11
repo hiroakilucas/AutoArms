@@ -175,14 +175,7 @@ public class PlayerCombat : MonoBehaviour
         {
             Vector2 blockDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
             defender.StartCoroutine(defender.Knockback(blockDir, settings.knockbackDistance * 0.5f, settings.hurtDuration));
-
-            string blockAnim = defender.weaponHandler.currentType switch
-            {
-                WeaponType.Heavy  => "SlashingHeavy",
-                WeaponType.Dagger => "SlashingDagger",
-                _                 => "Slashing"
-            };
-            defender.StartCoroutine(defenderAnimationController.PlayBlockAnimation(blockAnim, settings.hurtDuration * 2f));
+            defender.StartCoroutine(defenderAnimationController.PlayBlock(0.36666667f));
 
             Vector3 blockPos = defender.transform.position
                 + Vector3.up   * 1.5f
