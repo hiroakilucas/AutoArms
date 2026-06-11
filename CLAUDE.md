@@ -127,12 +127,17 @@ Each character prefab has a Spriter2UnityDX-generated Animator Controller with a
 | `Slashing` | Trigger | Sword/default attack |
 | `SlashingDagger` | Trigger | Dagger attack |
 | `SlashingHeavy` | Trigger | Heavy weapon attack |
+| `Blocking` | Trigger | Block reaction (defense pose) |
 
 ### Key States and Transitions
 - **Running → Slashing/SlashingDagger/SlashingHeavy**: condition `Running=false + trigger`. These are the original transitions.
 - **Any State → Slashing/SlashingDagger/SlashingHeavy** *(added for combo)*: same conditions, `CanTransitionToSelf=1`. Allows re-entering the Slashing state from itself during combo chains.
 - **Slashing/SlashingDagger/SlashingHeavy → Jump Start**: only via `JumpStart=true`. No auto-exit-time — the Slashing states stay indefinitely until JumpStart fires.
 - **Jump Start → Idle**: when `JumpStart=false AND Idle=true`.
+- **Any State → Block** *(added for parry)*: condition `Blocking` trigger, `HasExitTime=0`. Fires `AnimationController.PlayBlock(0.36666667f)`.
+- **Block → Idle**: `HasExitTime=1`, `ExitTime=0.75`, condition `Idle=true`. Auto-exits after playing ≥75% of the animation.
+
+`Block.anim` lives in each character's `Prefab/` folder (copied from Medieval Warrior original). Duration: `0.36666667s`. Animates arm/weapon bones into a raised-guard pose.
 
 ### Important: State Names Have Spaces
 State names in the `.controller` files differ from trigger/parameter names:
@@ -182,12 +187,15 @@ When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays 
 `BlockChance()` no atacante, lendo o tipo de arma do **defensor**:
 | WeaponType (defender) | Chance |
 |---|---|
-| Block | 25% |
+| Block | 50% |
+| Dagger | 15% |
+| Sword | 15% |
+| Heavy | 15% |
 | Slow | 5% |
-| Sem arma (CurrentWeaponData == null) | 0% |
+| Sem arma (`CurrentWeapon == null`) | 0% |
 | outros | 0% |
 
-Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal**. Quando block trigga: sem knockback, sem Hurt, sem dano. Defensor fica parado. Popup "BLOCK!" em dourado.
+Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
 > Future skill **Shield**: +45% block permanente.
 
 ### Knockback
@@ -332,4 +340,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 48 tarefas | Concluídas: 7
-- Última atualização: 2026-06-11 (esquiva, DodgeLeap, reposicionamento combo, knockback em todos os hits)
+- Última atualização: 2026-06-11 (esquiva, DodgeLeap, reposicionamento combo, knockback em todos os hits, Block animation com Blocking trigger nos três personagens)
