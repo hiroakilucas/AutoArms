@@ -1,0 +1,59 @@
+using UnityEngine;
+using TMPro;
+
+public class DamagePopup : MonoBehaviour
+{
+    const float Lifetime  = 1f;
+    const float RiseSpeed = 1.5f;
+
+    TextMeshPro label;
+    float elapsed;
+    Vector3 origin;
+    Color baseColor;
+
+    public static void Spawn(Vector3 worldPos, int damage, bool isCrit)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().Init(damage, isCrit);
+    }
+
+    void Init(int damage, bool isCrit)
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+
+        if (isCrit)
+        {
+            label.text     = $"CRÍTICO!\n{damage}";
+            label.fontSize = 12f;
+            baseColor      = Color.red;
+        }
+        else
+        {
+            label.text     = damage.ToString();
+            label.fontSize = 8f;
+            baseColor      = new Color(1f, 0.92f, 0.2f);
+        }
+
+        label.color = baseColor;
+        origin = transform.position;
+    }
+
+    void Update()
+    {
+        elapsed += Time.deltaTime;
+        float t = elapsed / Lifetime;
+
+        transform.position = origin + Vector3.up * (RiseSpeed * elapsed);
+
+        baseColor.a = 1f - t;
+        label.color = baseColor;
+
+        if (elapsed >= Lifetime)
+            Destroy(gameObject);
+    }
+}

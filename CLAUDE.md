@@ -221,7 +221,9 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Barra de vida com dano baseado em status + dano da arma
 - [x] Animação de knockback ao tomar hit (sem recuo físico, apenas animação Hurt + slide 0.5u)
 - [x] Mecânicas My Brute: combo (chance por tipo — Fast 40%, Dagger 35%, Sword 25%, Heavy 10%; hits encadeados sem movimento)
-- [ ] Mecânicas My Brute: crítico, esquiva, parry, jogar arma, desarmar, troca de arma
+- [x] Crítico: chance de dano dobrado por arma (Fast 25%, Dagger 20%, Sword 15%, Heavy 10%)
+- [x] Números de dano flutuantes com TextMesh Pro (amarelo normal, vermelho + "CRÍTICO!" em crit)
+- [ ] Mecânicas My Brute: esquiva, parry, jogar arma, desarmar, troca de arma
 - [ ] Porcentagens fixas por arma para eventos de combate
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
 - [ ] Curva de XP por nível: level × 20 XP necessário
@@ -275,5 +277,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 43 tarefas | Concluídas: 3
+- Total: 45 tarefas | Concluídas: 6
 - Última atualização: 2026-06-11

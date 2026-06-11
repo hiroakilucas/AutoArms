@@ -61,7 +61,6 @@ public class PlayerCombat : MonoBehaviour
         RestoreDefaultLayers();
     }
 
-    // Chance de combo por tipo de arma (calculada a cada hit independentemente).
     private float ComboChance() => weaponHandler.currentType switch
     {
         WeaponType.Fast   => 0.40f,
@@ -69,6 +68,15 @@ public class PlayerCombat : MonoBehaviour
         WeaponType.Sword  => 0.25f,
         WeaponType.Heavy  => 0.10f,
         _                 => 0.25f
+    };
+
+    private float CritChance() => weaponHandler.currentType switch
+    {
+        WeaponType.Fast   => 0.25f,
+        WeaponType.Dagger => 0.20f,
+        WeaponType.Sword  => 0.15f,
+        WeaponType.Heavy  => 0.10f,
+        _                 => 0.15f
     };
 
     // Ataque principal: corre até o defensor e executa um hit completo.
@@ -118,7 +126,19 @@ public class PlayerCombat : MonoBehaviour
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
 
-        defender?.GetComponent<HealthSystem>()?.TakeDamage(weaponHandler.CurrentWeaponData?.damage ?? 0);
+        bool isCrit      = Random.value < CritChance();
+        int  baseDamage  = weaponHandler.CurrentWeaponData?.damage ?? 0;
+        int  finalDamage = isCrit ? baseDamage * 2 : baseDamage;
+
+        defender?.GetComponent<HealthSystem>()?.TakeDamage(finalDamage);
+
+        if (defender != null)
+        {
+            Vector3 popupPos = defender.transform.position
+                + Vector3.up   * 1.5f
+                + Vector3.right * Random.Range(-0.3f, 0.3f);
+            DamagePopup.Spawn(popupPos, finalDamage, isCrit);
+        }
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
     }
