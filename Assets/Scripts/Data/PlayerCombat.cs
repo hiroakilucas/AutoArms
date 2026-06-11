@@ -88,8 +88,8 @@ public class PlayerCombat : MonoBehaviour
         yield return HitRoutine();
     }
 
-    // Hit de combo: pausa para o animator sair do estado Slashing, depois slash
-    // sem knockback — o defensor permanece no lugar durante todo o combo.
+    // Hit de combo: Any State → Slashing (CanTransitionToSelf=1) no controller
+    // permite re-triggar do próprio estado Slashing sem precisar aguardar saída.
     private IEnumerator ComboStrikeRoutine()
     {
         yield return new WaitForSeconds(settings.slashingToJumpDelay);

@@ -108,6 +108,40 @@ During an attack turn, `PlayerCombat.AttackRoutine` promotes the **attacker** to
 
 To add a new selectable character: create a `PlayerProfile` in `Assets/ScriptableObjects/PlayerProfiles/` and add it to the `CharacterDatabase` asset.
 
+## Animator Controller Architecture
+
+Each character prefab has a Spriter2UnityDX-generated Animator Controller with a **flat state machine** (no sub-state machines) in the Base Layer.
+
+### Parameters
+| Name | Type | Purpose |
+|---|---|---|
+| `Idle` | Bool | Idle animation loop |
+| `Running` | Bool | Run animation loop |
+| `JumpStart` | Bool | Jump takeoff animation |
+| `Hurt` | Trigger | Hit reaction |
+| `Slashing` | Trigger | Sword/default attack |
+| `SlashingDagger` | Trigger | Dagger attack |
+| `SlashingHeavy` | Trigger | Heavy weapon attack |
+
+### Key States and Transitions
+- **Running → Slashing/SlashingDagger/SlashingHeavy**: condition `Running=false + trigger`. These are the original transitions.
+- **Any State → Slashing/SlashingDagger/SlashingHeavy** *(added for combo)*: same conditions, `CanTransitionToSelf=1`. Allows re-entering the Slashing state from itself during combo chains.
+- **Slashing/SlashingDagger/SlashingHeavy → Jump Start**: only via `JumpStart=true`. No auto-exit-time — the Slashing states stay indefinitely until JumpStart fires.
+- **Jump Start → Idle**: when `JumpStart=false AND Idle=true`.
+
+### Important: State Names Have Spaces
+State names in the `.controller` files differ from trigger/parameter names:
+| Trigger param | State name in controller |
+|---|---|
+| `Slashing` | `Slashing` |
+| `SlashingDagger` | `Slashing Dagger` |
+| `SlashingHeavy` | `Slashing Heavy` |
+
+Use `animator.SetTrigger("SlashingDagger")` (no space), but `stateInfo.IsName("Slashing Dagger")` (with space) if checking current state.
+
+### Combo Architecture
+The combo fires `SetTrigger(slashTrigger)` from within the Slashing state. This works because the `Any State → Slashing` transitions have `CanTransitionToSelf=1`, allowing the animator to re-enter Slashing from itself with a 0.1s blend (restarts the animation). The `slashingToJumpDelay` pause in `ComboStrikeRoutine` controls rhythm between hits.
+
 ## Third-Party Plugins
 
 - **Spriter2UnityDX** (`Assets/Spriter2UnityDX/`) — Converts Spriter `.scml` files to Unity prefabs/animators. Character prefabs use its `EntityRenderer` and `TextureController` runtime components.
@@ -218,4 +252,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 32 tarefas | Concluídas: 3
-- Última atualização: (preencher a cada commit)
+- Última atualização: 2026-06-11
