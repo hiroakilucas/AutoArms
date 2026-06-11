@@ -734,7 +734,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   attackSequencer: {fileID: 904002941}
   player1SpawnPoint: {fileID: 0}
-  player2ObjectInScene: {fileID: 45243663}
+  player2Object: {fileID: 45243663}
   selectedProfileHolder: {fileID: 11400000, guid: 922f3509158987247abc4e20f118b45c, type: 2}
 --- !u!4 &1332891506
 Transform:
@@ -762,7 +762,7 @@ SceneRoots:
   m_Roots:
   - {fileID: 519420032}
   - {fileID: 1294674956}
-  - {fileID: 867448816}
+
   - {fileID: 1066112932}
   - {fileID: 1332891506}
   - {fileID: 904002942}

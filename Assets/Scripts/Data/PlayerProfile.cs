@@ -3,44 +3,48 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "NewPlayerProfile", menuName = "Game/Player Profile", order = 100)]
 public class PlayerProfile : ScriptableObject
 {
-    [Header("Identificação")]
-    [Tooltip("Nome do personagem para exibição")]
+    [Header("Identificaï¿½ï¿½o")]
+    [Tooltip("Nome do personagem para exibiï¿½ï¿½o")]
     public string profileName;
 
     [Header("Prefab e Imagem")]
-    [Tooltip("Prefab do personagem (deve conter todos os componentes necessários para o combate)")]
+    [Tooltip("Prefab do personagem (deve conter todos os componentes necessï¿½rios para o combate)")]
     public GameObject characterPrefab;
 
-    [Tooltip("Ícone utilizado na UI de seleção de personagens")]
+    [Tooltip("ï¿½cone utilizado na UI de seleï¿½ï¿½o de personagens")]
     public Sprite previewIcon;
 
-    [Header("Parâmetros de Combate")]
-    [Tooltip("Configurações de ataque e animação (velocidade, idle, delay etc.)")]
+    [Header("Parï¿½metros de Combate")]
+    [Tooltip("Configuraï¿½ï¿½es de ataque e animaï¿½ï¿½o (velocidade, idle, delay etc.)")]
     public AttackSettings attackSettings;
 
-    [Tooltip("Armas atribuídas para esse personagem")]
+    [Tooltip("Armas atribuï¿½das para esse personagem")]
     public WeaponLoadout weaponLoadout;
 
-    [Header("Instanciação")]
-    [Tooltip("Escala personalizada do personagem no momento da instância")]
+    [Header("Instanciaï¿½ï¿½o")]
+    [Tooltip("Escala personalizada do personagem no momento da instï¿½ncia")]
     public Vector3 scale = Vector3.one;
 
-    [Tooltip("Posição de início no combate (usada no PvP, exemplo: lado esquerdo)")]
+    [Tooltip("Posiï¿½ï¿½o de inï¿½cio no combate (usada no PvP, exemplo: lado esquerdo)")]
     public Vector2 startPos = new Vector2(-6.3f, -2.407897f);
 
+    [Header("Combate")]
+    [Tooltip("Vida mÃ¡xima do personagem")]
+    public int maxHealth = 15;
+
     [Header("Progresso")]
-    [Tooltip("Nível atual do personagem")]
+    [Tooltip("Nï¿½vel atual do personagem")]
     public int level = 1;
 
-    [Tooltip("Taxa de vitória (0 a 100%)")]
+    [Tooltip("Taxa de vitï¿½ria (0 a 100%)")]
     [Range(0f, 100f)] public float winRate = 0f;
 
-    [Tooltip("Experiência atual")]
+    [Tooltip("Experiï¿½ncia atual")]
     public int xpCurrent = 0;
 
-    [Tooltip("Experiência necessária para o próximo nível")]
+    [Tooltip("Experiï¿½ncia necessï¿½ria para o prï¿½ximo nï¿½vel")]
     public int xpRequired = 30;
 
-    [Tooltip("Lutas restantes (máximo por ciclo)")]
+    [Tooltip("Lutas restantes (mï¿½ximo por ciclo)")]
     public int battlesRemaining = 6;
 }

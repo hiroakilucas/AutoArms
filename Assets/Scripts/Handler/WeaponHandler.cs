@@ -6,19 +6,20 @@ public class WeaponHandler : MonoBehaviour
     public PlayerLoadout loadout;
     public GameObject swordBasePrefab;
 
-    [Header("Pivô e Offset")]
+    [Header("Pivo e Offset")]
     public Transform handBone;
     public Vector3 positionOffset;
     public Vector3 rotationOffset;
     public float zOffset;
 
-    [Header("Renderização")]
+    [Header("Renderizacao")]
     public string sortingLayer = "Weapon";
     public int sortingOrder = 0;
 
     private GameObject current;
     public GameObject CurrentWeapon => current;
     public WeaponType currentType { get; private set; }
+    public WeaponData CurrentWeaponData { get; private set; }
 
     public void EquipNext()
     {
@@ -27,8 +28,8 @@ public class WeaponHandler : MonoBehaviour
         var data = loadout.GetNextWeapon();
         if (data?.inHandSprite == null) return;
 
-
-        currentType = data.type; // <-- ESSA LINHA É ESSENCIAL!
+        currentType = data.type;
+        CurrentWeaponData = data;
         current = Instantiate(swordBasePrefab, handBone);
 
         current.transform.localPosition = positionOffset + new Vector3(0, 0, zOffset);

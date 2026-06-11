@@ -2,69 +2,68 @@ using UnityEngine;
 
 public class CombatSceneLoader : MonoBehaviour
 {
-    [Header("Referências")]
-    public AttackSequencer attackSequencer;         // Referência ao sequenciador
-    public Transform player1SpawnPoint;             // Posição inicial (opcional)
-    [SerializeField] private GameObject player2ObjectInScene;
+    [Header("References")]
+    public AttackSequencer attackSequencer;
+    [SerializeField] private GameObject player2Object;
     [SerializeField] private SelectedProfileHolder selectedProfileHolder;
+
+    [Header("Player 2")]
+    [Tooltip("Vida maxima do Player2 (Medieval Warrior Girl). Ajustar conforme o perfil do personagem.")]
+    [SerializeField] private int player2MaxHealth = 15;
 
     void Start()
     {
         var profile = selectedProfileHolder.currentProfile;
         if (profile == null)
         {
-            Debug.LogError("[CombatSceneLoader] Nenhum PlayerProfile selecionado.");
+            Debug.LogError("[CombatSceneLoader] No PlayerProfile selected.");
             return;
         }
 
-        // Instanciar Player1
-        GameObject player1 = Instantiate(profile.characterPrefab);
-        player1.name = "Player1";
-        player1.transform.position = profile.startPos;
-        player1.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
-
-
-        var combat1 = player1.GetComponent<PlayerCombat>();
-        if (combat1 == null)
+        var player2Combat = player2Object.GetComponent<PlayerCombat>();
+        var player2Anim   = player2Object.GetComponent<AnimationController>();
+        if (player2Combat == null || player2Anim == null)
         {
-            Debug.LogError("[CombatSceneLoader] PlayerCombat não encontrado no Player1.");
+            Debug.LogError("[CombatSceneLoader] Player2 is missing PlayerCombat or AnimationController.");
             return;
         }
 
-        var playerLoadout = player1.GetComponent<PlayerLoadout>();
-        if (playerLoadout != null)
-            playerLoadout.loadout = profile.weaponLoadout;
+        GameObject player1Obj = Instantiate(profile.characterPrefab);
+        player1Obj.name = "Player1";
+        player1Obj.transform.position = profile.startPos;
+        player1Obj.transform.localScale = Vector3.one * 0.3f;
 
-        var handler = player1.GetComponent<WeaponHandler>();
-        if (handler != null)
-            handler.loadout = playerLoadout;
-
-        combat1.settings = profile.attackSettings;
-        combat1.isPlayer1 = true;
-
-        // Referência ao oponente chumbado na cena
-        var combat2 = player2ObjectInScene.GetComponent<PlayerCombat>();
-        var anim2 = player2ObjectInScene.GetComponent<AnimationController>();
-        var anim1 = player1.GetComponent<AnimationController>();
-
-        if (combat2 == null || anim1 == null || anim2 == null)
+        var player1Combat = player1Obj.GetComponent<PlayerCombat>();
+        var player1Anim   = player1Obj.GetComponent<AnimationController>();
+        if (player1Combat == null || player1Anim == null)
         {
-            Debug.LogError("[CombatSceneLoader] Componentes do oponente faltando.");
+            Debug.LogError("[CombatSceneLoader] Player1 prefab is missing PlayerCombat or AnimationController.");
             return;
         }
 
-        // Link entre os dois
-        combat1.defender = combat2;
-        combat1.defenderAnimationController = anim2;
+        var loadout = player1Obj.GetComponent<PlayerLoadout>();
+        if (loadout != null) loadout.loadout = profile.weaponLoadout;
 
-        combat2.defender = combat1;
-        combat2.defenderAnimationController = anim1;
+        var handler = player1Obj.GetComponent<WeaponHandler>();
+        if (handler != null) handler.loadout = loadout;
 
-        // Registrar no sequenciador
-        attackSequencer.player1 = combat1;
-        attackSequencer.player2 = combat2;
+        player1Combat.settings  = profile.attackSettings;
+        player1Combat.isPlayer1 = true;
+        player1Combat.defender  = player2Combat;
+        player1Combat.defenderAnimationController = player2Anim;
 
-        Debug.Log("[CombatSceneLoader] Combate pronto com ambos jogadores conectados.");
+        player2Combat.defender  = player1Combat;
+        player2Combat.defenderAnimationController = player1Anim;
+
+        // Inicializa sistema de vida e HUD
+        var health1 = player1Obj.AddComponent<HealthSystem>();
+        health1.Initialize(profile.maxHealth);
+
+        var health2 = player2Object.GetComponent<HealthSystem>() ?? player2Object.AddComponent<HealthSystem>();
+        health2.Initialize(player2MaxHealth);
+
+        gameObject.AddComponent<CombatHUD>().Initialize(health1, health2);
+
+        attackSequencer.player1 = player1Combat;
     }
-
 }
