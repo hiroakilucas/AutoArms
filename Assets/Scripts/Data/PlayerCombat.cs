@@ -20,6 +20,9 @@ public class PlayerCombat : MonoBehaviour
     public PlayerCombat defender;
     public AnimationController defenderAnimationController;
 
+    [Header("Attributes")]
+    public int agility = 10;
+
     public bool IsDead => GetComponent<HealthSystem>()?.IsDead ?? false;
 
     private Animator animator;
@@ -79,6 +82,22 @@ public class PlayerCombat : MonoBehaviour
         _                 => 0.05f
     };
 
+    // Sixth Sense (skill futura): adiciona +0.10f a este valor permanentemente.
+    private float DodgeChance()
+    {
+        if (defender == null) return 0f;
+        float baseChance = defender.weaponHandler.currentType switch
+        {
+            WeaponType.Fast   => 0.20f,
+            WeaponType.Dagger => 0.15f,
+            WeaponType.Sword  => 0.10f,
+            WeaponType.Heavy  => 0.05f,
+            _                 => 0.10f
+        };
+        float agilityBonus = Mathf.Max(0, defender.agility - 10) * 0.01f;
+        return baseChance + agilityBonus;
+    }
+
     // Ataque principal: corre até o defensor e executa um hit completo.
     private IEnumerator StrikeRoutine()
     {
@@ -116,6 +135,16 @@ public class PlayerCombat : MonoBehaviour
         };
         animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+
+        if (defender != null && Random.value < DodgeChance())
+        {
+            Vector3 dodgePos = defender.transform.position
+                + Vector3.up   * 1.5f
+                + Vector3.right * Random.Range(-0.3f, 0.3f);
+            DamagePopup.SpawnDodge(dodgePos);
+            yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+            yield break;
+        }
 
         if (applyKnockback && defender != null)
         {

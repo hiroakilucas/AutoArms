@@ -18,6 +18,27 @@ public class DamagePopup : MonoBehaviour
         go.AddComponent<DamagePopup>().Init(damage, isCrit);
     }
 
+    public static void SpawnDodge(Vector3 worldPos)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitDodge();
+    }
+
+    void InitDodge()
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = "ESQUIVA!";
+        label.fontSize       = 4f;
+        baseColor            = new Color(0.3f, 0.7f, 1f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void Init(int damage, bool isCrit)
     {
         label = gameObject.AddComponent<TextMeshPro>();

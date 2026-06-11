@@ -223,7 +223,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Animação de hit ao tomar dano (defensor permanece no lugar)
 - [x] Combo: atacante executa Slash adicional sem Run, sem limite de hits
 - [x] Crítico: 5% base, Dagger 8%, Sword 5%, Heavy 3% — dano × 2
-- [ ] Esquiva: chance de desviar baseada em agilidade
+- [x] Esquiva: chance de desviar baseada em agilidade
 - [ ] Parry: chance de bloquear dano com arma ou escudo
 - [ ] Jogar arma: arremessar a arma no adversário
 - [ ] Desarmar: fazer o adversário soltar a arma
@@ -280,5 +280,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 48 tarefas | Concluídas: 5
+- Total: 48 tarefas | Concluídas: 6
 - Última atualização: 2026-06-11
