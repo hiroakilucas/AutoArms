@@ -31,6 +31,15 @@ public class PlayerCombat : MonoBehaviour
     private string defaultSortingLayer;
     private Vector2 spawnPosition;
 
+    private static readonly List<GameObject> fallenWeapons = new List<GameObject>();
+
+    public static void CleanupFallenWeapons()
+    {
+        foreach (var w in fallenWeapons)
+            if (w != null) Destroy(w);
+        fallenWeapons.Clear();
+    }
+
     private void Awake()
     {
         animator = GetComponent<Animator>();
@@ -403,21 +412,18 @@ public class PlayerCombat : MonoBehaviour
 
         float groundY   = target.transform.position.y - 1.5f;
         float velocityY = 0f;
-        float elapsed   = 0f;
 
-        while (elapsed < 1.5f && fallen.transform.position.y > groundY)
+        while (fallen.transform.position.y > groundY)
         {
             velocityY -= 9.8f * Time.deltaTime;
             fallen.transform.position += new Vector3(0f, velocityY * Time.deltaTime, 0f);
             fallen.transform.Rotate(0f, 0f, 200f * Time.deltaTime);
-            elapsed += Time.deltaTime;
             yield return null;
         }
 
-        if (elapsed < 1.5f)
-            yield return new WaitForSeconds(1.5f - elapsed);
-
-        Destroy(fallen);
+        var p = fallen.transform.position;
+        fallen.transform.position = new Vector3(p.x, groundY, p.z);
+        fallenWeapons.Add(fallen);
     }
 
     private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, bool rotate)
