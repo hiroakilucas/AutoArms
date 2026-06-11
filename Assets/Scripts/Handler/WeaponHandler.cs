@@ -41,4 +41,23 @@ public class WeaponHandler : MonoBehaviour
         sr.sortingLayerName = sortingLayer;
         sr.sortingOrder = sortingOrder;
     }
+
+    public void Unequip()
+    {
+        if (current) Destroy(current);
+        current = null;
+        currentType = default;
+        CurrentWeaponData = null;
+    }
+
+    // Unequip and permanently remove this weapon from the runtime loadout for this combat.
+    // Captures CurrentWeaponData BEFORE Unequip() clears it, then passes it to RemoveCurrentWeapon
+    // so the loadout can verify it's removing the correct slot.
+    public void UnequipPermanent()
+    {
+        var data = CurrentWeaponData;
+        Unequip();
+        if (data != null)
+            loadout?.RemoveCurrentWeapon(data);
+    }
 }

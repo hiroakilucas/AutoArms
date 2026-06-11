@@ -56,15 +56,20 @@ AttackSequencer
   └── loops: player1.AttackRoutine() → delay → player2.AttackRoutine()
 
 PlayerCombat.AttackRoutine()
-  ├── AnimationController  (Idle → Run → Slash → JumpStart → Hurt)
-  ├── MovementController   (MoveTo linear, JumpTo parabolic arc)
-  └── WeaponHandler        (equips next weapon from PlayerLoadout each round)
+  ├── StrikeRoutine()          → AttackPosition() → PlayRun → HitRoutine()
+  ├── ComboStrikeRoutine()     → delay → reposition if needed → HitRoutine()
+  ├── HitRoutine()             → slash trigger → dodge check → knockback+hurt+damage
+  ├── DodgeLeap()              → PlayJumpStart + JumpTo (fired on defender when dodge triggers)
+  ├── AnimationController      (Idle → Run → Slash → JumpStart → Hurt)
+  ├── MovementController       (MoveTo linear, JumpTo parabolic arc)
+  └── WeaponHandler            (equips next weapon from PlayerLoadout each round)
 ```
 
 - `AttackSequencer` — Runs the indefinite turn loop; waits for both `PlayerCombat` references before starting.
 - `PlayerCombat` — Owns `AttackRoutine`. Manages sorting layer swaps so the attacker renders above the defender during a strike.
 - `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach.
 - `PlayerLoadout` — Tracks `currentIndex` and advances round-robin through `WeaponLoadout.weapons[]`.
+- `DamagePopup` — World-space TextMeshPro floating text spawned at the defender's position. Three variants: normal (yellow), crit (red "CRIT!\n{damage}"), dodge (blue "ESQUIVA!").
 
 ### 04_CombatScenePVP Hierarchy
 
@@ -122,12 +127,20 @@ Each character prefab has a Spriter2UnityDX-generated Animator Controller with a
 | `Slashing` | Trigger | Sword/default attack |
 | `SlashingDagger` | Trigger | Dagger attack |
 | `SlashingHeavy` | Trigger | Heavy weapon attack |
+| `Blocking` | Trigger | Block reaction (defense pose) |
+| `Throwing` | Trigger | Throw weapon animation |
 
 ### Key States and Transitions
 - **Running → Slashing/SlashingDagger/SlashingHeavy**: condition `Running=false + trigger`. These are the original transitions.
 - **Any State → Slashing/SlashingDagger/SlashingHeavy** *(added for combo)*: same conditions, `CanTransitionToSelf=1`. Allows re-entering the Slashing state from itself during combo chains.
 - **Slashing/SlashingDagger/SlashingHeavy → Jump Start**: only via `JumpStart=true`. No auto-exit-time — the Slashing states stay indefinitely until JumpStart fires.
 - **Jump Start → Idle**: when `JumpStart=false AND Idle=true`.
+- **Any State → Block** *(added for parry)*: condition `Blocking` trigger, `HasExitTime=0`. Fires `AnimationController.PlayBlock(0.36666667f)`.
+- **Block → Idle**: `HasExitTime=1`, `ExitTime=0.75`, condition `Idle=true`. Auto-exits after playing ≥75% of the animation.
+- **Any State → Throwing** *(added for throw weapon)*: condition `Throwing` trigger, `HasExitTime=0`, `CanTransitionToSelf=0`. Fired by `ThrowRoutine` concurrently with `FlyWeapon`.
+- **Throwing → Idle**: `HasExitTime=1`, `ExitTime=0.75`, condition `Idle=true`.
+
+`Block.anim` lives in each character's `Prefab/` folder (copied from Medieval Warrior original). Duration: `0.36666667s`. Animates arm/weapon bones into a raised-guard pose.
 
 ### Important: State Names Have Spaces
 State names in the `.controller` files differ from trigger/parameter names:
@@ -141,6 +154,102 @@ Use `animator.SetTrigger("SlashingDagger")` (no space), but `stateInfo.IsName("S
 
 ### Combo Architecture
 The combo fires `SetTrigger(slashTrigger)` from within the Slashing state. This works because the `Any State → Slashing` transitions have `CanTransitionToSelf=1`, allowing the animator to re-enter Slashing from itself with a 0.1s blend (restarts the animation). The `slashingToJumpDelay` pause in `ComboStrikeRoutine` controls rhythm between hits.
+
+`ComboStrikeRoutine` recalculates `AttackPosition()` on every hit and runs `PlayRun` to reposition if the attacker is more than 0.3 units away — this handles both knockback (defender was pushed back on previous hit) and dodge (defender jumped back). Every hit including combo applies knockback.
+
+## Combat Systems
+
+### Critical Hit
+`CritChance()` on the attacker, based on attacker's weapon type:
+| WeaponType | Chance |
+|---|---|
+| Dagger | 8% |
+| Sword | 5% |
+| Heavy | 3% |
+| others | 5% |
+
+On crit: `finalDamage = baseDamage × 2`. Popup shows "CRIT!\n{damage}" in red, font 5.
+> Future skill **Fierce Brute**: +10% crit permanente.
+
+### Dodge
+`DodgeChance()` on the attacker, reading the **defender's** weapon type:
+| WeaponType (defender) | Chance |
+|---|---|
+| Fast | 20% |
+| Dagger | 15% |
+| Sword | 10% |
+| Heavy | 5% |
+| others | 10% |
+
+Each agility point above 10 adds +1% (`defender.agility` field, default 10).
+
+When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4). Popup shows "ESQUIVA!" in blue. Combo continues normally.
+> Future skill **Sixth Sense**: +10% dodge permanente.
+
+### Block
+`BlockChance()` no atacante, lendo o tipo de arma do **defensor**:
+| WeaponType (defender) | Chance |
+|---|---|
+| Block | 50% |
+| Dagger | 15% |
+| Sword | 15% |
+| Heavy | 15% |
+| Slow | 5% |
+| Sem arma (`CurrentWeapon == null`) | 0% |
+| outros | 0% |
+
+Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
+> Future skill **Shield**: +45% block permanente.
+
+### Throw Weapon (Jogar Arma)
+Fires after `ReturnToSpawn`, only if the defender is alive and the attacker has a weapon. `ThrowChance()` by weapon type:
+| WeaponType | Chance |
+|---|---|
+| Thrown | 100% |
+| Dagger | 25% |
+| Fast | 15% |
+| Sword | 10% |
+| Heavy | 5% |
+| others / no weapon | 0% |
+
+Flow:
+1. **Thrown** type: `Unequip()` only (stays in loadout, comes back next cycle). **All others**: `UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()` (removed from runtime loadout for this combat).
+2. Create `FlyingWeapon` GameObject with the weapon's `inHandSprite`. `localScale = Vector3.one * weaponData.scale` for **all types** (same scale as the in-hand sprite).
+3. `SetTrigger("Throwing")` fires animator concurrently.
+4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Only `WeaponType.Thrown`** rotates (540°/s). All other types fly with fixed rotation.
+5. On landing: 80% hit (weapon damage + Hurt + knockback), 20% miss (gray "MISS!" popup).
+6. After result: **40% chance** to immediately `EquipNext()` (pick up next weapon); **60%** stays unarmed.
+7. At the start of the NEXT `AttackRoutine`, if still unarmed, `EquipNext()` is called (normal round advancement).
+
+`PlayerLoadout.runtimeWeapons` is a `List<WeaponData>` initialized lazily on first `GetNextWeapon()` call (after `CombatSceneLoader` has assigned the loadout). `RemoveCurrentWeapon(expected)` removes the entry at `currentIndex` only if it matches `expected` (guards against index drift), then decrements `currentIndex` so the next `EquipNext()` gets the correct successor.
+`WeaponHandler.UnequipPermanent()` captures `CurrentWeaponData` before calling `Unequip()` (which clears it), then passes the reference to `RemoveCurrentWeapon(expected)` for validation.
+`DamagePopup.SpawnMiss(worldPos)` spawns a gray "MISS!" popup.
+
+### Unarmed Combat
+When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `1 + StrBonus()`.
+`ComboChance()` returns 10% while unarmed.
+
+### STR Attribute
+`PlayerCombat.str` (default 10). `StrBonus() = max(0, (str-10)/2)`.
+| Situation | Damage |
+|---|---|
+| Unarmed (punch) | `2 + StrBonus()` |
+| Heavy weapon | `10 + StrBonus()` |
+| Sword | `5` (fixed) |
+| Dagger | `3` (fixed) |
+| Other types | `weaponData.damage` if > 0, else `3` |
+
+Throw damage uses the same base values WITHOUT StrBonus (the weapon flies, not a melee hit).
+
+> Future skill **Iron Fist**: increases unarmed damage.
+
+### Post-Throw Action Return
+After `ThrowRoutine`, chance = `agility × 2%` (default agility=10 → 20%) to immediately:
+run to `AttackPosition()` → `HitRoutine()` → `ReturnToSpawn()`.
+This is a quick counter-strike with whatever weapon the attacker currently holds (might be unarmed punch if 60% case). Future skills can boost this chance.
+
+### Knockback
+Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
 
 ## Third-Party Plugins
 
@@ -219,13 +328,18 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Fase 2 — Combate Robusto
 - [x] Barra de vida com dano baseado em status + dano da arma
-- [x] Animação de knockback ao tomar hit (sem recuo físico, apenas animação Hurt + slide 0.5u)
-- [x] Mecânicas My Brute: combo (chance por tipo — Fast 40%, Dagger 35%, Sword 25%, Heavy 10%; hits encadeados sem movimento)
-- [ ] Mecânicas My Brute: crítico, esquiva, parry, jogar arma, desarmar, troca de arma
-- [ ] Porcentagens fixas por arma para eventos de combate
+- [x] Números de dano flutuantes com TextMesh Pro
+- [x] Animação de hit ao tomar dano (defensor permanece no lugar)
+- [x] Combo: atacante executa Slash adicional sem Run, sem limite de hits
+- [x] Crítico: 5% base, Dagger 8%, Sword 5%, Heavy 3% — dano × 2
+- [x] Esquiva: chance de desviar baseada em agilidade
+- [x] Parry: chance de bloquear dano com arma ou escudo
+- [x] Jogar arma: arremessar a arma no adversário
+- [ ] Desarmar: fazer o adversário soltar a arma
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
-- [ ] Curva de XP por nível: level × 20 XP necessário
+- [ ] Curva de XP: level × 20 XP necessário
 - [ ] Ao subir de nível: escolher atributo, skill ou arma
+- [ ] Tela de fim de combate com resultado e XP ganho
 
 ### Fase 3 — Armas & Pets
 - [ ] Criar mais armas com sprites e stats (tipos: Fast, Slow, Heavy, Thrown, Block)
@@ -275,5 +389,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 43 tarefas | Concluídas: 3
-- Última atualização: 2026-06-11
+- Total: 48 tarefas | Concluídas: 8
+- Última atualização: 2026-06-11 (Jogar Arma revisado: linha reta, Thrown exception, remoção permanente do loadout, 40% re-equip imediato, combate desarmado com STR, Heavy+STR)

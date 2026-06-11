@@ -29,6 +29,12 @@ public class AnimationController : MonoBehaviour
         anim.SetBool("JumpStart", false);
     }
 
+    public IEnumerator PlayBlock(float duration)
+    {
+        anim.SetTrigger("Blocking");
+        yield return new WaitForSeconds(duration);
+    }
+
     public IEnumerator PlayHurt(float duration)
     {
         anim.SetTrigger("Hurt");

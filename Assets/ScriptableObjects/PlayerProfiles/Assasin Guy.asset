@@ -23,5 +23,5 @@ MonoBehaviour:
   winRate: 0
   xpCurrent: 0
   xpRequired: 30
-  maxHealth: 15
+  maxHealth: 200
   battlesRemaining: 6
