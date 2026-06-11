@@ -28,7 +28,7 @@ public class DamagePopup : MonoBehaviour
 
         if (isCrit)
         {
-            label.text     = $"CRÍTICO! {damage}";
+            label.text     = $"CRIT!\n{damage}";
             label.fontSize = 5f;
             baseColor      = Color.red;
         }
