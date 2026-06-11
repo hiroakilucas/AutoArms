@@ -22,6 +22,7 @@ public class PlayerCombat : MonoBehaviour
 
     [Header("Attributes")]
     public int agility = 10;
+    public int str = 10;
 
     public bool IsDead => GetComponent<HealthSystem>()?.IsDead ?? false;
 
@@ -49,7 +50,7 @@ public class PlayerCombat : MonoBehaviour
 
     public IEnumerator AttackRoutine()
     {
-        // Re-equipa se desarmado pelo arremesso do turno anterior.
+        // 60% case: still unarmed from a previous throw — equip next weapon normally.
         if (weaponHandler.CurrentWeapon == null)
             weaponHandler.EquipNext();
 
@@ -59,14 +60,11 @@ public class PlayerCombat : MonoBehaviour
         yield return animationController.PlayIdle(settings.idleDuration);
         yield return StrikeRoutine();
 
-        // Combo: hits encadeados sem movimento. O atacante permanece próximo ao
-        // defensor e executa apenas slash → dano → Hurt enquanto a chance triggrar.
         while (defender != null && !defender.IsDead && Random.value < ComboChance())
             yield return ComboStrikeRoutine();
 
         yield return ReturnToSpawn();
 
-        // Jogar arma: dispara após o retorno ao spawn, desarmando o atacante.
         if (defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
             && Random.value < ThrowChance())
             yield return ThrowRoutine();
@@ -74,14 +72,13 @@ public class PlayerCombat : MonoBehaviour
         RestoreDefaultLayers();
     }
 
-    // Thrown (skill futura): 100% permanente.
     private float ThrowChance()
     {
         if (weaponHandler.CurrentWeapon == null) return 0f;
         return weaponHandler.currentType switch
         {
             WeaponType.Thrown  => 1.00f,
-            WeaponType.Dagger  => 0.20f,
+            WeaponType.Dagger  => 0.25f,
             WeaponType.Fast    => 0.15f,
             WeaponType.Sword   => 0.10f,
             WeaponType.Heavy   => 0.05f,
@@ -89,14 +86,18 @@ public class PlayerCombat : MonoBehaviour
         };
     }
 
-    private float ComboChance() => weaponHandler.currentType switch
+    private float ComboChance()
     {
-        WeaponType.Fast   => 0.40f,
-        WeaponType.Dagger => 0.35f,
-        WeaponType.Sword  => 0.25f,
-        WeaponType.Heavy  => 0.10f,
-        _                 => 0.25f
-    };
+        if (weaponHandler.CurrentWeapon == null) return 0.10f;
+        return weaponHandler.currentType switch
+        {
+            WeaponType.Fast   => 0.40f,
+            WeaponType.Dagger => 0.35f,
+            WeaponType.Sword  => 0.25f,
+            WeaponType.Heavy  => 0.10f,
+            _                 => 0.25f
+        };
+    }
 
     // Fierce Brute (skill futura): adiciona +0.10f a este valor permanentemente.
     private float CritChance() => weaponHandler.currentType switch
@@ -138,6 +139,19 @@ public class PlayerCombat : MonoBehaviour
         return baseChance + agilityBonus;
     }
 
+    // Iron Fist (skill futura): aumenta dano desarmado.
+    // Heavy: dano base + bônus de STR. Outras armas: dano fixo. Desarmado: 1 + bônus de STR.
+    private int StrBonus() => Mathf.Max(0, (str - 10) / 2);
+
+    private int CalcDamage()
+    {
+        if (weaponHandler.CurrentWeapon == null)
+            return 1 + StrBonus();
+        if (weaponHandler.currentType == WeaponType.Heavy)
+            return (weaponHandler.CurrentWeaponData?.damage ?? 0) + StrBonus();
+        return weaponHandler.CurrentWeaponData?.damage ?? 0;
+    }
+
     // Posição de ataque: imediatamente fora do alcance da arma, na direção do defensor.
     private Vector2 AttackPosition()
     {
@@ -153,14 +167,12 @@ public class PlayerCombat : MonoBehaviour
         return defPos - dir * reach;
     }
 
-    // Ataque principal: corre até o defensor e executa um hit completo.
     private IEnumerator StrikeRoutine()
     {
         yield return animationController.PlayRun(AttackPosition(), settings.runSpeed, movement);
         yield return HitRoutine();
     }
 
-    // Hit de combo: reposiciona se o defensor se moveu (knockback/esquiva), depois executa o hit.
     // Any State → Slashing (CanTransitionToSelf=1) no controller permite re-entrar no Slashing após o run.
     private IEnumerator ComboStrikeRoutine()
     {
@@ -172,6 +184,7 @@ public class PlayerCombat : MonoBehaviour
     }
 
     // Slash → (knockback + Hurt em paralelo) → dano.
+    // Quando desarmado: usa "Slashing" (soco) com dano calculado por STR.
     private IEnumerator HitRoutine(bool applyKnockback = true)
     {
         string slashTrigger = weaponHandler.currentType switch
@@ -220,7 +233,7 @@ public class PlayerCombat : MonoBehaviour
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
 
         bool isCrit      = Random.value < CritChance();
-        int  baseDamage  = weaponHandler.CurrentWeaponData?.damage ?? 0;
+        int  baseDamage  = CalcDamage();
         int  finalDamage = isCrit ? baseDamage * 2 : baseDamage;
 
         defender?.GetComponent<HealthSystem>()?.TakeDamage(finalDamage);
@@ -236,19 +249,28 @@ public class PlayerCombat : MonoBehaviour
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
     }
 
-    // Arremessa a arma atual em arco até o defensor, depois fica desarmado até o próximo turno.
+    // Arremessa a arma em linha reta até o defensor.
+    // Thrown: nunca removida do loadout. Outras: removidas permanentemente após o arremesso.
+    // Após o resultado (hit/miss): 40% pega a próxima arma imediatamente, 60% fica desarmado.
     private IEnumerator ThrowRoutine()
     {
         var weaponData = weaponHandler.CurrentWeaponData;
+        bool isThrown = weaponData?.type == WeaponType.Thrown;
+
         Vector3 launchPos = weaponHandler.handBone != null
             ? weaponHandler.handBone.position
             : transform.position + Vector3.up * 0.5f;
 
-        weaponHandler.Unequip();
+        if (isThrown)
+            weaponHandler.Unequip();
+        else
+            weaponHandler.UnequipPermanent();
 
         var flyingWeapon = new GameObject("FlyingWeapon");
         flyingWeapon.transform.position = launchPos;
-        flyingWeapon.transform.localScale = Vector3.one * (weaponData?.scale ?? 1f);
+        // Dagger mantém escala original (1,1,1); outras armas usam o scale do WeaponData.
+        if (weaponData?.type != WeaponType.Dagger)
+            flyingWeapon.transform.localScale = Vector3.one * (weaponData?.scale ?? 1f);
         var sr = flyingWeapon.AddComponent<SpriteRenderer>();
         sr.sprite = weaponData?.inHandSprite;
         sr.sortingLayerName = "Weapons";
@@ -260,7 +282,9 @@ public class PlayerCombat : MonoBehaviour
             ? defender.transform.position + Vector3.up * 0.3f
             : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
 
-        yield return FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f, 1.0f);
+        // Sword e Heavy voam sem rotação; todos os outros tipos rotacionam.
+        bool rotate = weaponData?.type != WeaponType.Sword && weaponData?.type != WeaponType.Heavy;
+        yield return FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f, rotate);
         Destroy(flyingWeapon);
 
         if (defender != null && Random.value < 0.80f)
@@ -280,18 +304,20 @@ public class PlayerCombat : MonoBehaviour
             DamagePopup.SpawnMiss(missPos);
             yield return new WaitForSeconds(settings.hurtDuration);
         }
+
+        // 40% chance de pegar a próxima arma do loadout imediatamente.
+        if (Random.value < 0.40f)
+            weaponHandler.EquipNext();
     }
 
-    private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, float arcHeight)
+    private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, bool rotate)
     {
         float elapsed = 0f;
         while (elapsed < duration)
         {
-            float t = elapsed / duration;
-            Vector3 pos = Vector3.Lerp(from, to, t);
-            pos.y += Mathf.Sin(Mathf.PI * t) * arcHeight;
-            obj.position = pos;
-            obj.Rotate(0, 0, 540f * Time.deltaTime);
+            obj.position = Vector3.Lerp(from, to, elapsed / duration);
+            if (rotate)
+                obj.Rotate(0, 0, 540f * Time.deltaTime);
             elapsed += Time.deltaTime;
             yield return null;
         }
@@ -324,7 +350,6 @@ public class PlayerCombat : MonoBehaviour
         transform.position = to;
     }
 
-    // Pausa pós-golpe → animação de salto → move para novo spawn → idle.
     private IEnumerator ReturnToSpawn()
     {
         yield return new WaitForSeconds(settings.slashingToJumpDelay);

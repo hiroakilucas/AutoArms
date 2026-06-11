@@ -1,14 +1,36 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class PlayerLoadout : MonoBehaviour
 {
     public WeaponLoadout loadout;
     [HideInInspector] public int currentIndex = -1;
 
+    // Runtime copy so weapons can be permanently removed without mutating the ScriptableObject.
+    // Lazily initialized on first use so CombatSceneLoader can assign loadout.loadout before we read it.
+    private List<WeaponData> runtimeWeapons;
+
+    private void EnsureRuntime()
+    {
+        if (runtimeWeapons == null)
+            runtimeWeapons = new List<WeaponData>(loadout?.weapons ?? new WeaponData[0]);
+    }
+
     public WeaponData GetNextWeapon()
     {
-        if (loadout == null || loadout.weapons.Length == 0) return null;
-        currentIndex = (currentIndex + 1) % loadout.weapons.Length;
-        return loadout.weapons[currentIndex];
+        EnsureRuntime();
+        if (runtimeWeapons.Count == 0) return null;
+        currentIndex = (currentIndex + 1) % runtimeWeapons.Count;
+        return runtimeWeapons[currentIndex];
+    }
+
+    // Permanently removes the weapon at currentIndex from this combat's loadout.
+    // Does not affect the ScriptableObject asset.
+    public void RemoveCurrentWeapon()
+    {
+        EnsureRuntime();
+        if (currentIndex < 0 || currentIndex >= runtimeWeapons.Count) return;
+        runtimeWeapons.RemoveAt(currentIndex);
+        currentIndex--;
     }
 }

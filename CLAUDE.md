@@ -206,18 +206,38 @@ Fires after `ReturnToSpawn`, only if the defender is alive and the attacker has 
 | WeaponType | Chance |
 |---|---|
 | Thrown | 100% |
-| Dagger | 20% |
+| Dagger | 25% |
 | Fast | 15% |
 | Sword | 10% |
 | Heavy | 5% |
 | others / no weapon | 0% |
 
-Flow: `weaponHandler.Unequip()` (disarm, no index advance) → create `FlyingWeapon` GameObject with the weapon's `inHandSprite` → `SetTrigger("Throwing")` fires animator concurrently → `FlyWeapon()` lerps the sprite in a parabolic arc over 0.45s → on landing: 80% hit (damage + Hurt + knockback), 20% miss (MISS! gray popup).
+Flow:
+1. **Thrown** type: `Unequip()` only (stays in loadout, comes back next cycle). **All others**: `UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()` (removed from runtime loadout for this combat).
+2. Create `FlyingWeapon` GameObject with the weapon's `inHandSprite`. **Dagger**: `localScale = Vector3.one` (original dimensions). **Others**: `localScale = Vector3.one * weaponData.scale`.
+3. `SetTrigger("Throwing")` fires animator concurrently.
+4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Sword/Heavy**: no rotation. **Dagger/Fast/Thrown**: rotates 540°/s.
+5. On landing: 80% hit (weapon damage + Hurt + knockback), 20% miss (gray "MISS!" popup).
+6. After result: **40% chance** to immediately `EquipNext()` (pick up next weapon); **60%** stays unarmed.
+7. At the start of the NEXT `AttackRoutine`, if still unarmed, `EquipNext()` is called (normal round advancement).
 
-After the throw the attacker is disarmed (`CurrentWeapon == null`). At the start of the next `AttackRoutine`, the check `if (weaponHandler.CurrentWeapon == null) weaponHandler.EquipNext()` re-equips the next weapon from the loadout.
-
-`WeaponHandler.Unequip()` destroys the current weapon instance and sets `current = null` / `CurrentWeaponData = null` without advancing `currentIndex`.
+`PlayerLoadout.runtimeWeapons` is a `List<WeaponData>` initialized lazily on first `GetNextWeapon()` call (after `CombatSceneLoader` has assigned the loadout). `RemoveCurrentWeapon()` removes the current entry and decrements `currentIndex` so the next `EquipNext()` gets the correct successor.
+`WeaponHandler.UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()`.
 `DamagePopup.SpawnMiss(worldPos)` spawns a gray "MISS!" popup.
+
+### Unarmed Combat
+When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `1 + StrBonus()`.
+`ComboChance()` returns 10% while unarmed.
+
+### STR Attribute
+`PlayerCombat.str` (default 10). Affects:
+| Situation | Damage formula |
+|---|---|
+| Unarmed | `1 + max(0, (str-10)/2)` |
+| Heavy weapon | `weaponData.damage + max(0, (str-10)/2)` |
+| Other weapons | `weaponData.damage` (fixed) |
+
+> Future skill **Iron Fist**: increases unarmed damage.
 
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
@@ -361,4 +381,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 48 tarefas | Concluídas: 8
-- Última atualização: 2026-06-11 (esquiva, DodgeLeap, reposicionamento combo, knockback em todos os hits, Block animation com Blocking trigger nos três personagens, Jogar Arma com arco parabólico e MISS!)
+- Última atualização: 2026-06-11 (Jogar Arma revisado: linha reta, Thrown exception, remoção permanente do loadout, 40% re-equip imediato, combate desarmado com STR, Heavy+STR)

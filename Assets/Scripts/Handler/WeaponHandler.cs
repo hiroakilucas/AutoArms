@@ -49,4 +49,11 @@ public class WeaponHandler : MonoBehaviour
         currentType = default;
         CurrentWeaponData = null;
     }
+
+    // Unequip and remove permanently from the runtime loadout (thrown weapons that aren't Thrown type).
+    public void UnequipPermanent()
+    {
+        Unequip();
+        loadout?.RemoveCurrentWeapon();
+    }
 }
