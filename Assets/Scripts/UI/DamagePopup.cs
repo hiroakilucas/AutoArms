@@ -32,6 +32,13 @@ public class DamagePopup : MonoBehaviour
         go.AddComponent<DamagePopup>().InitBlock();
     }
 
+    public static void SpawnMiss(Vector3 worldPos)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitMiss();
+    }
+
     void InitBlock()
     {
         label = gameObject.AddComponent<TextMeshPro>();
@@ -42,6 +49,20 @@ public class DamagePopup : MonoBehaviour
         label.text           = "BLOCK!";
         label.fontSize       = 4f;
         baseColor            = new Color(1f, 0.84f, 0f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
+    void InitMiss()
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = "MISS!";
+        label.fontSize       = 4f;
+        baseColor            = new Color(0.65f, 0.65f, 0.65f);
         label.color          = baseColor;
         origin               = transform.position;
     }

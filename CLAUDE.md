@@ -128,6 +128,7 @@ Each character prefab has a Spriter2UnityDX-generated Animator Controller with a
 | `SlashingDagger` | Trigger | Dagger attack |
 | `SlashingHeavy` | Trigger | Heavy weapon attack |
 | `Blocking` | Trigger | Block reaction (defense pose) |
+| `Throwing` | Trigger | Throw weapon animation |
 
 ### Key States and Transitions
 - **Running → Slashing/SlashingDagger/SlashingHeavy**: condition `Running=false + trigger`. These are the original transitions.
@@ -136,6 +137,8 @@ Each character prefab has a Spriter2UnityDX-generated Animator Controller with a
 - **Jump Start → Idle**: when `JumpStart=false AND Idle=true`.
 - **Any State → Block** *(added for parry)*: condition `Blocking` trigger, `HasExitTime=0`. Fires `AnimationController.PlayBlock(0.36666667f)`.
 - **Block → Idle**: `HasExitTime=1`, `ExitTime=0.75`, condition `Idle=true`. Auto-exits after playing ≥75% of the animation.
+- **Any State → Throwing** *(added for throw weapon)*: condition `Throwing` trigger, `HasExitTime=0`, `CanTransitionToSelf=0`. Fired by `ThrowRoutine` concurrently with `FlyWeapon`.
+- **Throwing → Idle**: `HasExitTime=1`, `ExitTime=0.75`, condition `Idle=true`.
 
 `Block.anim` lives in each character's `Prefab/` folder (copied from Medieval Warrior original). Duration: `0.36666667s`. Animates arm/weapon bones into a raised-guard pose.
 
@@ -197,6 +200,24 @@ When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays 
 
 Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
 > Future skill **Shield**: +45% block permanente.
+
+### Throw Weapon (Jogar Arma)
+Fires after `ReturnToSpawn`, only if the defender is alive and the attacker has a weapon. `ThrowChance()` by weapon type:
+| WeaponType | Chance |
+|---|---|
+| Thrown | 100% |
+| Dagger | 20% |
+| Fast | 15% |
+| Sword | 10% |
+| Heavy | 5% |
+| others / no weapon | 0% |
+
+Flow: `weaponHandler.Unequip()` (disarm, no index advance) → create `FlyingWeapon` GameObject with the weapon's `inHandSprite` → `SetTrigger("Throwing")` fires animator concurrently → `FlyWeapon()` lerps the sprite in a parabolic arc over 0.45s → on landing: 80% hit (damage + Hurt + knockback), 20% miss (MISS! gray popup).
+
+After the throw the attacker is disarmed (`CurrentWeapon == null`). At the start of the next `AttackRoutine`, the check `if (weaponHandler.CurrentWeapon == null) weaponHandler.EquipNext()` re-equips the next weapon from the loadout.
+
+`WeaponHandler.Unequip()` destroys the current weapon instance and sets `current = null` / `CurrentWeaponData = null` without advancing `currentIndex`.
+`DamagePopup.SpawnMiss(worldPos)` spawns a gray "MISS!" popup.
 
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
@@ -284,7 +305,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Crítico: 5% base, Dagger 8%, Sword 5%, Heavy 3% — dano × 2
 - [x] Esquiva: chance de desviar baseada em agilidade
 - [x] Parry: chance de bloquear dano com arma ou escudo
-- [ ] Jogar arma: arremessar a arma no adversário
+- [x] Jogar arma: arremessar a arma no adversário
 - [ ] Desarmar: fazer o adversário soltar a arma
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
 - [ ] Curva de XP: level × 20 XP necessário
@@ -339,5 +360,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 48 tarefas | Concluídas: 7
-- Última atualização: 2026-06-11 (esquiva, DodgeLeap, reposicionamento combo, knockback em todos os hits, Block animation com Blocking trigger nos três personagens)
+- Total: 48 tarefas | Concluídas: 8
+- Última atualização: 2026-06-11 (esquiva, DodgeLeap, reposicionamento combo, knockback em todos os hits, Block animation com Blocking trigger nos três personagens, Jogar Arma com arco parabólico e MISS!)

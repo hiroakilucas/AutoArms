@@ -49,6 +49,10 @@ public class PlayerCombat : MonoBehaviour
 
     public IEnumerator AttackRoutine()
     {
+        // Re-equipa se desarmado pelo arremesso do turno anterior.
+        if (weaponHandler.CurrentWeapon == null)
+            weaponHandler.EquipNext();
+
         SetAttackerLayers();
         yield return null;
 
@@ -61,7 +65,28 @@ public class PlayerCombat : MonoBehaviour
             yield return ComboStrikeRoutine();
 
         yield return ReturnToSpawn();
+
+        // Jogar arma: dispara após o retorno ao spawn, desarmando o atacante.
+        if (defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
+            && Random.value < ThrowChance())
+            yield return ThrowRoutine();
+
         RestoreDefaultLayers();
+    }
+
+    // Thrown (skill futura): 100% permanente.
+    private float ThrowChance()
+    {
+        if (weaponHandler.CurrentWeapon == null) return 0f;
+        return weaponHandler.currentType switch
+        {
+            WeaponType.Thrown  => 1.00f,
+            WeaponType.Dagger  => 0.20f,
+            WeaponType.Fast    => 0.15f,
+            WeaponType.Sword   => 0.10f,
+            WeaponType.Heavy   => 0.05f,
+            _                  => 0f
+        };
     }
 
     private float ComboChance() => weaponHandler.currentType switch
@@ -209,6 +234,68 @@ public class PlayerCombat : MonoBehaviour
         }
 
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+    }
+
+    // Arremessa a arma atual em arco até o defensor, depois fica desarmado até o próximo turno.
+    private IEnumerator ThrowRoutine()
+    {
+        var weaponData = weaponHandler.CurrentWeaponData;
+        Vector3 launchPos = weaponHandler.handBone != null
+            ? weaponHandler.handBone.position
+            : transform.position + Vector3.up * 0.5f;
+
+        weaponHandler.Unequip();
+
+        var flyingWeapon = new GameObject("FlyingWeapon");
+        flyingWeapon.transform.position = launchPos;
+        flyingWeapon.transform.localScale = Vector3.one * (weaponData?.scale ?? 1f);
+        var sr = flyingWeapon.AddComponent<SpriteRenderer>();
+        sr.sprite = weaponData?.inHandSprite;
+        sr.sortingLayerName = "Weapons";
+        sr.sortingOrder = 10;
+
+        animator.SetTrigger("Throwing");
+
+        Vector3 targetPos = defender != null
+            ? defender.transform.position + Vector3.up * 0.3f
+            : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
+
+        yield return FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f, 1.0f);
+        Destroy(flyingWeapon);
+
+        if (defender != null && Random.value < 0.80f)
+        {
+            Vector2 pushDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
+            defender.StartCoroutine(defender.Knockback(pushDir, settings.knockbackDistance, settings.hurtDuration));
+            yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
+            int damage = weaponData?.damage ?? 0;
+            defender.GetComponent<HealthSystem>()?.TakeDamage(damage);
+            Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
+            DamagePopup.Spawn(popupPos, damage, false);
+        }
+        else
+        {
+            Vector3 missPos = (defender != null ? defender.transform.position : transform.position)
+                + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
+            DamagePopup.SpawnMiss(missPos);
+            yield return new WaitForSeconds(settings.hurtDuration);
+        }
+    }
+
+    private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, float arcHeight)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            float t = elapsed / duration;
+            Vector3 pos = Vector3.Lerp(from, to, t);
+            pos.y += Mathf.Sin(Mathf.PI * t) * arcHeight;
+            obj.position = pos;
+            obj.Rotate(0, 0, 540f * Time.deltaTime);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        obj.position = to;
     }
 
     // Salta para trás ao esquivar: JumpStart animation + arco parabólico na direção oposta ao ataque.

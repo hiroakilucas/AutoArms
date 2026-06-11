@@ -41,4 +41,12 @@ public class WeaponHandler : MonoBehaviour
         sr.sortingLayerName = sortingLayer;
         sr.sortingOrder = sortingOrder;
     }
+
+    public void Unequip()
+    {
+        if (current) Destroy(current);
+        current = null;
+        currentType = default;
+        CurrentWeaponData = null;
+    }
 }
