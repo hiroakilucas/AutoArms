@@ -85,7 +85,7 @@ public class PlayerCombat : MonoBehaviour
     // Shield (skill futura): adiciona +0.45f a este valor permanentemente.
     private float BlockChance()
     {
-        if (defender == null || defender.weaponHandler.CurrentWeaponData == null) return 0f;
+        if (defender == null || defender.weaponHandler.CurrentWeapon == null) return 0f;
         return defender.weaponHandler.currentType switch
         {
             WeaponType.Block  => 0.50f,
