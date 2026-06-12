@@ -50,4 +50,5 @@ public class AnimationController : MonoBehaviour
     }
 
     public void SetIdle(bool state) => anim.SetBool("Idle", state);
+    public void SetSpeed(float speed) => anim.speed = speed;
 }

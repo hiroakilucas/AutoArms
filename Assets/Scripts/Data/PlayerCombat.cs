@@ -244,6 +244,10 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Dagger => "SlashingDagger",
             _                 => "Slashing"
         };
+
+        bool isUnarmed = weaponHandler.CurrentWeapon == null;
+        if (isUnarmed) animationController.SetSpeed(2f);
+
         animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
 
@@ -256,6 +260,7 @@ public class PlayerCombat : MonoBehaviour
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.SpawnDodge(dodgePos);
+            if (isUnarmed) animationController.SetSpeed(1f);
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }
@@ -276,6 +281,7 @@ public class PlayerCombat : MonoBehaviour
             if (defender.weaponHandler.CurrentWeapon != null && Random.value < 0.10f)
                 StartCoroutine(DropWeapon(defender, isDisarm: false));
 
+            if (isUnarmed) animationController.SetSpeed(1f);
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }
@@ -310,6 +316,7 @@ public class PlayerCombat : MonoBehaviour
             StartCoroutine(DropWeapon(defender));
         }
 
+        if (isUnarmed) animationController.SetSpeed(1f);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
     }
 

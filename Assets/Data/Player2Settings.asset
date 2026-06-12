@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Player2Settings
   m_EditorClassIdentifier: 
   idleDuration: 0.3
-  runSpeed: 25
+  runSpeed: 35
   slashingDuration: 0.5
   slashingToJumpDelay: 0.2
   jumpHeight: 2
