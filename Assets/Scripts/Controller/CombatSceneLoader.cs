@@ -56,6 +56,8 @@ public class CombatSceneLoader : MonoBehaviour
 
         player1Combat.settings  = profile.attackSettings;
         player1Combat.isPlayer1 = true;
+        player1Combat.str       = profile.str;
+        player1Combat.agility   = profile.agility;
         player1Combat.defender  = player2Combat;
         player1Combat.defenderAnimationController = player2Anim;
 
@@ -99,7 +101,8 @@ public class CombatSceneLoader : MonoBehaviour
         StartCoroutine(EntryFall(player2Object, p2Land, () => p2Done = true));
         yield return new WaitUntil(() => p1Done && p2Done);
 
-        attackSequencer.player1 = player1Combat;
+        attackSequencer.player1        = player1Combat;
+        attackSequencer.player1Profile = profile;
     }
 
     private IEnumerator EntryFall(GameObject obj, Vector3 landPos, Action onLand)

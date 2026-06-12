@@ -407,10 +407,10 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Entrada em cena: personagens caem do céu ao iniciar combate
 - [x] Drop de arma ao bloquear (atacante 15%, defensor 10%)
 - [x] HUD de armas abaixo da barra de vida
-- [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
-- [ ] Curva de XP: level × 20 XP necessário
+- [x] Sistema de XP e level (vitória +2 XP, derrota +1 XP)
+- [x] Curva de XP não linear: (level+1)×(level+2) — nível 1→2=6, 2→3=12, 3→4=20...
+- [x] Tela de fim de combate com resultado e XP ganho
 - [ ] Ao subir de nível: escolher atributo, skill ou arma
-- [ ] Tela de fim de combate com resultado e XP ganho
 
 ### Fase 3 — Armas & Pets
 - [ ] Criar mais armas com sprites e stats (tipos: Fast, Slow, Heavy, Thrown, Block)
@@ -460,5 +460,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 52 tarefas | Concluídas: 13
-- Última atualização: 2026-06-11 (HUD de armas: ícones 100px rotacionados 45° abaixo da barra de vida, destaque dourado na arma ativa, ícone some ao ser removida permanentemente, Thrown nunca some)
+- Total: 52 tarefas | Concluídas: 15
+- Última atualização: 2026-06-11 (XP+Level: vitória +2/derrota +1 XP, curva (level+1)×(level+2), level-up com bônus de atributos, tela de resultado com barra animada e botão Continuar)

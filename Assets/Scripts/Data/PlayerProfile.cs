@@ -32,6 +32,10 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("Vida máxima do personagem")]
     public int maxHealth = 15;
 
+    [Header("Atributos")]
+    public int str = 10;
+    public int agility = 10;
+
     [Header("Progresso")]
     [Tooltip("N�vel atual do personagem")]
     public int level = 1;
@@ -43,7 +47,7 @@ public class PlayerProfile : ScriptableObject
     public int xpCurrent = 0;
 
     [Tooltip("Experi�ncia necess�ria para o pr�ximo n�vel")]
-    public int xpRequired = 30;
+    public int xpRequired = 6;
 
     [Tooltip("Lutas restantes (m�ximo por ciclo)")]
     public int battlesRemaining = 6;

@@ -7,6 +7,9 @@ public class AttackSequencer : MonoBehaviour
     public PlayerCombat player1;
     public PlayerCombat player2;
 
+    [Header("Progresso")]
+    public PlayerProfile player1Profile;
+
     [Header("Turn Settings")]
     public float interTurnDelay = 0.2f;
 
@@ -39,5 +42,22 @@ public class AttackSequencer : MonoBehaviour
     {
         Debug.Log($"[AttackSequencer] {winner.name} venceu o combate!");
         PlayerCombat.CleanupFallenWeapons();
+
+        if (player1Profile == null) return;
+
+        bool player1Won = winner == player1;
+        int  xpGained   = player1Won ? 2 : 1;
+
+        player1Profile.battlesRemaining = Mathf.Max(0, player1Profile.battlesRemaining - 1);
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(player1Profile);
+#endif
+
+        int xpBefore    = player1Profile.xpCurrent;
+        int levelBefore = player1Profile.level;
+        var result      = XpSystem.AddXP(player1Profile, xpGained);
+
+        gameObject.AddComponent<CombatResultPanel>()
+            .Show(player1Won, xpGained, xpBefore, levelBefore, player1Profile, result.didLevelUp);
     }
 }
