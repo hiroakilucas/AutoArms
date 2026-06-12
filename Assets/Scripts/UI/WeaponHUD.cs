@@ -62,7 +62,7 @@ public class WeaponHUD : MonoBehaviour
         _iconMap[data] = BuildIcon(data);
     }
 
-    private const float IconSize = 90f;
+    private const float IconSize = 100f;
 
     private GameObject BuildIcon(WeaponData data)
     {
@@ -72,7 +72,7 @@ public class WeaponHUD : MonoBehaviour
         var rt = go.AddComponent<RectTransform>();
         rt.sizeDelta = new Vector2(IconSize, IconSize);
 
-        go.AddComponent<Image>().color = Color.clear;
+        go.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.35f);
 
         var spriteGo = new GameObject("Sprite");
         spriteGo.transform.SetParent(go.transform, false);
@@ -98,8 +98,8 @@ public class WeaponHUD : MonoBehaviour
             if (kvp.Value == null) continue;
             bool isActive = kvp.Key == active;
             kvp.Value.GetComponent<Image>().color = isActive
-                ? new Color(0.85f, 0.72f, 0.20f, 0.55f)
-                : Color.clear;
+                ? new Color(0.85f, 0.72f, 0.20f, 0.70f)
+                : new Color(0f, 0f, 0f, 0.35f);
         }
     }
 
@@ -111,12 +111,12 @@ public class WeaponHUD : MonoBehaviour
         var rt = go.AddComponent<RectTransform>();
         if (_isPlayer1)
         {
-            rt.anchorMin = new Vector2(0.02f, 0.820f);
+            rt.anchorMin = new Vector2(0.02f, 0.810f);
             rt.anchorMax = new Vector2(0.45f, 0.930f);
         }
         else
         {
-            rt.anchorMin = new Vector2(0.55f, 0.820f);
+            rt.anchorMin = new Vector2(0.55f, 0.810f);
             rt.anchorMax = new Vector2(0.98f, 0.930f);
         }
         rt.offsetMin = Vector2.zero;
