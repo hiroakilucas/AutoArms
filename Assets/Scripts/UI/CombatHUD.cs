@@ -42,6 +42,8 @@ public class CombatHUD : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
 
+        go.AddComponent<GraphicRaycaster>();
+
         return go;
     }
 

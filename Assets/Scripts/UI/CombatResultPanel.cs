@@ -133,7 +133,9 @@ public class CombatResultPanel : MonoBehaviour
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = rt.offsetMax = Vector2.zero;
-        go.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.65f);
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0f, 0f, 0f, 0.65f);
+        img.raycastTarget = false;
     }
 
     private static GameObject MakePanel(Transform parent)

@@ -17,6 +17,6 @@ MonoBehaviour:
   previewIcon: {fileID: 21300000, guid: acde409e0b6e5794e80031314f35d193, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weaponLoadout: {fileID: 11400000, guid: f0b1a3769f05ab14c97c17536e86a089, type: 2}
-  maxHealth: 200
+  maxHealth: 50
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
