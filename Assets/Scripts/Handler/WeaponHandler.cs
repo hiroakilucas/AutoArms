@@ -21,6 +21,9 @@ public class WeaponHandler : MonoBehaviour
     public WeaponType currentType { get; private set; }
     public WeaponData CurrentWeaponData { get; private set; }
 
+    // Fires with the newly equipped WeaponData, or null when unequipped.
+    public event System.Action<WeaponData> OnWeaponChanged;
+
     public void EquipNext()
     {
         if (current) Destroy(current);
@@ -55,6 +58,8 @@ public class WeaponHandler : MonoBehaviour
         sr.sprite = data.inHandSprite;
         sr.sortingLayerName = sortingLayer;
         sr.sortingOrder = sortingOrder;
+
+        OnWeaponChanged?.Invoke(data);
     }
 
     public void Unequip()
@@ -63,6 +68,7 @@ public class WeaponHandler : MonoBehaviour
         current = null;
         currentType = default;
         CurrentWeaponData = null;
+        OnWeaponChanged?.Invoke(null);
     }
 
     // Unequip and permanently remove this weapon from the runtime loadout for this combat.

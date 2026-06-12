@@ -5,10 +5,14 @@ public class CombatHUD : MonoBehaviour
 {
     private RectTransform p1FillRect;
     private RectTransform p2FillRect;
+    private GameObject _canvasObject;
+
+    public Transform CanvasTransform => _canvasObject != null ? _canvasObject.transform : null;
 
     public void Initialize(HealthSystem health1, HealthSystem health2)
     {
-        var canvas = CreateCanvas();
+        _canvasObject = CreateCanvas();
+        var canvas = _canvasObject;
         p1FillRect = CreateBar(canvas, isLeft: true);
         p2FillRect = CreateBar(canvas, isLeft: false);
 

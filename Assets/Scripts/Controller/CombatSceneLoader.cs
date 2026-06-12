@@ -68,7 +68,22 @@ public class CombatSceneLoader : MonoBehaviour
         var health2 = player2Object.GetComponent<HealthSystem>() ?? player2Object.AddComponent<HealthSystem>();
         health2.Initialize(player2MaxHealth);
 
-        gameObject.AddComponent<CombatHUD>().Initialize(health1, health2);
+        var combatHUD = gameObject.AddComponent<CombatHUD>();
+        combatHUD.Initialize(health1, health2);
+
+        if (loadout != null && handler != null)
+        {
+            var p1WeaponHUD = gameObject.AddComponent<WeaponHUD>();
+            p1WeaponHUD.Initialize(loadout, handler, true, combatHUD.CanvasTransform);
+        }
+
+        var p2Loadout = player2Object.GetComponent<PlayerLoadout>();
+        var p2Handler = player2Object.GetComponent<WeaponHandler>();
+        if (p2Loadout != null && p2Handler != null)
+        {
+            var p2WeaponHUD = gameObject.AddComponent<WeaponHUD>();
+            p2WeaponHUD.Initialize(p2Loadout, p2Handler, false, combatHUD.CanvasTransform);
+        }
 
         // Aguarda um frame para PlayerCombat.Start() rodar e definir spawnPosition
         yield return null;

@@ -405,6 +405,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Desarmar: fazer o adversário soltar a arma
 - [x] Entrada em cena: personagens caem do céu ao iniciar combate
 - [x] Drop de arma ao bloquear (atacante 15%, defensor 10%)
+- [x] HUD de armas abaixo da barra de vida
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
 - [ ] Curva de XP: level × 20 XP necessário
 - [ ] Ao subir de nível: escolher atributo, skill ou arma
@@ -458,5 +459,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 51 tarefas | Concluídas: 12
-- Última atualização: 2026-06-11 (Entrada em cena; Drop ao bloquear; runSpeed 35; hurtDuration 0.07s; jumpStartDuration 0.02s; atraso pré-salto removido do ReturnToSpawn)
+- Total: 52 tarefas | Concluídas: 13
+- Última atualização: 2026-06-11 (HUD de armas: ícones do loadout abaixo da barra de vida, destaque na arma ativa, ícone some ao ser removida, Thrown nunca some)

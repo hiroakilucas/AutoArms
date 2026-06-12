@@ -6,6 +6,14 @@ public class PlayerLoadout : MonoBehaviour
     public WeaponLoadout loadout;
     [HideInInspector] public int currentIndex = -1;
 
+    // Fires whenever a weapon is permanently removed from the runtime list.
+    public event System.Action OnWeaponsChanged;
+
+    public int CurrentIndex => currentIndex;
+
+    // Read-only view of the runtime weapon list; initializes lazily on first access.
+    public IReadOnlyList<WeaponData> Weapons { get { EnsureRuntime(); return runtimeWeapons; } }
+
     // Runtime copy so weapons can be permanently removed without mutating the ScriptableObject.
     // Lazily initialized on first use so CombatSceneLoader can assign loadout.loadout before we read it.
     private List<WeaponData> runtimeWeapons;
@@ -42,5 +50,6 @@ public class PlayerLoadout : MonoBehaviour
         if (expected != null && runtimeWeapons[currentIndex] != expected) return;
         runtimeWeapons.RemoveAt(currentIndex);
         currentIndex--;
+        OnWeaponsChanged?.Invoke();
     }
 }
