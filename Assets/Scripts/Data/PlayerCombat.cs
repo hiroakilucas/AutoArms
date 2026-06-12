@@ -492,7 +492,6 @@ public class PlayerCombat : MonoBehaviour
 
     private IEnumerator ReturnToSpawn()
     {
-        yield return new WaitForSeconds(settings.slashingToJumpDelay);
         yield return animationController.PlayJumpStart(settings.jumpStartDuration);
         spawnPosition = RandomSpawnPosition();
         yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);

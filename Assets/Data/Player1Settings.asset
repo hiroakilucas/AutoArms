@@ -16,7 +16,7 @@ MonoBehaviour:
   runSpeed: 35
   slashingDuration: 0.5
   slashingToJumpDelay: 0.2
-  jumpStartDuration: 0.1
+  jumpStartDuration: 0.05
   jumpHeight: 2
   hurtDuration: 0.1
   hurtTriggerDelay: 0.25
