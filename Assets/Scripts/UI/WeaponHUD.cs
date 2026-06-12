@@ -68,9 +68,9 @@ public class WeaponHUD : MonoBehaviour
         go.transform.SetParent(_container, false);
 
         var rt = go.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(24f, 24f);
+        rt.sizeDelta = new Vector2(40f, 40f);
 
-        go.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.6f);
+        go.AddComponent<Image>().color = Color.clear;
 
         var spriteGo = new GameObject("Sprite");
         spriteGo.transform.SetParent(go.transform, false);
@@ -78,8 +78,8 @@ public class WeaponHUD : MonoBehaviour
         img.sprite = data.inHandSprite;
         img.preserveAspect = true;
         var spriteRt = spriteGo.GetComponent<RectTransform>();
-        spriteRt.anchorMin = new Vector2(0.08f, 0.08f);
-        spriteRt.anchorMax = new Vector2(0.92f, 0.92f);
+        spriteRt.anchorMin = Vector2.zero;
+        spriteRt.anchorMax = Vector2.one;
         spriteRt.offsetMin = Vector2.zero;
         spriteRt.offsetMax = Vector2.zero;
 
@@ -94,8 +94,8 @@ public class WeaponHUD : MonoBehaviour
             if (kvp.Value == null) continue;
             bool isActive = kvp.Key == active;
             kvp.Value.GetComponent<Image>().color = isActive
-                ? new Color(0.85f, 0.72f, 0.20f, 0.85f)
-                : new Color(0f, 0f, 0f, 0.60f);
+                ? new Color(0.85f, 0.72f, 0.20f, 0.55f)
+                : Color.clear;
         }
     }
 
@@ -107,13 +107,13 @@ public class WeaponHUD : MonoBehaviour
         var rt = go.AddComponent<RectTransform>();
         if (_isPlayer1)
         {
-            rt.anchorMin = new Vector2(0.02f, 0.87f);
-            rt.anchorMax = new Vector2(0.45f, 0.93f);
+            rt.anchorMin = new Vector2(0.02f, 0.855f);
+            rt.anchorMax = new Vector2(0.45f, 0.930f);
         }
         else
         {
-            rt.anchorMin = new Vector2(0.55f, 0.87f);
-            rt.anchorMax = new Vector2(0.98f, 0.93f);
+            rt.anchorMin = new Vector2(0.55f, 0.855f);
+            rt.anchorMax = new Vector2(0.98f, 0.930f);
         }
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
