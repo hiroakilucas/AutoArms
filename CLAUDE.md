@@ -80,9 +80,10 @@ PlayerCombat.AttackRoutine()
 - `AttackSequencer` — Runs the indefinite turn loop; waits for both `PlayerCombat` references before starting.
 - `CombatSceneLoader` — Agora usa coroutine (`Initialize()`): instancia Player1, inicializa health/HUD, aguarda um frame (para `PlayerCombat.Start()` rodar), então executa entrada em cena (`EntryFall`) de ambos em paralelo. Só atribui `attackSequencer.player1` após os dois pousarem.
 - `PlayerCombat` — Owns `AttackRoutine`. Manages sorting layer swaps so the attacker renders above the defender during a strike.
-- `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach.
-- `PlayerLoadout` — Tracks `currentIndex` and advances round-robin through `WeaponLoadout.weapons[]`.
+- `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach. Fires `OnWeaponChanged(WeaponData)` from `EquipData` (new weapon) and `Unequip` (null).
+- `PlayerLoadout` — Tracks `currentIndex` and advances round-robin through `WeaponLoadout.weapons[]`. Fires `OnWeaponsChanged` from `RemoveCurrentWeapon`. Exposes `IReadOnlyList<WeaponData> Weapons` (lazy-initializes `runtimeWeapons` on first access).
 - `DamagePopup` — World-space TextMeshPro floating text spawned at the defender's position. Variants: normal (yellow), crit (red "CRIT!\n{damage}"), dodge (blue "ESQUIVA!"), block (gold "BLOCK!"), miss (gray "MISS!"), disarm (orange "DISARM!"), drop (orange "DROP!").
+- `WeaponHUD` — Screen-space UI row of weapon icons (100×100px, rotated 45°, tip up) below each player's health bar. One instance per player on `CombatInitializer`. P1 icons left→right; P2 icons right→left (mirrored). Subscribes to `PlayerLoadout.OnWeaponsChanged` (rebuild all icons) and `WeaponHandler.OnWeaponChanged` (update gold highlight). Background: semi-transparent black (alpha 0.35); active weapon: gold (alpha 0.70). Thrown weapons never lose their icon (only `UnequipPermanent` triggers `OnWeaponsChanged`). Created and wired in `CombatSceneLoader.Initialize()` via `CombatHUD.CanvasTransform`.
 
 ### 04_CombatScenePVP Hierarchy
 
@@ -460,4 +461,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 52 tarefas | Concluídas: 13
-- Última atualização: 2026-06-11 (HUD de armas: ícones do loadout abaixo da barra de vida, destaque na arma ativa, ícone some ao ser removida, Thrown nunca some)
+- Última atualização: 2026-06-11 (HUD de armas: ícones 100px rotacionados 45° abaixo da barra de vida, destaque dourado na arma ativa, ícone some ao ser removida permanentemente, Thrown nunca some)
