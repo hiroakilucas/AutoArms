@@ -60,6 +60,27 @@ public class DamagePopup : MonoBehaviour
         origin               = transform.position;
     }
 
+    public static void SpawnDrop(Vector3 worldPos)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitDrop();
+    }
+
+    void InitDrop()
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = "DROP!";
+        label.fontSize       = 4f;
+        baseColor            = new Color(1f, 0.5f, 0f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void InitBlock()
     {
         label = gameObject.AddComponent<TextMeshPro>();

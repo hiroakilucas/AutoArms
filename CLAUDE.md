@@ -66,6 +66,7 @@ PlayerCombat.AttackRoutine()
 ```
 
 - `AttackSequencer` — Runs the indefinite turn loop; waits for both `PlayerCombat` references before starting.
+- `CombatSceneLoader` — Agora usa coroutine (`Initialize()`): instancia Player1, inicializa health/HUD, aguarda um frame (para `PlayerCombat.Start()` rodar), então executa entrada em cena (`EntryFall`) de ambos em paralelo. Só atribui `attackSequencer.player1` após os dois pousarem.
 - `PlayerCombat` — Owns `AttackRoutine`. Manages sorting layer swaps so the attacker renders above the defender during a strike.
 - `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach.
 - `PlayerLoadout` — Tracks `currentIndex` and advances round-robin through `WeaponLoadout.weapons[]`.
@@ -202,6 +203,12 @@ When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays 
 | outros | 0% |
 
 Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal → Desarmar**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
+
+**Drop de arma ao bloquear** — verificados independentemente após o popup de block:
+- **15%** de chance do **atacante** soltar a arma (impacto no escudo)
+- **10%** de chance do **defensor** soltar a arma/escudo (impacto forte demais)
+- Usa `DropWeapon(target, isDisarm: false)` → popup "DROP!" laranja + arma cai com pêndulo, fica no chão até fim da luta.
+
 > Future skill **Shield**: +45% block permanente.
 
 ### Throw Weapon (Jogar Arma)
@@ -276,6 +283,22 @@ Só trigga no **primeiro hit do turno** (`isCombo = false`). `HitRoutine(isCombo
 7. Objeto **não é destruído** — fica no chão pelo resto da luta.
 
 Armas caídas são rastreadas na lista estática `PlayerCombat.fallenWeapons`. `CleanupFallenWeapons()` é chamado por `AttackSequencer.OnCombatEnd` ao declarar o vencedor, destruindo todos os objetos e limpando a lista. Nenhum personagem pode pegar a arma caída — ela é puramente visual.
+
+### Entry Drop (Entrada em Cena)
+Ao carregar `04_CombatScenePVP`, ambos os personagens aparecem 12 unidades acima de sua `spawnPosition` (fora da câmera) e caem simultaneamente com gravidade (28f) antes do combate começar.
+
+**Fluxo em `CombatSceneLoader.Initialize()`:**
+1. Toda a configuração (instanciar Player1, wiring, health, HUD) ocorre normalmente.
+2. `yield return null` — garante que `PlayerCombat.Start()` rodou e `spawnPosition` foi definido.
+3. Captura posições de pouso (`p1Land`, `p2Land`) dos dois objetos.
+4. Move ambos para `landPos.y + 12f` (céu).
+5. `StartCoroutine(EntryFall)` para os dois em paralelo; aguarda via callbacks `bool`.
+6. Só após ambos pousarem: `attackSequencer.player1 = player1Combat` → desbloqueia o loop de combate.
+
+**`EntryFall(obj, landPos, onLand)`:**
+- Queda com aceleração gravitacional (`gravity = 28f`), velocityY parte de 0.
+- Ao atingir `landPos.y`: snappa posição e aplica squash de impacto (`scale X × 1.4, Y × 0.55`) interpolado de volta ao scale normal em 0.12s.
+- Animação durante a queda: Idle (já ativo por `PlayerCombat.Start()`).
 
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
@@ -366,6 +389,8 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Jogar arma: arremessar a arma no adversário
 - [x] Pegar arma: começar desarmado e pegar arma aleatória (40% chance) no início do turno com animação CatchWeapon
 - [x] Desarmar: fazer o adversário soltar a arma
+- [x] Entrada em cena: personagens caem do céu ao iniciar combate
+- [x] Drop de arma ao bloquear (atacante 15%, defensor 10%)
 - [ ] Sistema de XP e level (vitória +3 XP, derrota +1 XP)
 - [ ] Curva de XP: level × 20 XP necessário
 - [ ] Ao subir de nível: escolher atributo, skill ou arma
@@ -419,5 +444,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Validar integridade do save local com hash
 
 ### Progresso
-- Total: 49 tarefas | Concluídas: 10
-- Última atualização: 2026-06-11 (Desarmar completo: pêndulo amortecido, arma fica no chão até fim da luta, layer Default atrás de todos)
+- Total: 51 tarefas | Concluídas: 12
+- Última atualização: 2026-06-11 (Entrada em cena: queda do céu + squash; Drop ao bloquear: atacante 15%, defensor 10%)

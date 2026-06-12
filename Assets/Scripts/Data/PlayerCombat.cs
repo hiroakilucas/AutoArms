@@ -270,6 +270,12 @@ public class PlayerCombat : MonoBehaviour
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.SpawnBlock(blockPos);
+
+            if (weaponHandler.CurrentWeapon != null && Random.value < 0.15f)
+                StartCoroutine(DropWeapon(this, isDisarm: false));
+            if (defender.weaponHandler.CurrentWeapon != null && Random.value < 0.10f)
+                StartCoroutine(DropWeapon(defender, isDisarm: false));
+
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }
@@ -388,7 +394,7 @@ public class PlayerCombat : MonoBehaviour
 
     }
 
-    private IEnumerator DropWeapon(PlayerCombat target)
+    private IEnumerator DropWeapon(PlayerCombat target, bool isDisarm = true)
     {
         var data = target.weaponHandler.CurrentWeaponData;
         if (data?.inHandSprite == null) yield break;
@@ -400,7 +406,10 @@ public class PlayerCombat : MonoBehaviour
         target.weaponHandler.UnequipPermanent();
 
         Vector3 popupPos = target.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
-        DamagePopup.SpawnDisarm(popupPos);
+        if (isDisarm)
+            DamagePopup.SpawnDisarm(popupPos);
+        else
+            DamagePopup.SpawnDrop(popupPos);
 
         var fallen = new GameObject("FallenWeapon");
         fallen.transform.position   = startPos;
