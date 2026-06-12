@@ -229,7 +229,9 @@ Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal → 
 > Future skill **Shield**: +45% block permanente.
 
 ### Throw Weapon (Jogar Arma)
-Fires after `ReturnToSpawn`, only if the defender is alive and the attacker has a weapon. `ThrowChance()` by weapon type:
+Verificado **no início do `AttackRoutine`, ANTES do melee**, após o idle. Se triggar: atacante arremessa do lugar onde está (sem Run até o defensor); turno encerra sem JumpBack. Se não triggar: executa melee normal (Run → Slash → JumpBack).
+
+`ThrowChance()` por tipo de arma:
 | WeaponType | Chance |
 |---|---|
 | Thrown | 100% |
@@ -237,7 +239,7 @@ Fires after `ReturnToSpawn`, only if the defender is alive and the attacker has 
 | Fast | 60% |
 | Sword | 60% |
 | Heavy | 60% |
-| others / no weapon | 0% |
+| outros / sem arma | 0% |
 
 Flow:
 1. **Thrown** type: `Unequip()` only (stays in loadout, comes back next cycle). **All others**: `UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()` (removed from runtime loadout for this combat).
@@ -245,6 +247,7 @@ Flow:
 3. `SetTrigger("Throwing")` fires animator concurrently.
 4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Only `WeaponType.Thrown`** rotates (540°/s). All other types fly with fixed rotation.
 5. On landing: 80% hit (weapon damage + Hurt + knockback), 20% miss — defender plays `DodgeLeap` (same animation as dodge) + gray "MISS!" popup.
+6. After hit/miss: **40%** de chance de equipar arma aleatória imediatamente (`EquipRandom()`); 60% fica desarmado até o próximo turno.
 
 `PlayerLoadout.runtimeWeapons` is a `List<WeaponData>` initialized lazily on first `GetNextWeapon()` call (after `CombatSceneLoader` has assigned the loadout). `RemoveCurrentWeapon(expected)` removes the entry at `currentIndex` only if it matches `expected` (guards against index drift), then decrements `currentIndex` so the next `EquipNext()` gets the correct successor.
 `WeaponHandler.UnequipPermanent()` captures `CurrentWeaponData` before calling `Unequip()` (which clears it), then passes the reference to `RemoveCurrentWeapon(expected)` for validation.

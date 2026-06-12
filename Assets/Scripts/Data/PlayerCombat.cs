@@ -75,16 +75,22 @@ public class PlayerCombat : MonoBehaviour
         yield return null;
 
         yield return animationController.PlayIdle(settings.idleDuration);
-        yield return StrikeRoutine();
 
-        while (defender != null && !defender.IsDead && Random.value < ComboChance())
-            yield return ComboStrikeRoutine();
-
-        yield return ReturnToSpawn();
-
+        // Throw verifica ANTES do melee. Se triggar: arremessa do lugar, sem Run+JumpBack.
         if (defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
             && Random.value < ThrowChance())
+        {
             yield return ThrowRoutine();
+        }
+        else
+        {
+            yield return StrikeRoutine();
+
+            while (defender != null && !defender.IsDead && Random.value < ComboChance())
+                yield return ComboStrikeRoutine();
+
+            yield return ReturnToSpawn();
+        }
 
         RestoreDefaultLayers();
     }
@@ -399,6 +405,9 @@ public class PlayerCombat : MonoBehaviour
             yield return new WaitForSeconds(settings.hurtDuration);
         }
 
+        // 40% de chance de pegar uma arma aleatória imediatamente após o arremesso.
+        if (Random.value < 0.40f)
+            weaponHandler.EquipRandom();
     }
 
     private IEnumerator DropWeapon(PlayerCombat target, bool isDisarm = true)
