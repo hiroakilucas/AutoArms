@@ -62,13 +62,15 @@ public class WeaponHUD : MonoBehaviour
         _iconMap[data] = BuildIcon(data);
     }
 
+    private const float IconSize = 56f;
+
     private GameObject BuildIcon(WeaponData data)
     {
         var go = new GameObject(data.weaponName ?? "WeaponIcon");
         go.transform.SetParent(_container, false);
 
         var rt = go.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(40f, 40f);
+        rt.sizeDelta = new Vector2(IconSize, IconSize);
 
         go.AddComponent<Image>().color = Color.clear;
 
@@ -78,10 +80,12 @@ public class WeaponHUD : MonoBehaviour
         img.sprite = data.inHandSprite;
         img.preserveAspect = true;
         var spriteRt = spriteGo.GetComponent<RectTransform>();
-        spriteRt.anchorMin = Vector2.zero;
-        spriteRt.anchorMax = Vector2.one;
-        spriteRt.offsetMin = Vector2.zero;
-        spriteRt.offsetMax = Vector2.zero;
+        spriteRt.anchorMin = new Vector2(0.5f, 0.5f);
+        spriteRt.anchorMax = new Vector2(0.5f, 0.5f);
+        spriteRt.pivot     = new Vector2(0.5f, 0.5f);
+        spriteRt.sizeDelta = new Vector2(IconSize, IconSize);
+        spriteRt.anchoredPosition = Vector2.zero;
+        spriteGo.transform.localEulerAngles = new Vector3(0f, 0f, 45f);
 
         return go;
     }
@@ -107,12 +111,12 @@ public class WeaponHUD : MonoBehaviour
         var rt = go.AddComponent<RectTransform>();
         if (_isPlayer1)
         {
-            rt.anchorMin = new Vector2(0.02f, 0.855f);
+            rt.anchorMin = new Vector2(0.02f, 0.840f);
             rt.anchorMax = new Vector2(0.45f, 0.930f);
         }
         else
         {
-            rt.anchorMin = new Vector2(0.55f, 0.855f);
+            rt.anchorMin = new Vector2(0.55f, 0.840f);
             rt.anchorMax = new Vector2(0.98f, 0.930f);
         }
         rt.offsetMin = Vector2.zero;
