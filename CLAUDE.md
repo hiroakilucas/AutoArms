@@ -58,7 +58,7 @@ AttackSequencer
 PlayerCombat.AttackRoutine()
   ├── StrikeRoutine()          → AttackPosition() → PlayRun → HitRoutine()
   ├── ComboStrikeRoutine()     → delay → reposition if needed → HitRoutine()
-  ├── HitRoutine()             → slash trigger → dodge check → knockback+hurt+damage
+  ├── HitRoutine()             → slash trigger → dodge check → knockback+hurt+damage → disarm check
   ├── DodgeLeap()              → PlayJumpStart + JumpTo (fired on defender when dodge triggers)
   ├── AnimationController      (Idle → Run → Slash → JumpStart → Hurt)
   ├── MovementController       (MoveTo linear, JumpTo parabolic arc)
@@ -201,7 +201,7 @@ When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays 
 | Sem arma (`CurrentWeapon == null`) | 0% |
 | outros | 0% |
 
-Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
+Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal → Desarmar**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
 > Future skill **Shield**: +45% block permanente.
 
 ### Throw Weapon (Jogar Arma)
@@ -251,6 +251,31 @@ When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch)
 Throw damage uses the same base values WITHOUT StrBonus (the weapon flies, not a melee hit).
 
 > Future skill **Iron Fist**: increases unarmed damage.
+
+### Desarmar
+`DisarmChance()` baseado no tipo de arma do **atacante**:
+| WeaponType (atacante) | Chance |
+|---|---|
+| Dagger | 20% |
+| Fast | 15% |
+| Sword | 10% |
+| Heavy | 5% |
+| outros / desarmado | 0% |
+
+> Future skill **Impact**: +15% disarm permanente.
+
+Só trigga no **primeiro hit do turno** (`isCombo = false`). `HitRoutine(isCombo)` recebe o flag; `ComboStrikeRoutine` passa `isCombo: true`. Ordem: depois do dano normal — o defensor ainda toma Hurt + knockback + dano normalmente antes de perder a arma.
+
+**`DropWeapon(target)`** (coroutine no atacante):
+1. Captura `CurrentWeaponData` (sprite, scale) e posição do `CurrentWeapon` antes de chamar `UnequipPermanent()`.
+2. Chama `target.weaponHandler.UnequipPermanent()` — arma removida permanentemente do loadout.
+3. Spawna popup "DISARM!" em laranja acima do defensor.
+4. Cria `FallenWeapon` GameObject com `SpriteRenderer` na layer **Default** (sorting order 0 — sempre atrás de todos os personagens).
+5. Animação de **pêndulo amortecido** durante a queda: `θ(t) = θ₀ × e^(-γt) × cos(ωt)` com θ₀ aleatório 60°–100°, ω = 10 rad/s, γ = 0.8.
+6. Queda com gravidade (9.8f) até `groundY = target.y - 1.5f`; snappa ao chão ao parar.
+7. Objeto **não é destruído** — fica no chão pelo resto da luta.
+
+Armas caídas são rastreadas na lista estática `PlayerCombat.fallenWeapons`. `CleanupFallenWeapons()` é chamado por `AttackSequencer.OnCombatEnd` ao declarar o vencedor, destruindo todos os objetos e limpando a lista. Nenhum personagem pode pegar a arma caída — ela é puramente visual.
 
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
@@ -395,4 +420,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 49 tarefas | Concluídas: 10
-- Última atualização: 2026-06-11 (Desarmar: DisarmChance por tipo de arma, DropWeapon com gravidade, popup DISARM! laranja; só no primeiro hit do turno)
+- Última atualização: 2026-06-11 (Desarmar completo: pêndulo amortecido, arma fica no chão até fim da luta, layer Default atrás de todos)
