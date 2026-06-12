@@ -35,10 +35,22 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 |---|---|---|
 | `PlayerProfile` | `Assets/ScriptableObjects/PlayerProfiles/` | Assassin Guy, Medieval Warrior, Medieval Warrior Girl |
 | `CharacterDatabase` | `Assets/ScriptableObjects/Databases/` | Only **Assassin Guy** and **Medieval Warrior** are unlocked (selectable); Medieval Warrior Girl is hardcoded as Player2 |
-| `SelectedProfileHolder` | `Assets/ScriptableObjects/` | Cross-scene singleton — read by `CombatSceneLoader` and `MainMenuCharacterPreview` |
-| `AttackSettings` | `Assets/ScriptableObjects/` | Combat timing: idle duration, run speed, slashing/jump/hurt durations |
-| `WeaponLoadout` | `Assets/ScriptableObjects/` | Array of 10 `WeaponData` slots cycled per round |
-| `WeaponData` | `Assets/ScriptableObjects/` | Name, in-hand sprite, damage, speed modifier, `WeaponType` (Sword/Heavy/Dagger), scale |
+| `SelectedProfileHolder` | `Assets/Resources/` | Cross-scene singleton — read by `CombatSceneLoader` and `MainMenuCharacterPreview` |
+| `AttackSettings` | `Assets/Data/Player1Settings.asset`, `Assets/Data/Player2Settings.asset` | Combat timing — see current values below |
+| `WeaponLoadout` | `Assets/Data/Weapons/` | e.g. `Loadout10Armas.asset` — array of `WeaponData` slots |
+| `WeaponData` | `Assets/Data/Weapons/<type>/` | Name, in-hand sprite, damage, `WeaponType`, scale |
+
+**AttackSettings — valores atuais (Player1 = Player2 exceto onde indicado):**
+| Campo | Valor |
+|---|---|
+| `idleDuration` | 0.3s |
+| `runSpeed` | 35 |
+| `slashingDuration` | 0.5s |
+| `slashingToJumpDelay` | 0.2s (usado só em ComboStrikeRoutine) |
+| `jumpStartDuration` | 0.02s |
+| `jumpHeight` | 2 |
+| `hurtDuration` | 0.07s |
+| `knockbackDistance` | 0.5 |
 
 ## Prefabs
 
@@ -70,7 +82,7 @@ PlayerCombat.AttackRoutine()
 - `PlayerCombat` — Owns `AttackRoutine`. Manages sorting layer swaps so the attacker renders above the defender during a strike.
 - `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach.
 - `PlayerLoadout` — Tracks `currentIndex` and advances round-robin through `WeaponLoadout.weapons[]`.
-- `DamagePopup` — World-space TextMeshPro floating text spawned at the defender's position. Three variants: normal (yellow), crit (red "CRIT!\n{damage}"), dodge (blue "ESQUIVA!").
+- `DamagePopup` — World-space TextMeshPro floating text spawned at the defender's position. Variants: normal (yellow), crit (red "CRIT!\n{damage}"), dodge (blue "ESQUIVA!"), block (gold "BLOCK!"), miss (gray "MISS!"), disarm (orange "DISARM!"), drop (orange "DROP!").
 
 ### 04_CombatScenePVP Hierarchy
 
@@ -83,12 +95,14 @@ PlayerCombat.AttackRoutine()
 | `CombatInitializer` | Hosts `CombatSceneLoader` — spawns Player1 and wires both combatants at runtime |
 | `AttackSequencer` | Hosts `AttackSequencer` script — Player2 (Medieval Warrior Girl) pre-assigned, `interTurnDelay = 0.2`; Player1 starts as `None` and is filled at runtime by `CombatSceneLoader` |
 
-`CombatSceneLoader.Start()` wiring sequence:
+`CombatSceneLoader.Initialize()` wiring sequence (coroutine iniciada em `Start()`):
 1. Reads `SelectedProfileHolder.currentProfile`
 2. Instantiates Player1 prefab, assigns `AttackSettings` and `WeaponLoadout` from the profile
 3. Finds the pre-placed Player2 (`Medieval Warrior Girl`)
 4. Sets mutual `defender` / `defenderAnimationController` references on both `PlayerCombat` instances
-5. Assigns `attackSequencer.player1` — this is what unblocks `AttackSequencer` and starts the combat loop
+5. `yield return null` — garante que `PlayerCombat.Start()` rodou em ambos (necessário para `spawnPosition`)
+6. Move ambos para `spawnY + 12f`, executa `EntryFall` em paralelo, aguarda via callbacks `bool`
+7. Assigns `attackSequencer.player1` — **só após ambos pousarem**, desbloqueando o loop de combate
 
 ### Menu Character Preview
 
@@ -242,7 +256,7 @@ Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, s
 `PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
 ### Unarmed Combat
-When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `1 + StrBonus()`.
+When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `2 + StrBonus()`. Animation speed boosted to 2× via `AnimationController.SetSpeed(2f)` during the slash, reset to `1f` afterward (all exit paths including dodge/block).
 `ComboChance()` returns 10% while unarmed.
 
 ### STR Attribute
@@ -445,4 +459,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 51 tarefas | Concluídas: 12
-- Última atualização: 2026-06-11 (Entrada em cena: queda do céu + squash; Drop ao bloquear: atacante 15%, defensor 10%)
+- Última atualização: 2026-06-11 (Entrada em cena; Drop ao bloquear; runSpeed 35; hurtDuration 0.07s; jumpStartDuration 0.02s; atraso pré-salto removido do ReturnToSpawn)
