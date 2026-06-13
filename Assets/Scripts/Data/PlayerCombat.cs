@@ -81,6 +81,7 @@ public class PlayerCombat : MonoBehaviour
             && Random.value < ThrowChance())
         {
             yield return ThrowRoutine();
+            animationController.SetIdle(true); // espelha ReturnToSpawn: sai do estado Throwing antes do próximo turno
         }
         else
         {
