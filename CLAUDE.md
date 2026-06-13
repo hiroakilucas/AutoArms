@@ -558,6 +558,43 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] SSL/HTTPS em todas as chamadas de rede
 - [ ] Validar integridade do save local com hash
 
+### Fase 9 — Áudio
+#### Música
+- [ ] Música de fundo na tela principal (loop)
+- [ ] Música de fundo na tela de seleção de personagem
+- [ ] Música de combate (loop durante a luta)
+- [ ] Música de vitória (tela de resultado)
+- [ ] Música de derrota (tela de resultado)
+
+#### Efeitos Sonoros — Combate
+- [ ] Som de golpe normal (hit)
+- [ ] Som de golpe crítico (crit — mais impactante)
+- [ ] Som de esquiva (dodge/miss)
+- [ ] Som de block (escudo bloqueando)
+- [ ] Som de combo (hit adicional)
+- [ ] Som de desarmar (disarm)
+- [ ] Som de arma voando (throw)
+- [ ] Som de acerto da arma arremessada
+- [ ] Som de soco desarmado (punch)
+- [ ] Som de knockback
+- [ ] Som de morte/derrota
+- [ ] Som de barra de vida baixa (alerta)
+
+#### Efeitos Sonoros — UI
+- [ ] Som de botão (click)
+- [ ] Som de level up
+- [ ] Som de XP ganhando
+- [ ] Som de seleção de personagem
+- [ ] Som de entrada em cena (queda do céu)
+- [ ] Som de impacto no pouso (squash)
+
+#### Implementação Técnica
+- [ ] Integrar AudioManager singleton na cena
+- [ ] Separar trilha de música (Music) e efeitos (SFX) com volumes independentes
+- [ ] Adicionar controles de volume nas Settings
+- [ ] Suporte a AudioMixer do Unity para balanceamento
+- [ ] Formato recomendado: .ogg para música, .wav para SFX
+
 ### Progresso
-- Total: 52 tarefas | Concluídas: 15
+- Total: 80 tarefas | Concluídas: 15
 - Última atualização: 2026-06-11 (XP+Level: vitória +2/derrota +1 XP, curva (level+1)×(level+2), level-up com bônus de atributos, tela de resultado com barra animada e botão Continuar)
