@@ -385,6 +385,12 @@ Referência jogável: https://brute.eternaltwin.org/
 - Energia: comprar recargas para lutar mais vezes
 - Personagens: desbloquear com diamante
 
+### Código Fonte de Referência
+- LaBrute (remake open source do My Brute): https://github.com/Zenoo/labrute
+- Pasta de lógica de combate: core/src/
+- IMPORTANTE: Licença PolyForm Noncommercial — estudar lógica apenas, não copiar código
+- Quando implementar uma skill ou mecânica, consultar o repositório para entender a lógica original
+
 ## Skills Reference
 
 Referência: https://github.com/Zenoo/labrute (LaBrute open source — estudar lógica apenas, não copiar código por restrição de licença comercial)
