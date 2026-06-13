@@ -595,6 +595,18 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Suporte a AudioMixer do Unity para balanceamento
 - [ ] Formato recomendado: .ogg para música, .wav para SFX
 
+#### Fontes de Áudio Gratuitas (uso comercial permitido)
+- freesound.org — efeitos sonoros variados (verificar licença por arquivo)
+- opengameart.org — músicas e SFX para jogos (CC0 e CC-BY)
+- pixabay.com/music — músicas livres para uso comercial
+- kenney.nl/assets — pacotes de SFX prontos para jogos (CC0, sem atribuição)
+- zapsplat.com — SFX profissionais (plano gratuito disponível)
+
+#### Estilo de Áudio sugerido para o AutoArms
+- Música: medieval/fantasia com clima de arena — épico mas não pesado
+- SFX de combate: impactos sólidos, metálicos para armas, cartoon para eventos especiais (crítico, level up)
+- Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
+
 ### Progresso
 - Total: 80 tarefas | Concluídas: 15
 - Última atualização: 2026-06-11 (XP+Level: vitória +2/derrota +1 XP, curva (level+1)×(level+2), level-up com bônus de atributos, tela de resultado com barra animada e botão Continuar)
