@@ -329,6 +329,9 @@ Every hit (including combo) pushes the defender by `settings.knockbackDistance` 
 - **Spriter2UnityDX** (`Assets/Spriter2UnityDX/`) — Converts Spriter `.scml` files to Unity prefabs/animators. Character prefabs use its `EntityRenderer` and `TextureController` runtime components.
 - **TextMesh Pro** — Used throughout UI; assets in `Assets/TextMesh Pro/`.
 
+## Assets
+- **CraftPix.net** — todos os assets visuais do jogo (personagens, ícones, backgrounds, GUI) foram adquiridos com licença comercial. Licença permite: uso comercial, modificação, distribuição em jogos. Proibido: revender arquivos fonte, usar para treinar IA. Referência: https://craftpix.net/file-licenses/
+
 ## Game Vision
 
 AutoArms é inspirado no My Brute (jogo browser francês de 2008 da Motion Twin).
