@@ -385,6 +385,93 @@ Referência jogável: https://brute.eternaltwin.org/
 - Energia: comprar recargas para lutar mais vezes
 - Personagens: desbloquear com diamante
 
+## Skills Reference
+
+Referência: https://github.com/Zenoo/labrute (LaBrute open source — estudar lógica apenas, não copiar código por restrição de licença comercial)
+
+### Skills a implementar (inspiradas nas 42 skills do My Brute)
+
+#### Passivas — Combate
+| Nome | Efeito | Raridade | Peso |
+|---|---|---|---|
+| Relentless | +chance de combo | Comum | Alto |
+| Counter Attack | ataca após ser atingido | Comum | Alto |
+| Impact | desarma no golpe (+15% disarm) | Comum | Médio |
+| Pugnacious | ataca após levar hit | Comum | Médio |
+| Shield | +45% block rate | Incomum | Médio |
+| Sixth Sense | +10% esquiva | Incomum | Médio |
+| Iron Head | desarma com a cabeça | Incomum | Baixo |
+| Sabotage | remove arma do inventário ao acertar | Raro | Baixo |
+| Thief | rouba a arma do adversário | Raro | Baixo |
+| Untouchable | +esquiva alta | Raro | Muito Baixo |
+
+#### Passivas — Defesa
+| Nome | Efeito | Raridade | Peso |
+|---|---|---|---|
+| Armour | reduz % do dano recebido | Incomum | Médio |
+| Iron Skin | reduz dano fixo por hit | Incomum | Médio |
+| Lead Skeleton | reduz dano de armas Heavy | Incomum | Médio |
+| Extra-Thick Skin | reduz dano % maior | Raro | Baixo |
+| Survival | sobrevive com 1 HP uma vez por luta | Muito Raro | Muito Baixo |
+| Ballet Shoes | pula atrás no início da luta | Incomum | Baixo |
+
+#### Boosters de Stats
+| Nome | Efeito | Raridade | Peso |
+|---|---|---|---|
+| Bodybuilder | STR × 1.5 | Incomum | Médio |
+| Herculean Strength | +STR alto, -agilidade | Raro | Baixo |
+| Feline Agility | AGI × 1.5 | Incomum | Médio |
+| Lightning Bolt | SPD × 1.5 | Incomum | Médio |
+| Immortal | +HP alto, -velocidade | Raro | Baixo |
+| Determination | +STR conforme perde HP | Raro | Baixo |
+
+#### Passivas — Armas
+| Nome | Efeito | Raridade | Peso |
+|---|---|---|---|
+| Weapon Master | +dano com qualquer arma | Comum | Alto |
+| Strong Arm | +dano com armas Heavy | Incomum | Médio |
+| Master of Arms | +dano com armas Melee | Incomum | Médio |
+| Hostility | equipa a arma mais forte primeiro | Incomum | Médio |
+| Weapon Tampering | reduz dano das armas inimigas | Raro | Baixo |
+
+#### Supers (ativas — usadas X vezes por luta)
+| Nome | Usos | Efeito | Raridade | Peso |
+|---|---|---|---|---|
+| Fierce Brute | 1x | dano duplo no próximo hit (+10% crit) | Raro | Baixo |
+| Tragic Potion | 1x | recupera HP | Raro | Baixo |
+| Hammer | 1x | golpe massivo de dano | Raro | Baixo |
+| Flash Flood | 1x | dano em área | Muito Raro | Muito Baixo |
+| Net | 1x | imobiliza o adversário | Raro | Baixo |
+| Hypnosis | 1x | adversário ataca a si mesmo | Muito Raro | Muito Baixo |
+| Bomb | 1x | explosão de dano alto | Muito Raro | Muito Baixo |
+| Cry of the Damned | 1x | reduz stats do adversário | Raro | Baixo |
+| Tamer | passivo | pets mais fortes | Incomum | Médio |
+| Fists of Fury | passivo | combo de socos desarmado | Incomum | Médio |
+| First Strike | passivo | ataca primeiro independente da velocidade | Raro | Baixo |
+
+### Roadmap de implementação das Skills (Fase 2.5)
+- [ ] Relentless: +combo rate (fácil — ajustar ComboChance())
+- [ ] Counter Attack: ataca após levar hit
+- [ ] Impact: +15% disarm (fácil — já temos DisarmChance())
+- [ ] Shield: +45% block (fácil — já temos BlockChance())
+- [ ] Sixth Sense: +10% esquiva (fácil — já temos DodgeChance())
+- [ ] Fierce Brute: +10% crit (fácil — já temos CritChance())
+- [ ] Weapon Master: +dano com qualquer arma
+- [ ] Strong Arm: +dano Heavy
+- [ ] Iron Skin: reduz dano fixo por hit
+- [ ] Armour: reduz % dano recebido
+- [ ] Survival: sobrevive com 1 HP uma vez
+- [ ] Bodybuilder: STR × 1.5
+- [ ] Feline Agility: AGI × 1.5
+- [ ] Pugnacious: ataca após levar hit
+- [ ] Tragic Potion: recupera HP (Super)
+- [ ] Hammer: golpe massivo (Super)
+- [ ] Thief: rouba arma do adversário
+- [ ] Sabotage: remove arma do inventário
+- [ ] Untouchable: +esquiva alta
+- [ ] Extra-Thick Skin: reduz % dano maior
+- [ ] Survival: sobrevive com 1 HP
+
 ## Roadmap
 
 ### Como atualizar
