@@ -459,27 +459,56 @@ Referência: https://github.com/Zenoo/labrute (LaBrute open source — estudar l
 | First Strike | passivo | ataca primeiro independente da velocidade | Raro | Baixo |
 
 ### Roadmap de implementação das Skills (Fase 2.5)
-- [ ] Relentless: +combo rate (fácil — ajustar ComboChance())
-- [ ] Counter Attack: ataca após levar hit
-- [ ] Impact: +15% disarm (fácil — já temos DisarmChance())
-- [ ] Shield: +45% block (fácil — já temos BlockChance())
-- [ ] Sixth Sense: +10% esquiva (fácil — já temos DodgeChance())
-- [ ] Fierce Brute: +10% crit (fácil — já temos CritChance())
-- [ ] Weapon Master: +dano com qualquer arma
-- [ ] Strong Arm: +dano Heavy
-- [ ] Iron Skin: reduz dano fixo por hit
-- [ ] Armour: reduz % dano recebido
-- [ ] Survival: sobrevive com 1 HP uma vez
-- [ ] Bodybuilder: STR × 1.5
-- [ ] Feline Agility: AGI × 1.5
-- [ ] Pugnacious: ataca após levar hit
-- [ ] Tragic Potion: recupera HP (Super)
-- [ ] Hammer: golpe massivo (Super)
-- [ ] Thief: rouba arma do adversário
-- [ ] Sabotage: remove arma do inventário
-- [ ] Untouchable: +esquiva alta
-- [ ] Extra-Thick Skin: reduz % dano maior
-- [ ] Survival: sobrevive com 1 HP
+
+#### Passivas de Combate
+- [ ] Relentless — +chance de combo (ajustar ComboChance())
+- [ ] Counter Attack — ataca após levar hit
+- [ ] Impact — +15% disarm (ajustar DisarmChance())
+- [ ] Pugnacious — chance de contra-atacar após levar dano
+- [ ] Sixth Sense — +10% esquiva (ajustar DodgeChance())
+- [ ] Iron Head — desarma o adversário com a cabeça ao levar hit
+- [ ] Sabotage — remove permanentemente uma arma do adversário ao acertar
+- [ ] Thief — rouba a arma do adversário ao acertar
+- [ ] Untouchable — +25% esquiva (versão mais forte do Sixth Sense)
+- [ ] First Strike — ataca primeiro independente da velocidade
+
+#### Passivas de Defesa
+- [ ] Shield — +45% block rate (ajustar BlockChance())
+- [ ] Armour — reduz % do dano recebido
+- [ ] Iron Skin — reduz dano fixo por hit
+- [ ] Lead Skeleton — reduz dano de armas Heavy
+- [ ] Extra Thick Skin — reduz % dano maior que Armour
+- [ ] Survival — sobrevive com 1 HP uma vez por luta
+- [ ] Ballet Shoes — pula para trás no início da luta
+
+#### Passivas de Stats
+- [ ] Bodybuilder — STR × 1.5
+- [ ] Herculean Strength — +STR alto, -agilidade
+- [ ] Feline Agility — AGI × 1.5
+- [ ] Lightning Bolt — SPD × 1.5 (velocidade de movimento)
+- [ ] Immortal — +HP alto, -velocidade
+- [ ] Determination — +STR conforme perde HP
+
+#### Passivas de Armas
+- [ ] Weapon Master — +dano com qualquer arma
+- [ ] Strong Arm — +dano com armas Heavy
+- [ ] Master of Arms — +dano com armas Melee
+- [ ] Hostility — equipa a arma mais forte primeiro
+- [ ] Weapon Tampering — reduz dano das armas inimigas
+- [ ] Fists of Fury — combo de socos desarmado melhorado
+
+#### Supers (ativas — usadas X vezes por luta)
+- [ ] Fierce Brute — dano duplo no próximo hit (1x por luta)
+- [ ] Tragic Potion — recupera HP (1x por luta)
+- [ ] Hammer — golpe massivo de dano (1x por luta)
+- [ ] Flash Flood — dano em área (1x por luta)
+- [ ] Net — imobiliza o adversário (1x por luta)
+- [ ] Hypnosis — adversário ataca a si mesmo (1x por luta)
+- [ ] Bomb — explosão de dano alto (1x por luta)
+- [ ] Cry of the Damned — reduz stats do adversário (1x por luta)
+
+#### Relacionadas a Pets
+- [ ] Tamer — pets mais fortes e com mais HP
 
 ## Roadmap
 
