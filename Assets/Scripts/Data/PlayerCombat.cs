@@ -24,6 +24,12 @@ public class PlayerCombat : MonoBehaviour
     public int agility = 10;
     public int str = 10;
 
+    [Header("Skills — Teste")]
+    public List<SkillData> skills = new List<SkillData>();
+
+    [Header("Debug")]
+    public bool logSkills = true;
+
     public bool IsDead => GetComponent<HealthSystem>()?.IsDead ?? false;
 
     private Animator animator;
@@ -513,6 +519,36 @@ public class PlayerCombat : MonoBehaviour
         float x = isPlayer1 ? Random.Range(-7.25f, -4.79f) : Random.Range(4.79f, 7.25f);
         float y = Random.Range(-3.90f, -0.81f);
         return new Vector2(x, y);
+    }
+
+    // --- Skill queries ---
+
+    public bool HasSkill(string skillName)
+    {
+        if (skills == null) return false;
+        foreach (var s in skills)
+            if (s != null && s.skillName == skillName) return true;
+        return false;
+    }
+
+    public SkillData GetSkill(string skillName)
+    {
+        if (skills == null) return null;
+        foreach (var s in skills)
+            if (s != null && s.skillName == skillName) return s;
+        return null;
+    }
+
+    // Call inside each chance method when a skill modifies the roll.
+    // Example: LogSkillCheck("Relentless", triggered, "combo chance: 40% → 55%")
+    public void LogSkillCheck(string skillName, bool triggered, string detail = "")
+    {
+        if (!logSkills) return;
+        string status = triggered ? "triggered" : "not triggered";
+        string owner  = isPlayer1 ? "Player1" : "Player2";
+        Debug.Log(string.IsNullOrEmpty(detail)
+            ? $"[Skill] {skillName} checked on {owner} → {status}"
+            : $"[Skill] {skillName} checked on {owner} → {status} ({detail})");
     }
 
     private void SetAttackerLayers()

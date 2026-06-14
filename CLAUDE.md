@@ -324,6 +324,42 @@ Ao carregar `04_CombatScenePVP`, ambos os personagens aparecem 12 unidades acima
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
 
+## Skill System
+
+### Arquitetura
+
+| Arquivo | Tipo | Propósito |
+|---|---|---|
+| `Assets/Scripts/Data/SkillData.cs` | ScriptableObject | Dados de uma skill (nome, ícone, categoria, ativação) |
+| `Assets/Scripts/Data/SkillDatabase.cs` | ScriptableObject | Lista mestre de todas as 38 skills |
+| `Assets/ScriptableObjects/Skills/` | Assets | Um `SkillData.asset` por skill + `SkillDatabase.asset` |
+| `Assets/Data/UI/Skills/` | Sprites | `skill_<nome>.png` — ícone de cada skill |
+| `Assets/Editor/SkillAssetGenerator.cs` | Editor tool | Gera todos os assets via **Tools → AutoArms → Generate Skill Assets** |
+
+### Enums
+- `SkillCategory`: `CombatPassive`, `DefensePassive`, `StatBoost`, `WeaponPassive`, `Super`
+- `SkillActivationType`: `Passive`, `Active`
+
+### SkillHolder no PlayerCombat
+`PlayerCombat` expõe:
+- `List<SkillData> skills` — skills equipadas; visível no Inspector para testes
+- `bool logSkills` — quando `true`, loga cada check de skill no Console
+- `HasSkill(string name)` — retorna `true` se a skill está equipada
+- `GetSkill(string name)` — retorna o `SkillData` ou `null`
+- `LogSkillCheck(string name, bool triggered, string detail)` — emite log no formato `[Skill] NomeDaSkill checked on PlayerX → triggered (detalhe)`
+
+### Como adicionar uma nova skill ao jogo
+1. Abrir Unity → **Tools → AutoArms → Generate Skill Assets** (só necessário na primeira vez ou ao adicionar skills)
+2. Encontrar o `.asset` em `Assets/ScriptableObjects/Skills/`
+3. No Inspector do `PlayerCombat` de um personagem, adicionar o asset em **Skills — Teste**
+4. Implementar o efeito em `PlayerCombat.cs` no método relevante (`ComboChance`, `DodgeChance`, `DisarmChance`, etc.) usando `HasSkill("Nome")` e `LogSkillCheck(...)`
+
+### Convenção de log de skill
+```
+[Skill] Relentless checked on Player1 → triggered (combo chance: 40% → 55%)
+[Skill] Sixth Sense checked on Player2 → not triggered
+```
+
 ## Third-Party Plugins
 
 - **Spriter2UnityDX** (`Assets/Spriter2UnityDX/`) — Converts Spriter `.scml` files to Unity prefabs/animators. Character prefabs use its `EntityRenderer` and `TextureController` runtime components.
@@ -459,6 +495,8 @@ Referência: https://github.com/Zenoo/labrute (LaBrute open source — estudar l
 | First Strike | passivo | ataca primeiro independente da velocidade | Raro | Baixo |
 
 ### Roadmap de implementação das Skills (Fase 2.5)
+
+- [x] Infraestrutura base do sistema de skills (SkillData, SkillDatabase, SkillHolder no PlayerCombat, SkillAssetGenerator)
 
 #### Passivas de Combate
 - [ ] Relentless — +chance de combo (ajustar ComboChance())

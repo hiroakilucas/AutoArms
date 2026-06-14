@@ -1,0 +1,125 @@
+using UnityEngine;
+using UnityEditor;
+using System.Collections.Generic;
+
+public static class SkillAssetGenerator
+{
+    private struct SkillDef
+    {
+        public string fileName;
+        public string skillName;
+        public string description;
+        public SkillCategory category;
+        public SkillActivationType activationType;
+        public int usesPerFight;
+    }
+
+    private static readonly SkillDef[] Defs = new SkillDef[]
+    {
+        // CombatPassive
+        new SkillDef { fileName = "skill_relentless",         skillName = "Relentless",          description = "+chance de combo",                                          category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_counter_attack",     skillName = "Counter Attack",       description = "Ataca após levar hit",                                      category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_impact",             skillName = "Impact",               description = "+15% chance de desarmar no golpe",                          category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_pugnacious",         skillName = "Pugnacious",           description = "Chance de contra-atacar após levar dano",                   category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_sixth_sense",        skillName = "Sixth Sense",          description = "+10% chance de esquiva",                                    category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_iron_head",          skillName = "Iron Head",            description = "Desarma o adversário com a cabeça ao levar hit",            category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_sabotage",           skillName = "Sabotage",             description = "Remove permanentemente uma arma do adversário ao acertar",  category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_thief",              skillName = "Thief",                description = "Rouba a arma do adversário ao acertar",                     category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_untouchable",        skillName = "Untouchable",          description = "+25% chance de esquiva (versão mais forte do Sixth Sense)",  category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_first_strike",       skillName = "First Strike",         description = "Ataca primeiro independente da velocidade",                 category = SkillCategory.CombatPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+
+        // DefensePassive
+        new SkillDef { fileName = "skill_shield",             skillName = "Shield",               description = "+45% block rate",                                           category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_armour",             skillName = "Armour",               description = "Reduz % do dano recebido",                                  category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_iron_skin",          skillName = "Iron Skin",            description = "Reduz dano fixo por hit",                                   category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_lead_skeleton",      skillName = "Lead Skeleton",        description = "Reduz dano de armas Heavy",                                 category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_extra_thick_skin",   skillName = "Extra Thick Skin",     description = "Reduz % dano recebido (versão mais forte do Armour)",        category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_survival",           skillName = "Survival",             description = "Sobrevive com 1 HP uma vez por luta",                       category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_ballet_shoes",       skillName = "Ballet Shoes",         description = "Pula para trás no início da luta",                          category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+
+        // StatBoost
+        new SkillDef { fileName = "skill_bodybuilder",        skillName = "Bodybuilder",          description = "STR × 1.5",                                                 category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_herculean_strength", skillName = "Herculean Strength",   description = "+STR alto, -agilidade",                                     category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_feline_agility",     skillName = "Feline Agility",       description = "AGI × 1.5",                                                 category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_lightning_bolt",     skillName = "Lightning Bolt",       description = "SPD × 1.5 (velocidade de movimento)",                       category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_immortal",           skillName = "Immortal",             description = "+HP alto, -velocidade",                                     category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_determination",      skillName = "Determination",        description = "+STR conforme perde HP",                                    category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+
+        // WeaponPassive
+        new SkillDef { fileName = "skill_weapon_master",      skillName = "Weapon Master",        description = "+dano com qualquer arma",                                   category = SkillCategory.WeaponPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_strong_arm",         skillName = "Strong Arm",           description = "+dano com armas Heavy",                                     category = SkillCategory.WeaponPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_master_of_arms",     skillName = "Master of Arms",       description = "+dano com armas Melee",                                     category = SkillCategory.WeaponPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_hostility",          skillName = "Hostility",            description = "Equipa a arma mais forte primeiro",                         category = SkillCategory.WeaponPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_weapon_tampering",   skillName = "Weapon Tampering",     description = "Reduz dano das armas inimigas",                             category = SkillCategory.WeaponPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_fists_of_fury",      skillName = "Fists of Fury",        description = "Combo de socos desarmado melhorado",                        category = SkillCategory.WeaponPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_tamer",              skillName = "Tamer",                description = "Pets mais fortes e com mais HP",                            category = SkillCategory.WeaponPassive,  activationType = SkillActivationType.Passive, usesPerFight = 1 },
+
+        // Super (Active)
+        new SkillDef { fileName = "skill_fierce_brute",       skillName = "Fierce Brute",         description = "Dano duplo no próximo hit (1x por luta)",                   category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+        new SkillDef { fileName = "skill_tragic_potion",      skillName = "Tragic Potion",        description = "Recupera HP (1x por luta)",                                 category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+        new SkillDef { fileName = "skill_hammer",             skillName = "Hammer",               description = "Golpe massivo de dano (1x por luta)",                       category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+        new SkillDef { fileName = "skill_flash_flood",        skillName = "Flash Flood",          description = "Dano em área (1x por luta)",                                category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+        new SkillDef { fileName = "skill_net",                skillName = "Net",                  description = "Imobiliza o adversário (1x por luta)",                      category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+        new SkillDef { fileName = "skill_hypnosis",           skillName = "Hypnosis",             description = "Adversário ataca a si mesmo (1x por luta)",                 category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+        new SkillDef { fileName = "skill_bomb",               skillName = "Bomb",                 description = "Explosão de dano alto (1x por luta)",                       category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+        new SkillDef { fileName = "skill_cry_of_the_damned",  skillName = "Cry of the Damned",    description = "Reduz stats do adversário (1x por luta)",                   category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
+    };
+
+    [MenuItem("Tools/AutoArms/Generate Skill Assets")]
+    public static void GenerateAll()
+    {
+        const string folder = "Assets/ScriptableObjects/Skills";
+        if (!AssetDatabase.IsValidFolder("Assets/ScriptableObjects"))
+            AssetDatabase.CreateFolder("Assets", "ScriptableObjects");
+        if (!AssetDatabase.IsValidFolder(folder))
+            AssetDatabase.CreateFolder("Assets/ScriptableObjects", "Skills");
+
+        var allSkills = new List<SkillData>();
+
+        foreach (var def in Defs)
+        {
+            string assetPath = $"{folder}/{def.fileName}.asset";
+            var skill = AssetDatabase.LoadAssetAtPath<SkillData>(assetPath);
+            if (skill == null)
+            {
+                skill = ScriptableObject.CreateInstance<SkillData>();
+                AssetDatabase.CreateAsset(skill, assetPath);
+            }
+
+            skill.skillName      = def.skillName;
+            skill.description    = def.description;
+            skill.category       = def.category;
+            skill.activationType = def.activationType;
+            skill.usesPerFight   = def.usesPerFight;
+
+            // Ensure PNG is imported as Sprite then load it
+            string iconPath = $"Assets/Data/UI/Skills/{def.fileName}.png";
+            var importer = AssetImporter.GetAtPath(iconPath) as TextureImporter;
+            if (importer != null && importer.textureType != TextureImporterType.Sprite)
+            {
+                importer.textureType     = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                AssetDatabase.ImportAsset(iconPath, ImportAssetOptions.ForceUpdate);
+            }
+            skill.icon = AssetDatabase.LoadAssetAtPath<Sprite>(iconPath);
+
+            EditorUtility.SetDirty(skill);
+            allSkills.Add(skill);
+        }
+
+        // Create or update SkillDatabase
+        string dbPath = $"{folder}/SkillDatabase.asset";
+        var db = AssetDatabase.LoadAssetAtPath<SkillDatabase>(dbPath);
+        if (db == null)
+        {
+            db = ScriptableObject.CreateInstance<SkillDatabase>();
+            AssetDatabase.CreateAsset(db, dbPath);
+        }
+        db.skills = allSkills;
+        EditorUtility.SetDirty(db);
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log($"[SkillAssetGenerator] {allSkills.Count} skill assets + SkillDatabase criados em {folder}");
+    }
+}
