@@ -432,67 +432,121 @@ Referência jogável: https://brute.eternaltwin.org/
 
 ## Skills Reference
 
-Referência: https://github.com/Zenoo/labrute (LaBrute open source — estudar lógica apenas, não copiar código por restrição de licença comercial)
+Referência: https://brute.eternaltwin.org (LaBrute open source — estudar lógica apenas)
+Lista completa das 53 skills originais do My Brute com efeitos, stats e raridade.
 
-### Skills a implementar (inspiradas nas 42 skills do My Brute)
-
-#### Passivas — Combate
-| Nome | Efeito | Raridade | Peso |
+### Passivas de Stats
+| Nome | Efeito | Stats | Odds |
 |---|---|---|---|
-| Relentless | +chance de combo | Comum | Alto |
-| Counter Attack | ataca após ser atingido | Comum | Alto |
-| Impact | desarma no golpe (+15% disarm) | Comum | Médio |
-| Pugnacious | ataca após levar hit | Comum | Médio |
-| Shield | +45% block rate | Incomum | Médio |
-| Sixth Sense | +10% esquiva | Incomum | Médio |
-| Iron Head | desarma com a cabeça | Incomum | Baixo |
-| Sabotage | remove arma do inventário ao acertar | Raro | Baixo |
-| Thief | rouba a arma do adversário | Raro | Baixo |
-| Untouchable | +esquiva alta | Raro | Muito Baixo |
+| Herculean Strength | +STR, deve derrotar oponente para mover montanhas | +3 STR, +50% Strength | 5.76% |
+| Feline Agility | +AGI, sempre pode derrubar oponente | +3 AGI, +50% Agility | 5.76% |
+| Lightning Bolt | +SPD, mais rápido que sombra | +3 Speed, +50% Speed | 5.76% |
+| Vitality | +HP, luta por mais tempo na arena | +18 HP, +50% HP | 5.76% |
+| Immortality | +HP massivo, dificulta ser morto | +250 HP, +200 Strength, -25% Agility, +150 Speed, -50% Critical damage | 0.01% |
+| Reconnaissance | Analisa fraquezas do oponente antes de atacar | +50% Size, +100% HP, +40 Strength, -100% Reversal, -100% Agility, -100% Speed, +100% Evasion, -200 Initiative | 0.10% |
+| Deity | Poder ilimitado, capacidade de salto limitada | +50% Size, +100% HP, +100 Strength, +40 Reversal, -100% Agility, -100% Speed, +100% Evasion, -200 Initiative | 0.19% |
+| Bodybuilder | Bíceps enormes, usa armas heavy | +20% Hit speed (Weapons: heavy) | 0.48% |
+| Resistant | Oponente precisa de 5 golpes para derrubar | Opponent blows can only decrease your combat bar by 25% | 0.29% |
 
-#### Passivas — Defesa
-| Nome | Efeito | Raridade | Peso |
+### Passivas de Combate
+| Nome | Efeito | Stats | Odds |
 |---|---|---|---|
-| Armour | reduz % do dano recebido | Incomum | Médio |
-| Iron Skin | reduz dano fixo por hit | Incomum | Médio |
-| Lead Skeleton | reduz dano de armas Heavy | Incomum | Médio |
-| Extra-Thick Skin | reduz dano % maior | Raro | Baixo |
-| Survival | sobrevive com 1 HP uma vez por luta | Muito Raro | Muito Baixo |
-| Ballet Shoes | pula atrás no início da luta | Incomum | Baixo |
+| Weapons Master | +dano com armas afiadas, spy não pode trocar | +50% Damage (Weapons: sharp) | 0.96% |
+| Martial Arts | Pode andar onde quiser, quase nunca derruba | +0% Damage (Weapons: None) | 0.96% |
+| Sixth Sense | Vigilância aguçada, oponente não sabe o que vai acertar | +10% Counter None | 1.92% |
+| Hostility | Muito educado, retribui favores | +30% Reversal | 0.96% |
+| Fists of Fury | Arranhar, morder, bater — escudo para parar os golpes | +20% Combo | 0.96% |
+| Shock | Ataque surpreende o oponente, ele derruba a arma | +40% Disarm | 0.38% |
+| Relentless | Sempre acerta, ninguém pode parar | +20% Accuracy | 0.48% |
+| First Strike | Oponentes entram lentamente, você ataca primeiro | +200 Initiative | 0.77% |
+| Counter Attack | Contra-ataca imediatamente após bloquear | +10% Block, +20% Reversal after blocking | 0.96% |
+| Iron Head | Oponente danificado pela própria cabeça a cada ataque | +40% Chance to block weapon com a cabeça | 0.38% |
+| Thief | Rouba arma do oponente e usa contra ele | Action x2: Brute picks up opponent's weapon | 0.24% |
+| Piledriver | Salta sobre oponente causando dano pesado | Action x1: inflicts heavy damage (Opponent: -20% speed) | 0.10% |
+| Repulse | Deflete como herói de filme, joga armas longe | +30% Deflect, +20% Critical chance | 0.96% |
+| Sticky Hands | Arma comprometida, difícil ser desarmado | +50% Weapon grip | 0.48% |
+| Chaining | Combo para você — 3 golpes consecutivos atordoam | Every 3rd consecutive melee hit will stun opponent | 0.48% |
+| Haste | Move rápido como ninja | Action x1: rush opponent dealing damage scaling with speed | 0.48% |
+| Mimic | Aprende instantaneamente skill do oponente | You copy an opponent's used skill | 0.48% |
+| Fast Metabolism | Células regeneram na velocidade da luz | +1% Regeneration, -50% Hit speed, +1% Critical chance. At 50% HP regenerates up to 10 times 5% HP | 0.48% |
 
-#### Boosters de Stats
-| Nome | Efeito | Raridade | Peso |
+### Passivas de Defesa
+| Nome | Efeito | Stats | Odds |
 |---|---|---|---|
-| Bodybuilder | STR × 1.5 | Incomum | Médio |
-| Herculean Strength | +STR alto, -agilidade | Raro | Baixo |
-| Feline Agility | AGI × 1.5 | Incomum | Médio |
-| Lightning Bolt | SPD × 1.5 | Incomum | Médio |
-| Immortal | +HP alto, -velocidade | Raro | Baixo |
-| Determination | +STR conforme perde HP | Raro | Baixo |
+| Shield | Escudo para parar golpes | +45% Block, -25% Damage | 0.96% |
+| Armor | Casaco de armadura, reduz dano | +25% Armor, +15% Speed | 0.38% |
+| Toughened Skin | Pele mais grossa, muito mais resistente | +10% Armor | 2.88% |
+| Untouchable | Agora pode evitar ataques facilmente | +30% Evasion | 0.10% |
+| Sabotage | Vandaliza armas do oponente, destrói uma por golpe | +50% Chance to destroy a weapon each time you land a blow | 0.29% |
+| Lead Skeleton | Reduz dano de armas contundentes | -15% Opponent damage (Weapons: blunt), -15% Armor | 0.38% |
+| Ballet Shoes | Primeiro golpe de cada luta automaticamente evitado | First blow of each fight will be automatically avoided | 0.38% |
+| Determination | Nada pode parar — se golpe não machucar, ataca novamente | -10% chance of Brute launching another attack | 0.38% |
+| Survival | Anos de luta, +1 vida extra | +20% Evasion at 1HP. First blow that would kill you leaves you with 1HP instead | 0.38% |
+| Bandage | Curativo para machucados | 0% Armor. You can fight twice more each day | 0.29% |
 
-#### Passivas — Armas
-| Nome | Efeito | Raridade | Peso |
+### Passivas de Armas
+| Nome | Efeito | Stats | Odds |
 |---|---|---|---|
-| Weapon Master | +dano com qualquer arma | Comum | Alto |
-| Strong Arm | +dano com armas Heavy | Incomum | Médio |
-| Master of Arms | +dano com armas Melee | Incomum | Médio |
-| Hostility | equipa a arma mais forte primeiro | Incomum | Médio |
-| Weapon Tampering | reduz dano das armas inimigas | Raro | Baixo |
+| Strong Arm | Braço forte | — | — |
+| Master of Arms | Mestre das armas melee | — | — |
+| Saboteur | Armas de espuma, fake weapons king | Destroy one of opponent's weapon (opponent initiative -100%, -20% weapon damage when used) | 0.29% |
+| Spy | Troca versão degradada das suas armas | Swap a slightly damaged version of some of your weapons with some of opponent's weapons (-20% weapon damage) | 0.29% |
+| Hideaway | Prefere distância, joga arma na cara | +25% Block against throws. Weapons do not disappear after throwing | 0.48% |
+| Backup | Chama brute mais fraco para ajudar | Brute calls on a weaker ally to assist them in combat (stays for 2.8 normal turns) | 0.48% |
 
-#### Supers (ativas — usadas X vezes por luta)
-| Nome | Usos | Efeito | Raridade | Peso |
-|---|---|---|---|---|
-| Fierce Brute | 1x | dano duplo no próximo hit (+10% crit) | Raro | Baixo |
-| Tragic Potion | 1x | recupera HP | Raro | Baixo |
-| Hammer | 1x | golpe massivo de dano | Raro | Baixo |
-| Flash Flood | 1x | dano em área | Muito Raro | Muito Baixo |
-| Net | 1x | imobiliza o adversário | Raro | Baixo |
-| Hypnosis | 1x | adversário ataca a si mesmo | Muito Raro | Muito Baixo |
-| Bomb | 1x | explosão de dano alto | Muito Raro | Muito Baixo |
-| Cry of the Damned | 1x | reduz stats do adversário | Raro | Baixo |
-| Tamer | passivo | pets mais fortes | Incomum | Médio |
-| Fists of Fury | passivo | combo de socos desarmado | Incomum | Médio |
-| First Strike | passivo | ataca primeiro independente da velocidade | Raro | Baixo |
+### Supers (ativas)
+| Nome | Efeito | Uso | Odds |
+|---|---|---|---|
+| Fierce Brute | Dano duplo, +10% crit, +1 uso a cada 30 STR | Action x1: blows will cause double damage. +1 more use every 30 STR | 1.92% |
+| Tragic Potion | Recupera 25-50% HP, cura Chef poison | Action x1: regains between 25 and 50% HP | 0.77% |
+| Net | Para o alvo até próximo ataque | Action x1: Net stops the target from evading its next attack | 1.54% |
+| Bomb | Dano 15-25 para todos os oponentes | Action x2: between 15 and 25 damage including all opponents | 0.58% |
+| Piledriver | Salta causando dano pesado | Action x1: heavy damage (Opponent: -20% speed) | 0.10% |
+| Cry of the Damned | Repele animais/pets, atordoa (50% chance) | Action x2: repels opponent's animals or wakes from stun (50% chance) | 0.38% |
+| Hypnosis | Controla animais/pets, poupa deles | Action x1: takes control of opponent's animals or convinces them to spare them (90% chance) | 0.05% |
+| Flash Flood | Dano instantâneo com 3 armas | Action x3: instantly deals damage to opponents with 3 weapons | 0.05% |
+| Tamer | Recicla corpos na arena, recupera HP | Action x4: regains between 20 and 50% health depending on quality of meat | 0.38% |
+| Chef | Oponentes sofrem 1.5x dano no final de cada ação | Your opponents will suffer 1.5x damage at end of each of their actions | 0.10% |
+| Monk | Visualiza hits antes de acontecer | +40% Counter, -100% Initiative, -100% Hit speed | 0.48% |
+| Vampirism | Rouba 25% HP perdido, cura até 2x | Deals 25% of your missing health as damage and heals you for up to twice that amount | 0.48% |
+| Treat | Cura pet para 50% HP, imune ao próximo ataque | Heal one of their pets for 50% of their health, make them immune to next attack and force them to attack | 1.92% |
+
+### Skills faltando mapear (29 ainda sem ícone)
+Precisam de ícone em Assets/Data/UI/Skills/:
+- skill_vitality.png
+- skill_immortality.png
+- skill_reconnaissance.png
+- skill_deity.png
+- skill_martial_arts.png
+- skill_shock.png
+- skill_resistant.png
+- skill_toughened_skin.png
+- skill_sabotage.png
+- skill_lead_skeleton.png
+- skill_determination.png
+- skill_bandage.png
+- skill_strong_arm.png
+- skill_master_of_arms.png
+- skill_saboteur.png
+- skill_spy.png
+- skill_hideaway.png
+- skill_backup.png
+- skill_piledriver.png
+- skill_chef.png
+- skill_monk.png
+- skill_vampirism.png
+- skill_treat.png
+- skill_chaining.png
+- skill_haste.png
+- skill_mimic.png
+- skill_fast_metabolism.png
+- skill_repulse.png
+- skill_sticky_hands.png
+
+### Assets de Skills
+- Ícones mapeados: 38 em Assets/Data/UI/Skills/ com prefixo numérico (01_ a 38_)
+- Padrão de nome: skill_<nome>.png
+- Skills sem ícone ainda: 29 listadas acima
 
 ### Roadmap de implementação das Skills (Fase 2.5)
 
