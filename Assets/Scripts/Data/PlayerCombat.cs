@@ -23,6 +23,20 @@ public class PlayerCombat : MonoBehaviour
     [Header("Attributes")]
     public int agility = 10;
     public int str = 10;
+    public int speed = 10;
+    public float armor = 0f;
+    public float evasion = 0f;
+    public float accuracy = 0f;
+    public int initiative = 0;
+    public float reversal = 0f;
+    public float counter = 0f;
+    public float criticalChance = 0f;
+    public float hitSpeed = 1f;
+    public float runSpeedMultiplier = 1f;
+    public float comboChanceBonus = 0f;
+
+    [HideInInspector] public bool leadSkeleton   = false;
+    [HideInInspector] public bool firstHitAvoided = false;
 
     [Header("Skills — Teste")]
     public List<SkillData> skills = new List<SkillData>();
@@ -31,6 +45,8 @@ public class PlayerCombat : MonoBehaviour
     public bool logSkills = true;
 
     public bool IsDead => GetComponent<HealthSystem>()?.IsDead ?? false;
+
+    private float RuntimeRunSpeed => settings != null ? settings.runSpeed * runSpeedMultiplier : 35f;
 
     private Animator animator;
     private List<SpriteRenderer> bodyRenderers;
@@ -118,8 +134,7 @@ public class PlayerCombat : MonoBehaviour
 
     private float ComboChance()
     {
-        if (weaponHandler.CurrentWeapon == null) return 0.10f;
-        return weaponHandler.currentType switch
+        float base_ = weaponHandler.CurrentWeapon == null ? 0.10f : weaponHandler.currentType switch
         {
             WeaponType.Fast   => 0.40f,
             WeaponType.Dagger => 0.35f,
@@ -127,30 +142,33 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Heavy  => 0.10f,
             _                 => 0.25f
         };
+        return base_ + comboChanceBonus;
     }
 
-    // Fierce Brute (skill futura): adiciona +0.10f a este valor permanentemente.
-    private float CritChance() => weaponHandler.currentType switch
+    // criticalChance: base do profile + bônus de skills (ex: Fierce Brute +0.10f).
+    private float CritChance() => (weaponHandler.currentType switch
     {
         WeaponType.Dagger => 0.08f,
         WeaponType.Sword  => 0.05f,
         WeaponType.Heavy  => 0.03f,
         _                 => 0.05f
-    };
+    }) + criticalChance;
 
-    // Shield (skill futura): adiciona +0.45f a este valor permanentemente.
+    // counter: base por arma do defensor + bônus de skills (Shield +0.45f, Counter Attack +0.10f, Monk +0.40f).
     private float BlockChance()
     {
-        if (defender == null || defender.weaponHandler.CurrentWeapon == null) return 0f;
-        return defender.weaponHandler.currentType switch
-        {
-            WeaponType.Block  => 0.50f,
-            WeaponType.Slow   => 0.05f,
-            WeaponType.Dagger => 0.15f,
-            WeaponType.Sword  => 0.15f,
-            WeaponType.Heavy  => 0.15f,
-            _                 => 0f
-        };
+        if (defender == null) return 0f;
+        float weaponBonus = defender.weaponHandler.CurrentWeapon == null ? 0f :
+            defender.weaponHandler.currentType switch
+            {
+                WeaponType.Block  => 0.50f,
+                WeaponType.Slow   => 0.05f,
+                WeaponType.Dagger => 0.15f,
+                WeaponType.Sword  => 0.15f,
+                WeaponType.Heavy  => 0.15f,
+                _                 => 0f
+            };
+        return weaponBonus + defender.counter;
     }
 
     // Impact (skill futura): adiciona +0.15f a este valor permanentemente.
@@ -167,7 +185,8 @@ public class PlayerCombat : MonoBehaviour
         };
     }
 
-    // Sixth Sense (skill futura): adiciona +0.10f a este valor permanentemente.
+    // evasion: base por tipo de arma do defensor + bônus de agilidade + evasion do defensor.
+    // Skills: Sixth Sense +0.10f, Untouchable +0.30f, Ballet Shoes +0.10f.
     private float DodgeChance()
     {
         if (defender == null) return 0f;
@@ -180,7 +199,7 @@ public class PlayerCombat : MonoBehaviour
             _                 => 0.10f
         };
         float agilityBonus = Mathf.Max(0, defender.agility - 10) * 0.01f;
-        return baseChance + agilityBonus;
+        return baseChance + agilityBonus + defender.evasion;
     }
 
     // Iron Fist (skill futura): aumenta dano desarmado.
@@ -233,7 +252,7 @@ public class PlayerCombat : MonoBehaviour
 
     private IEnumerator StrikeRoutine()
     {
-        yield return animationController.PlayRun(AttackPosition(), settings.runSpeed, movement);
+        yield return animationController.PlayRun(AttackPosition(), RuntimeRunSpeed, movement);
         yield return HitRoutine();
     }
 
@@ -243,7 +262,7 @@ public class PlayerCombat : MonoBehaviour
         yield return new WaitForSeconds(settings.slashingToJumpDelay);
         Vector2 attackPos = AttackPosition();
         if (Vector2.Distance(transform.position, attackPos) > 0.3f)
-            yield return animationController.PlayRun(attackPos, settings.runSpeed, movement);
+            yield return animationController.PlayRun(attackPos, RuntimeRunSpeed, movement);
         yield return HitRoutine(isCombo: true);
     }
 
@@ -258,8 +277,30 @@ public class PlayerCombat : MonoBehaviour
             _                 => "Slashing"
         };
 
-        bool isUnarmed = weaponHandler.CurrentWeapon == null;
-        if (isUnarmed) animationController.SetSpeed(2f);
+        // Ballet Shoes: primeiro golpe da luta automaticamente esquivado
+        if (defender != null && defender.firstHitAvoided)
+        {
+            defender.firstHitAvoided = false;
+            defender.LogSkillCheck("Ballet Shoes", true, "first hit of fight automatically avoided");
+            Vector2 balletDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
+            defender.StartCoroutine(defender.DodgeLeap(balletDir, settings.knockbackDistance));
+            Vector3 balletPos = defender.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
+            DamagePopup.SpawnDodge(balletPos);
+            yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
+            yield break;
+        }
+
+        // Monk: guarda em vez de atacar (hitSpeed = 0)
+        if (hitSpeed <= 0f)
+        {
+            LogSkillCheck("Monk", true, "guarding instead of attacking (hitSpeed = 0)");
+            yield return new WaitForSeconds(settings.slashingDuration);
+            yield break;
+        }
+
+        bool  isUnarmed  = weaponHandler.CurrentWeapon == null;
+        float slashSpeed = isUnarmed ? 2f : hitSpeed;
+        if (slashSpeed != 1f) animationController.SetSpeed(slashSpeed);
 
         animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
@@ -273,7 +314,7 @@ public class PlayerCombat : MonoBehaviour
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.SpawnDodge(dodgePos);
-            if (isUnarmed) animationController.SetSpeed(1f);
+            if (slashSpeed != 1f) animationController.SetSpeed(1f);
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }
@@ -294,7 +335,7 @@ public class PlayerCombat : MonoBehaviour
             if (defender.weaponHandler.CurrentWeapon != null && Random.value < 0.10f)
                 StartCoroutine(DropWeapon(defender, isDisarm: false));
 
-            if (isUnarmed) animationController.SetSpeed(1f);
+            if (slashSpeed != 1f) animationController.SetSpeed(1f);
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }
@@ -311,6 +352,22 @@ public class PlayerCombat : MonoBehaviour
         bool isCrit      = Random.value < CritChance();
         int  baseDamage  = CalcDamage();
         int  finalDamage = isCrit ? baseDamage * 2 : baseDamage;
+
+        // Lead Skeleton: -15% dano de armas Heavy
+        if (defender != null && defender.leadSkeleton && weaponHandler.currentType == WeaponType.Heavy)
+        {
+            int beforeLS = finalDamage;
+            finalDamage  = Mathf.Max(1, Mathf.RoundToInt(finalDamage * 0.85f));
+            defender.LogSkillCheck("Lead Skeleton", true, $"heavy damage {beforeLS} → {finalDamage}");
+        }
+
+        // Armor: reduz % do dano recebido
+        if (defender != null && defender.armor > 0f)
+        {
+            int beforeArmor = finalDamage;
+            finalDamage     = Mathf.Max(1, Mathf.RoundToInt(finalDamage * (1f - defender.armor)));
+            Debug.Log($"[Armor] {defender.name} armor {defender.armor:P0}: damage {beforeArmor} → {finalDamage}");
+        }
 
         defender?.GetComponent<HealthSystem>()?.TakeDamage(finalDamage);
 
@@ -329,7 +386,7 @@ public class PlayerCombat : MonoBehaviour
             StartCoroutine(DropWeapon(defender));
         }
 
-        if (isUnarmed) animationController.SetSpeed(1f);
+        if (slashSpeed != 1f) animationController.SetSpeed(1f);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
     }
 
@@ -510,7 +567,7 @@ public class PlayerCombat : MonoBehaviour
     {
         yield return animationController.PlayJumpStart(settings.jumpStartDuration);
         spawnPosition = RandomSpawnPosition();
-        yield return movement.JumpTo(spawnPosition, settings.runSpeed, settings.jumpHeight);
+        yield return movement.JumpTo(spawnPosition, RuntimeRunSpeed, settings.jumpHeight);
         animationController.SetIdle(true);
     }
 

@@ -35,6 +35,15 @@ public class PlayerProfile : ScriptableObject
     [Header("Atributos")]
     public int str = 10;
     public int agility = 10;
+    public int speed = 10;
+    public float armor = 0f;
+    public float evasion = 0f;
+    public float accuracy = 0f;
+    public int initiative = 0;
+    public float reversal = 0f;
+    public float counter = 0f;
+    public float criticalChance = 0f;
+    public float hitSpeed = 1f;
 
     [Header("Progresso")]
     [Tooltip("N�vel atual do personagem")]

@@ -54,18 +54,28 @@ public class CombatSceneLoader : MonoBehaviour
         var handler = player1Obj.GetComponent<WeaponHandler>();
         if (handler != null) handler.loadout = loadout;
 
-        player1Combat.settings  = profile.attackSettings;
-        player1Combat.isPlayer1 = true;
-        player1Combat.str       = profile.str;
-        player1Combat.agility   = profile.agility;
-        player1Combat.defender  = player2Combat;
+        player1Combat.settings       = profile.attackSettings;
+        player1Combat.isPlayer1      = true;
+        player1Combat.str            = profile.str;
+        player1Combat.agility        = profile.agility;
+        player1Combat.speed          = profile.speed;
+        player1Combat.armor          = profile.armor;
+        player1Combat.evasion        = profile.evasion;
+        player1Combat.accuracy       = profile.accuracy;
+        player1Combat.initiative     = profile.initiative;
+        player1Combat.reversal       = profile.reversal;
+        player1Combat.counter        = profile.counter;
+        player1Combat.criticalChance = profile.criticalChance;
+        player1Combat.hitSpeed       = profile.hitSpeed;
+        player1Combat.defender       = player2Combat;
         player1Combat.defenderAnimationController = player2Anim;
 
         player2Combat.defender  = player1Combat;
         player2Combat.defenderAnimationController = player1Anim;
 
+        int p1MaxHealth = ApplySkillStats(player1Combat, profile.maxHealth);
         var health1 = player1Obj.AddComponent<HealthSystem>();
-        health1.Initialize(profile.maxHealth);
+        health1.Initialize(p1MaxHealth);
 
         var health2 = player2Object.GetComponent<HealthSystem>() ?? player2Object.AddComponent<HealthSystem>();
         health2.Initialize(player2MaxHealth);
@@ -103,6 +113,112 @@ public class CombatSceneLoader : MonoBehaviour
 
         attackSequencer.player1        = player1Combat;
         attackSequencer.player1Profile = profile;
+    }
+
+    private static int ApplySkillStats(PlayerCombat combat, int baseMaxHealth)
+    {
+        int hp = baseMaxHealth;
+
+        if (combat.HasSkill("Vitality"))
+        {
+            hp += 50;
+            combat.LogSkillCheck("Vitality", true, $"maxHealth {baseMaxHealth} → {hp}");
+        }
+
+        if (combat.HasSkill("Herculean Strength"))
+        {
+            int ps = combat.str; int pa = combat.agility;
+            combat.str     += 15;
+            combat.agility -= 4;
+            combat.LogSkillCheck("Herculean Strength", true, $"str {ps}→{combat.str}, agi {pa}→{combat.agility}");
+        }
+
+        if (combat.HasSkill("Feline Agility"))
+        {
+            int prev = combat.agility;
+            combat.agility = Mathf.RoundToInt(combat.agility * 1.5f);
+            combat.LogSkillCheck("Feline Agility", true, $"agility {prev} → {combat.agility}");
+        }
+
+        if (combat.HasSkill("Lightning Bolt"))
+        {
+            combat.runSpeedMultiplier *= 1.5f;
+            combat.LogSkillCheck("Lightning Bolt", true, $"runSpeedMultiplier × 1.5 = {combat.runSpeedMultiplier:F2}");
+        }
+
+        if (combat.HasSkill("Immortal"))
+        {
+            int prev = hp;
+            hp += 100;
+            combat.runSpeedMultiplier *= 0.5f;
+            combat.LogSkillCheck("Immortal", true, $"maxHealth {prev}→{hp}, speed ×0.5");
+        }
+
+        if (combat.HasSkill("Armour"))
+        {
+            combat.armor += 0.30f;
+            combat.LogSkillCheck("Armour", true, $"armor → {combat.armor:P0}");
+        }
+
+        if (combat.HasSkill("Extra Thick Skin"))
+        {
+            combat.armor += 0.50f;
+            combat.LogSkillCheck("Extra Thick Skin", true, $"armor → {combat.armor:P0}");
+        }
+
+        if (combat.HasSkill("Untouchable"))
+        {
+            combat.evasion += 0.25f;
+            combat.LogSkillCheck("Untouchable", true, $"evasion → {combat.evasion:P0}");
+        }
+
+        if (combat.HasSkill("Bodybuilder"))
+        {
+            int prev = combat.str;
+            combat.str = Mathf.RoundToInt(combat.str * 1.5f);
+            combat.LogSkillCheck("Bodybuilder", true, $"str {prev} → {combat.str}");
+        }
+
+        if (combat.HasSkill("Relentless"))
+        {
+            combat.comboChanceBonus += 0.15f;
+            combat.LogSkillCheck("Relentless", true, $"comboChanceBonus → {combat.comboChanceBonus:P0}");
+        }
+
+        if (combat.HasSkill("Lead Skeleton"))
+        {
+            combat.leadSkeleton = true;
+            combat.LogSkillCheck("Lead Skeleton", true, "heavy damage reduced by 15%");
+        }
+
+        if (combat.HasSkill("Ballet Shoes"))
+        {
+            combat.evasion        += 0.10f;
+            combat.firstHitAvoided = true;
+            combat.LogSkillCheck("Ballet Shoes", true, $"evasion +10% → {combat.evasion:P0}, first hit auto-avoided");
+        }
+
+        if (combat.HasSkill("First Strike"))
+        {
+            combat.initiative += 200;
+            combat.LogSkillCheck("First Strike", true, $"initiative → {combat.initiative}");
+        }
+
+        if (combat.HasSkill("Counter Attack"))
+        {
+            combat.counter += 0.40f;
+            combat.LogSkillCheck("Counter Attack", true, $"counter → {combat.counter:P0}");
+        }
+
+        if (combat.HasSkill("Monk"))
+        {
+            combat.counter    += 0.40f;
+            combat.initiative -= 200;
+            combat.hitSpeed    = 0f;
+            combat.LogSkillCheck("Monk", true, $"counter +40%, initiative −200, hitSpeed = 0");
+        }
+
+        return hp;
     }
 
     private IEnumerator EntryFall(GameObject obj, Vector3 landPos, Action onLand)

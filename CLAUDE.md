@@ -360,6 +360,58 @@ Every hit (including combo) pushes the defender by `settings.knockbackDistance` 
 [Skill] Sixth Sense checked on Player2 → not triggered
 ```
 
+## Stats System
+
+Todos os atributos são definidos em `PlayerProfile` (ScriptableObject) e copiados para `PlayerCombat` (runtime) por `CombatSceneLoader.Initialize()` antes do combate.
+
+### Campos e defaults
+
+| Campo | Tipo | Default | Onde é usado |
+|---|---|---|---|
+| `str` | int | 10 | `StrBonus()`, `CalcDamage()` |
+| `agility` | int | 10 | `DodgeChance()` (+1% por ponto acima de 10) |
+| `speed` | int | 10 | future: deslocamento no mapa |
+| `armor` | float | 0 | `HitRoutine`: `finalDamage = Max(1, RoundToInt(damage × (1 − armor)))` |
+| `evasion` | float | 0 | `DodgeChance()`: adicionado à chance base |
+| `accuracy` | float | 0 | future: reduz chance de esquiva do oponente |
+| `initiative` | int | 0 | `AttackSequencer.StartWhenReady`: quem tem mais initiative ataca primeiro |
+| `reversal` | float | 0 | future: chance de reverter a iniciativa |
+| `counter` | float | 0 | `BlockChance()`: adicionado à chance base do defensor |
+| `criticalChance` | float | 0 | `CritChance()`: adicionado à chance base do atacante |
+| `hitSpeed` | float | 1 | `HitRoutine`: velocidade da animação de slash (`slashSpeed = isUnarmed ? 2f : hitSpeed`) |
+| `comboChanceBonus` | float | 0 | `ComboChance()`: adicionado à chance base |
+| `runSpeedMultiplier` | float | 1 | `RuntimeRunSpeed = settings.runSpeed × runSpeedMultiplier` |
+
+### Campos de estado (runtime, não persistidos no perfil)
+
+| Campo | Tipo | Propósito |
+|---|---|---|
+| `leadSkeleton` | bool | Se `true`, reduz 15% do dano de armas Heavy recebidas |
+| `firstHitAvoided` | bool | Se `true`, o primeiro golpe da luta é automaticamente esquivado (Ballet Shoes) |
+
+### Skills que modificam stats (aplicadas em `CombatSceneLoader.ApplySkillStats`)
+
+| Skill | Modificações |
+|---|---|
+| Vitality | `maxHealth += 50` |
+| Herculean Strength | `str += 15`, `agility -= 4` |
+| Feline Agility | `agility = RoundToInt(agility × 1.5)` |
+| Lightning Bolt | `runSpeedMultiplier × 1.5` |
+| Immortal | `maxHealth += 100`, `runSpeedMultiplier × 0.5` |
+| Armour | `armor += 0.30` |
+| Extra Thick Skin | `armor += 0.50` |
+| Untouchable | `evasion += 0.25` |
+| Bodybuilder | `str = RoundToInt(str × 1.5)` |
+| Relentless | `comboChanceBonus += 0.15` |
+| Lead Skeleton | `leadSkeleton = true` |
+| Ballet Shoes | `evasion += 0.10`, `firstHitAvoided = true` |
+| First Strike | `initiative += 200` |
+| Counter Attack | `counter += 0.40` |
+| Monk | `counter += 0.40`, `initiative -= 200`, `hitSpeed = 0` |
+
+> `accuracy` e `reversal` ainda não têm mecânica implementada — campos reservados para futuras skills.
+> `hitSpeed = 0` (Monk): `HitRoutine` sai cedo — personagem guarda em vez de atacar.
+
 ## Third-Party Plugins
 
 - **Spriter2UnityDX** (`Assets/Spriter2UnityDX/`) — Converts Spriter `.scml` files to Unity prefabs/animators. Character prefabs use its `EntityRenderer` and `TextureController` runtime components.
@@ -553,32 +605,32 @@ Precisam de ícone em Assets/Data/UI/Skills/:
 - [x] Infraestrutura base do sistema de skills (SkillData, SkillDatabase, SkillHolder no PlayerCombat, SkillAssetGenerator)
 
 #### Passivas de Combate
-- [ ] Relentless — +chance de combo (ajustar ComboChance())
-- [ ] Counter Attack — ataca após levar hit
+- [x] Relentless — +15% combo chance (comboChanceBonus += 0.15)
+- [x] Counter Attack — +40% block chance (counter += 0.40)
 - [ ] Impact — +15% disarm (ajustar DisarmChance())
 - [ ] Pugnacious — chance de contra-atacar após levar dano
 - [ ] Sixth Sense — +10% esquiva (ajustar DodgeChance())
 - [ ] Iron Head — desarma o adversário com a cabeça ao levar hit
 - [ ] Sabotage — remove permanentemente uma arma do adversário ao acertar
 - [ ] Thief — rouba a arma do adversário ao acertar
-- [ ] Untouchable — +25% esquiva (versão mais forte do Sixth Sense)
-- [ ] First Strike — ataca primeiro independente da velocidade
+- [x] Untouchable — +25% evasion
+- [x] First Strike — +200 initiative (ataca primeiro)
 
 #### Passivas de Defesa
 - [ ] Shield — +45% block rate (ajustar BlockChance())
-- [ ] Armour — reduz % do dano recebido
+- [x] Armour — armor += 0.30 (30% redução de dano)
 - [ ] Iron Skin — reduz dano fixo por hit
-- [ ] Lead Skeleton — reduz dano de armas Heavy
-- [ ] Extra Thick Skin — reduz % dano maior que Armour
+- [x] Lead Skeleton — -15% dano de armas Heavy (leadSkeleton = true)
+- [x] Extra Thick Skin — armor += 0.50 (50% redução de dano)
 - [ ] Survival — sobrevive com 1 HP uma vez por luta
-- [ ] Ballet Shoes — pula para trás no início da luta
+- [x] Ballet Shoes — evasion +10%, primeiro golpe automaticamente esquivado
 
 #### Passivas de Stats
-- [ ] Bodybuilder — STR × 1.5
-- [ ] Herculean Strength — +STR alto, -agilidade
-- [ ] Feline Agility — AGI × 1.5
-- [ ] Lightning Bolt — SPD × 1.5 (velocidade de movimento)
-- [ ] Immortal — +HP alto, -velocidade
+- [x] Bodybuilder — str × 1.5
+- [x] Herculean Strength — str += 15, agility -= 4
+- [x] Feline Agility — agility × 1.5
+- [x] Lightning Bolt — runSpeedMultiplier × 1.5
+- [x] Immortal — maxHealth += 100, runSpeedMultiplier × 0.5
 - [ ] Determination — +STR conforme perde HP
 
 #### Passivas de Armas
@@ -732,5 +784,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
 
 ### Progresso
-- Total: 80 tarefas | Concluídas: 15
-- Última atualização: 2026-06-11 (XP+Level: vitória +2/derrota +1 XP, curva (level+1)×(level+2), level-up com bônus de atributos, tela de resultado com barra animada e botão Continuar)
+- Total: 80 tarefas | Concluídas: 29
+- Última atualização: 2026-06-15 (Stats System: 9 novos campos em PlayerProfile/PlayerCombat, CombatSceneLoader.ApplySkillStats com 15 skills passivas, initiative-based attack order em AttackSequencer, armor/leadSkeleton/ballet shoes em HitRoutine)

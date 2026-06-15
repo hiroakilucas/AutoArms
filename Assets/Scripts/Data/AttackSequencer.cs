@@ -21,19 +21,23 @@ public class AttackSequencer : MonoBehaviour
     private IEnumerator StartWhenReady()
     {
         yield return new WaitUntil(() => player1 != null && player2 != null);
-        StartCoroutine(CombatLoop());
+        bool p2First = player2.initiative > player1.initiative;
+        Debug.Log($"[Initiative] Player1: {player1.initiative} vs Player2: {player2.initiative} → {(p2First ? "Player2" : "Player1")} ataca primeiro");
+        StartCoroutine(CombatLoop(p2First));
     }
 
-    private IEnumerator CombatLoop()
+    private IEnumerator CombatLoop(bool player2GoesFirst = false)
     {
+        PlayerCombat first  = player2GoesFirst ? player2 : player1;
+        PlayerCombat second = player2GoesFirst ? player1 : player2;
         while (true)
         {
-            yield return StartCoroutine(player1.AttackRoutine());
-            if (player2.IsDead) { OnCombatEnd(player1); yield break; }
+            yield return StartCoroutine(first.AttackRoutine());
+            if (second.IsDead) { OnCombatEnd(first); yield break; }
             yield return new WaitForSeconds(interTurnDelay);
 
-            yield return StartCoroutine(player2.AttackRoutine());
-            if (player1.IsDead) { OnCombatEnd(player2); yield break; }
+            yield return StartCoroutine(second.AttackRoutine());
+            if (first.IsDead) { OnCombatEnd(second); yield break; }
             yield return new WaitForSeconds(interTurnDelay);
         }
     }
