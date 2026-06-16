@@ -12,9 +12,8 @@ public class CharacterPanel : MonoBehaviour
     private bool         _isOpen;
 
     // Stats tab
-    private TMP_Text      _charName, _levelText, _xpLabel;
-    private RectTransform _xpFill;
-    private TMP_Text      _hpVal, _strVal, _agiVal, _spdVal;
+    private TMP_Text _charName, _levelText;
+    private TMP_Text _hpVal, _strVal, _agiVal, _spdVal;
     private TMP_Text      _battlesText, _winRateText;
 
     // Skills tab
@@ -229,39 +228,23 @@ public class CharacterPanel : MonoBehaviour
         vlg.childControlWidth = true; vlg.childControlHeight = false;
         vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
 
-        // Level row
+        // Level + XP text (no bar)
         MakeRow(content, "levelRow", out _levelText);
         _levelText.fontSize = 18; _levelText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
 
-        // XP bar
-        var xpBg = MakeTall(content, "XpBar", 22f);
-        xpBg.GetComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.90f);
-        var xpFillGo = new GameObject("Fill");
-        xpFillGo.transform.SetParent(xpBg.transform, false);
-        _xpFill = xpFillGo.AddComponent<RectTransform>();
-        _xpFill.anchorMin = Vector2.zero; _xpFill.anchorMax = new Vector2(0f, 1f);
-        _xpFill.offsetMin = _xpFill.offsetMax = Vector2.zero;
-        xpFillGo.AddComponent<Image>().color = new Color(0.20f, 0.55f, 0.90f, 0.90f);
-
-        // XP label
-        MakeRow(content, "xpRow", out _xpLabel);
-        _xpLabel.fontSize = 14; _xpLabel.color = new Color(0.6f, 0.6f, 0.6f, 1f);
-
         MakeSep(content);
 
-        // 2×2 stat grid
-        var gridGo = MakeTall(content, "StatGrid", 180f);
-        var glg = gridGo.gameObject.AddComponent<GridLayoutGroup>();
-        glg.cellSize = new Vector2(320f, 80f);
-        glg.spacing = new Vector2(8f, 8f);
-        glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        glg.constraintCount = 2;
-        glg.childAlignment = TextAnchor.UpperLeft;
+        // Horizontal stats row — 4 columns: HP | STR | AGI | SPD
+        var statsRow = MakeTall(content, "StatsRow", 70f);
+        var hlg = statsRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 4f;
+        hlg.childControlWidth = true; hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = true; hlg.childForceExpandHeight = true;
 
-        _hpVal  = BuildStatCell(gridGo.gameObject, "❤  HP");
-        _strVal = BuildStatCell(gridGo.gameObject, "⚔  STR");
-        _agiVal = BuildStatCell(gridGo.gameObject, "✦  AGI");
-        _spdVal = BuildStatCell(gridGo.gameObject, "⚡  SPD");
+        _hpVal  = BuildStatColumn(statsRow.gameObject, "HP");
+        _strVal = BuildStatColumn(statsRow.gameObject, "STR");
+        _agiVal = BuildStatColumn(statsRow.gameObject, "AGI");
+        _spdVal = BuildStatColumn(statsRow.gameObject, "SPD");
 
         MakeSep(content);
 
@@ -273,31 +256,33 @@ public class CharacterPanel : MonoBehaviour
         return root;
     }
 
-    private TMP_Text BuildStatCell(GameObject parent, string label)
+    private TMP_Text BuildStatColumn(GameObject parent, string label)
     {
-        var cell = new GameObject(label + "Cell");
-        cell.transform.SetParent(parent.transform, false);
-        cell.AddComponent<Image>().color = SectBg;
+        var colGo = new GameObject(label + "Col");
+        colGo.transform.SetParent(parent.transform, false);
+        colGo.AddComponent<RectTransform>();  // RT before UIBehaviour
+        colGo.AddComponent<Image>().color = SectBg;
 
-        var hdrGo = new GameObject("Lbl");
-        hdrGo.transform.SetParent(cell.transform, false);
-        var hrt = hdrGo.AddComponent<RectTransform>();
-        hrt.anchorMin = Vector2.zero; hrt.anchorMax = new Vector2(1f, 0.48f);
-        hrt.offsetMin = new Vector2(8f, 2f); hrt.offsetMax = Vector2.zero;
-        var hdrTxt = hdrGo.AddComponent<TextMeshProUGUI>();
-        hdrTxt.text = label; hdrTxt.fontSize = 20;
-        hdrTxt.color = new Color(Gold.r, Gold.g, Gold.b, 0.85f);
-        hdrTxt.alignment = TextAlignmentOptions.TopLeft;
+        // Label: top 40% (golden, size 12)
+        var lblGo = new GameObject("Lbl");
+        lblGo.transform.SetParent(colGo.transform, false);
+        var lrt = lblGo.AddComponent<RectTransform>();
+        lrt.anchorMin = new Vector2(0f, 0.55f); lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+        var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+        lbl.text = label; lbl.fontSize = 12; lbl.color = Gold;
+        lbl.alignment = TextAlignmentOptions.Center;
 
+        // Value: bottom 55% (white, bold, size 20)
         var valGo = new GameObject("Val");
-        valGo.transform.SetParent(cell.transform, false);
+        valGo.transform.SetParent(colGo.transform, false);
         var vrt = valGo.AddComponent<RectTransform>();
-        vrt.anchorMin = new Vector2(0f, 0.48f); vrt.anchorMax = Vector2.one;
-        vrt.offsetMin = new Vector2(8f, 0f); vrt.offsetMax = Vector2.zero;
-        var valTxt = valGo.AddComponent<TextMeshProUGUI>();
-        valTxt.fontSize = 22; valTxt.fontStyle = FontStyles.Bold; valTxt.color = Color.white;
-        valTxt.alignment = TextAlignmentOptions.MidlineLeft;
-        return valTxt;
+        vrt.anchorMin = Vector2.zero; vrt.anchorMax = new Vector2(1f, 0.55f);
+        vrt.offsetMin = vrt.offsetMax = Vector2.zero;
+        var val = valGo.AddComponent<TextMeshProUGUI>();
+        val.fontSize = 20; val.fontStyle = FontStyles.Bold; val.color = Color.white;
+        val.alignment = TextAlignmentOptions.Center;
+        return val;
     }
 
     // ── Skills Tab ──────────────────────────────────────────────────────────
@@ -367,12 +352,9 @@ public class CharacterPanel : MonoBehaviour
         if (p == null) { _charName.text = "—"; return; }
 
         _charName.text  = p.profileName;
-        _levelText.text = $"Level {p.level}";
 
         int req = XpSystem.XpRequired(p.level);
-        float pct = req > 0 ? Mathf.Clamp01((float)p.xpCurrent / req) : 0f;
-        _xpFill.anchorMax = new Vector2(pct, 1f);
-        _xpLabel.text = $"XP: {p.xpCurrent} / {req}";
+        _levelText.text = $"Level {p.level}  •  XP: {p.xpCurrent} / {req}";
 
         _hpVal.text  = $"{p.maxHealth}";
         _strVal.text = $"{p.str}";

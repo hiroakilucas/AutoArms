@@ -15,7 +15,7 @@ MonoBehaviour:
   weaponName: VeryHeavyArmoredFrontierDefender
   icon: {fileID: 21300000, guid: 098734c27f8bf284da3dde7d2fc7cb3e, type: 3}
   inHandSprite: {fileID: 21300000, guid: 098734c27f8bf284da3dde7d2fc7cb3e, type: 3}
-  damage: 5
+  damage: 14
   speedModifier: 0.5
   type: 0
   scale: 1.75

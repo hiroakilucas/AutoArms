@@ -299,20 +299,20 @@ Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, s
 `PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
 ### Unarmed Combat
-When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `2 + StrBonus()`. Animation speed boosted to 2× via `AnimationController.SetSpeed(2f)` during the slash, reset to `1f` afterward (all exit paths including dodge/block).
-`ComboChance()` returns 10% while unarmed.
+When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `1 + StrBonus()`. Animation speed boosted to 2× via `AnimationController.SetSpeed(2f)` during the slash, reset to `1f` afterward (all exit paths including dodge/block).
+`ComboChance()` returns 10% while unarmed (plus AGI bonus).
 
 ### STR Attribute
-`PlayerCombat.str` (default 10). `StrBonus() = max(0, (str-10)/2)`.
+`PlayerCombat.str` (default 10). `StrBonus() = max(0, (str-10)/2)`. Heavy weapons use `HeavyStrBonus() = max(0, str-10)` (dobro do bônus normal).
 | Situation | Damage |
 |---|---|
-| Unarmed (punch) | `2 + StrBonus()` |
-| Heavy weapon | `10 + StrBonus()` |
-| Sword | `5` (fixed) |
-| Dagger | `3` (fixed) |
+| Unarmed (punch) | `1 + StrBonus()` |
+| Heavy weapon | `Random.Range(30, 50) + HeavyStrBonus()` |
+| Sword | `Random.Range(10, 18)` (~10–17) |
+| Dagger | `Random.Range(7, 13)` (~7–12) |
 | Other types | `weaponData.damage` if > 0, else `3` |
 
-Throw damage uses the same base values WITHOUT StrBonus (the weapon flies, not a melee hit).
+Throw damage uses the same ranges WITHOUT StrBonus (the weapon flies, not a melee hit).
 
 > Future skill **Iron Fist**: increases unarmed damage.
 

@@ -162,7 +162,10 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Heavy  => 0.10f,
             _                 => 0.25f
         };
-        return base_ + comboChanceBonus;
+        float agiBonus = Mathf.Max(0, agility - 5) * 0.01f;
+        float total    = base_ + agiBonus + comboChanceBonus;
+        Debug.Log($"[Combo] Base: {base_*100:F0}% + AGI bonus: {agiBonus*100:F0}% = Total: {total*100:F0}%");
+        return total;
     }
 
     // criticalChance: base do profile + bônus de skills (ex: Fierce Brute +0.10f).
@@ -224,32 +227,34 @@ public class PlayerCombat : MonoBehaviour
 
     // Iron Fist (skill futura): aumenta dano desarmado.
     private int StrBonus() => Mathf.Max(0, (str - 10) / 2);
+    // Heavy weapons get double STR bonus (full str-10, not halved).
+    private int HeavyStrBonus() => Mathf.Max(0, str - 10);
 
     // Dano base por tipo de arma (ataque normal em HitRoutine).
-    // Heavy recebe bônus de STR; outros tipos têm dano fixo por tipo.
+    // Heavy recebe bônus de STR dobrado; Sword/Dagger têm variação aleatória estilo My Brute.
     private int CalcDamage()
     {
         if (weaponHandler.CurrentWeapon == null)
-            return 2 + StrBonus();
+            return 1 + StrBonus();
         return weaponHandler.currentType switch
         {
-            WeaponType.Heavy  => 10 + StrBonus(),
-            WeaponType.Sword  => 5,
-            WeaponType.Dagger => 3,
+            WeaponType.Heavy  => Random.Range(30, 50) + HeavyStrBonus(),
+            WeaponType.Sword  => Random.Range(10, 18),
+            WeaponType.Dagger => Random.Range(7, 13),
             _                 => weaponHandler.CurrentWeaponData?.damage > 0
                                  ? weaponHandler.CurrentWeaponData.damage : 3
         };
     }
 
-    // Dano do arremesso usa o mesmo valor base do tipo (sem bônus de STR).
+    // Dano do arremesso usa os mesmos ranges sem bônus de STR.
     private static int ThrowDamage(WeaponData data)
     {
         if (data == null) return 2;
         return data.type switch
         {
-            WeaponType.Heavy  => 10,
-            WeaponType.Sword  => 5,
-            WeaponType.Dagger => 3,
+            WeaponType.Heavy  => Random.Range(30, 50),
+            WeaponType.Sword  => Random.Range(10, 18),
+            WeaponType.Dagger => Random.Range(7, 13),
             _                 => data.damage > 0 ? data.damage : 3
         };
     }

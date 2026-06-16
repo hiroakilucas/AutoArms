@@ -15,7 +15,7 @@ MonoBehaviour:
   weaponName: Zombie
   icon: {fileID: 21300000, guid: 00a7f3ee6e040734ba737db9b6d578d7, type: 3}
   inHandSprite: {fileID: 21300000, guid: 00a7f3ee6e040734ba737db9b6d578d7, type: 3}
-  damage: 3
+  damage: 14
   speedModifier: 0.5
   type: 0
   scale: 1.75
