@@ -111,6 +111,51 @@ PlayerCombat.AttackRoutine()
 
 Both `MainMenuCharacterPreview` and `CharacterSelectController` instantiate the character prefab for display, then immediately `DestroyImmediate` `PlayerCombat`, `WeaponHandler`, `MovementController`, and `AnimationController` — leaving only the `Animator` in idle state.
 
+`MainMenuCharacterPreview.Start()` also calls `BuildSummaryHUD(profile)` — creates a standalone ScreenSpaceOverlay Canvas (sortingOrder=5) with a semi-transparent strip showing: character name + level, animated XP bar, and the first 3 skill icons. Container anchors: `(0.30, 0.21)–(0.70, 0.40)` — positioned above the bottom buttons (button tops ≈ 0.188 of 1080p).
+
+### CharacterPanel (3-tab slide-in)
+
+`Assets/Scripts/UI/CharacterPanel.cs` — opened by clicking the "Personagem" button in the MainMenu (wired to `MainMenuController.OnCharacterButton()`).
+
+- Created lazily on first click; `Setup(holder)` builds all UI then sets GO inactive
+- Uses a separate ScreenSpaceOverlay Canvas (sortingOrder=20) parented to the CharacterPanel GO
+- Panel RT: `anchorMin=(1, 0.22)`, `anchorMax=(1, 0.92)`, `pivot=(1, 0.5)`, `offsetMin=(-320, 0)`, `offsetMax=(0, 0)` → 320px fixed-width strip on the right edge, bottom at 237px (above the 203px button tops)
+- Slide animation: `anchoredPosition.x = 340` (off-screen right) → `0` (visible). EaseOut quad (0.3s open, 0.2s close)
+- Three tabs: **Stats** (HP/STR/AGI/SPD grid + XP bar + battle stats), **Skills** (3-column icon grid), **Armas** (weapon list with icon + name/type/damage)
+- Overlay behind panel has `raycastTarget = false` so bottom buttons stay clickable
+
+### UI Construction Rule — RectTransform First
+
+**CRITICAL:** When building UI GameObjects in code, always `AddComponent<RectTransform>()` BEFORE adding `Image` or `TextMeshProUGUI`.
+
+UI components (`Image`, `TextMeshProUGUI`) auto-create a `RectTransform` when added. If you try to add `RectTransform` afterward, Unity returns `null` (can't add a duplicate component), causing `NullReferenceException`.
+
+```csharp
+// CORRECT
+var rt = go.AddComponent<RectTransform>();
+go.AddComponent<Image>();
+
+// WRONG — rt will be null
+go.AddComponent<Image>();
+var rt = go.AddComponent<RectTransform>(); // null!
+```
+
+`MakeStrip()` and similar helpers return `RectTransform` — call `.gameObject.AddComponent<Image>()` on the result, not `.AddComponent<Image>()` directly.
+
+### 01_MainMenu Scene — Key Objects
+
+| Object | Notes |
+|---|---|
+| `Canvas` | ScreenSpaceCamera (renderMode=1), camera=519420031. Has: RectTransform, Canvas, CanvasScaler (1920×1080), GraphicRaycaster |
+| `EventSystem` | Standalone GO with EventSystem + StandaloneInputModule — the only EventSystem in the scene |
+| `MainMenuController` | fileID 1078761889; `selectedProfileHolder` set in Inspector |
+| `CharacterPreviewManager` | Has `MainMenuCharacterPreview`; `spawnPoint` and `selectedProfileHolder` set |
+| `Btn_SelectCharacter` | The "Personagem" button at anchor(0.5,0.5) pos=(600,−422), size=(495,170); onClick → `OnCharacterButton` |
+| `BtnJogar` | Play button at pos=(0,−422); onClick → `OnPlayButton` |
+| `BtnShop` | Shop button at pos=(−600,−422) |
+
+Button math (1920×1080 canvas, anchor center): button center y = 540−422 = **118px** from bottom; tops at **203px**. Any panel `anchorMin.y` must be > 0.188 (use ≥ 0.20) to clear the buttons.
+
 ## Sorting Layers
 
 Defined in Project Settings → Tags and Layers, ordered bottom to top:
@@ -824,4 +869,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 83 tarefas | Concluídas: 32
-- Última atualização: 2026-06-16 (UI: HP numbers nas barras de vida, CharacterPanel slide-in com 3 abas, Summary HUD com nome/level/XP/skill icons na MainMenu)
+- Última atualização: 2026-06-16 (UI: HP numbers nas barras de vida, CharacterPanel slide-in com 3 abas, Summary HUD com nome/level/XP/skill icons na MainMenu; fix: duplicate EventSystem removido da cena, botão Personagem conectado ao CharacterPanel, SummaryHUD reposicionado acima dos botões)
