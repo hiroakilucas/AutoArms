@@ -238,7 +238,7 @@ On crit: `finalDamage = baseDamage × 2`. Popup shows "CRIT!\n{damage}" in red, 
 | Heavy | 5% |
 | others | 10% |
 
-Each agility point above 10 adds +1% (`defender.agility` field, default 10).
+Each agility point above 3 adds +2% dodge (teto máximo de esquiva total: 60%). Same AGI threshold adds +1.5% combo in `ComboChance()`.
 
 When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4). Popup shows "ESQUIVA!" in blue. Combo continues normally.
 > Future skill **Sixth Sense**: +10% dodge permanente.
@@ -438,9 +438,9 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 
 | Campo | Tipo | Default | Onde é usado |
 |---|---|---|---|
-| `str` | int | 10 | `StrBonus()`, `CalcDamage()` |
-| `agility` | int | 10 | `DodgeChance()` (+1% por ponto acima de 10) |
-| `speed` | int | 10 | future: deslocamento no mapa |
+| `str` | int | 10 | `StrBonus()`: +0.5 dano/ponto acima de 10 (Heavy: +1/ponto via `HeavyStrBonus()`) |
+| `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +1.5%/ponto acima de 3 |
+| `speed` | int | 10 | Reservado — future initiative e movimento no mapa |
 | `armor` | float | 0 | `HitRoutine`: `finalDamage = Max(1, RoundToInt(damage × (1 − armor)))` |
 | `evasion` | float | 0 | `DodgeChance()`: adicionado à chance base |
 | `accuracy` | float | 0 | future: reduz chance de esquiva do oponente |

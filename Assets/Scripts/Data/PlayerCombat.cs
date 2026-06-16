@@ -162,9 +162,9 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Heavy  => 0.10f,
             _                 => 0.25f
         };
-        float agiBonus = Mathf.Max(0, agility - 5) * 0.01f;
+        float agiBonus = Mathf.Max(0, agility - 3) * 0.015f;
         float total    = base_ + agiBonus + comboChanceBonus;
-        Debug.Log($"[Combo] Base: {base_*100:F0}% + AGI bonus: {agiBonus*100:F0}% = Total: {total*100:F0}%");
+        Debug.Log($"[Combo] Base: {base_*100:F0}% + AGI bonus: {agiBonus*100:F1}% = Total: {total*100:F1}% (AGI: {agility})");
         return total;
     }
 
@@ -221,8 +221,10 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Heavy  => 0.05f,
             _                 => 0.10f
         };
-        float agilityBonus = Mathf.Max(0, defender.agility - 10) * 0.01f;
-        return baseChance + agilityBonus + defender.evasion;
+        float agiBonus = Mathf.Max(0, defender.agility - 3) * 0.02f;
+        float total    = Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion);
+        Debug.Log($"[Dodge] Base: {baseChance*100:F0}% + AGI bonus: {agiBonus*100:F0}% = Total: {total*100:F0}% (AGI: {defender.agility})");
+        return total;
     }
 
     // Iron Fist (skill futura): aumenta dano desarmado.
