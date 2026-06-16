@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8842f4dfd7eaca8429084a06f44ec3c6, type: 3}
   m_Name: Assasin Guy
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier:
   profileName: Assasin Guy
   characterPrefab: {fileID: 1492118923640976, guid: 75e46bf5ec767a441a2b58925f34f38a, type: 3}
   previewIcon: {fileID: 21300000, guid: afebf40d075589240953327e697d8f0d, type: 3}
@@ -19,9 +19,20 @@ MonoBehaviour:
   weaponLoadout: {fileID: 11400000, guid: f0b1a3769f05ab14c97c17536e86a089, type: 2}
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
+  maxHealth: 60
+  str: 4
+  agility: 7
+  speed: 3
+  armor: 0
+  evasion: 0
+  accuracy: 0
+  initiative: 0
+  reversal: 0
+  counter: 0
+  criticalChance: 0
+  hitSpeed: 1
   level: 1
   winRate: 0
   xpCurrent: 0
   xpRequired: 6
-  maxHealth: 50
   battlesRemaining: 6

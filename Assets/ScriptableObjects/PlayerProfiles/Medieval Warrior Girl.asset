@@ -11,12 +11,28 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8842f4dfd7eaca8429084a06f44ec3c6, type: 3}
   m_Name: Medieval Warrior Girl
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier:
   profileName: Medieval Warrior Girl
   characterPrefab: {fileID: 1154517427754006, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
   previewIcon: {fileID: 21300000, guid: 0e5279db325c3214f876949ad1cfcc67, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weaponLoadout: {fileID: 11400000, guid: f0b1a3769f05ab14c97c17536e86a089, type: 2}
-  maxHealth: 200
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
+  maxHealth: 70
+  str: 4
+  agility: 4
+  speed: 4
+  armor: 0
+  evasion: 0
+  accuracy: 0
+  initiative: 0
+  reversal: 0
+  counter: 0
+  criticalChance: 0
+  hitSpeed: 1
+  level: 1
+  winRate: 0
+  xpCurrent: 0
+  xpRequired: 6
+  battlesRemaining: 6

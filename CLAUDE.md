@@ -364,6 +364,40 @@ Every hit (including combo) pushes the defender by `settings.knockbackDistance` 
 
 Todos os atributos são definidos em `PlayerProfile` (ScriptableObject) e copiados para `PlayerCombat` (runtime) por `CombatSceneLoader.Initialize()` antes do combate.
 
+### Geração de stats no level 1
+
+`Assets/Scripts/Utils/CharacterCreation.cs` — `CharacterCreation.GenerateLevel1Stats()`.
+
+**Valores base:**
+| Atributo | Base |
+|---|---|
+| maxHealth | 55 |
+| str | 2 |
+| agility | 2 |
+| speed | 2 |
+
+**Pool de 9 pontos** distribuídos aleatoriamente (25% cada atributo):
+- HP: +5 por ponto
+- STR: +1 por ponto
+- AGI: +1 por ponto
+- SPD: +1 por ponto
+
+Sem limitador por atributo — toda a sorte pode cair em um único stat.
+
+**Exemplos de resultado:**
+- 9 em STR → HP 55, STR 11, AGI 2, SPD 2
+- 9 em HP → HP 100, STR 2, AGI 2, SPD 2
+- Distribuído → HP 70, STR 4, AGI 4, SPD 4
+
+**Stats atuais dos personagens (aplicados via geração aleatória):**
+| Personagem | HP | STR | AGI | SPD |
+|---|---|---|---|---|
+| Assassin Guy | 60 | 4 | 7 | 3 |
+| Medieval Warrior | 65 | 7 | 3 | 3 |
+| Medieval Warrior Girl | 70 | 4 | 4 | 4 |
+
+Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Editor/CharacterCreationEditor.cs`). Só afeta profiles com `level == 1`.
+
 ### Campos e defaults
 
 | Campo | Tipo | Default | Onde é usado |

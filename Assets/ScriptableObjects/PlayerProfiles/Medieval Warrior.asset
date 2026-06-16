@@ -11,12 +11,28 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8842f4dfd7eaca8429084a06f44ec3c6, type: 3}
   m_Name: Medieval Warrior
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier:
   profileName: Medieval Warrior
   characterPrefab: {fileID: 1545498302350534, guid: 927828765a1dfce40ad37a9e0b167b7b, type: 3}
   previewIcon: {fileID: 21300000, guid: acde409e0b6e5794e80031314f35d193, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weaponLoadout: {fileID: 11400000, guid: f0b1a3769f05ab14c97c17536e86a089, type: 2}
-  maxHealth: 50
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
+  maxHealth: 65
+  str: 7
+  agility: 3
+  speed: 3
+  armor: 0
+  evasion: 0
+  accuracy: 0
+  initiative: 0
+  reversal: 0
+  counter: 0
+  criticalChance: 0
+  hitSpeed: 1
+  level: 1
+  winRate: 0
+  xpCurrent: 0
+  xpRequired: 6
+  battlesRemaining: 6
