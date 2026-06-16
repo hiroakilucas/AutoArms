@@ -154,7 +154,7 @@ public class CharacterPanel : MonoBehaviour
         go.AddComponent<Image>().color = new Color(0.60f, 0.10f, 0.10f, 0.92f);
         var btn = go.AddComponent<Button>();
         btn.onClick.AddListener(Close);
-        AddLabel(go, "✕", 28, Color.white);
+        AddLabel(go, "X", 28, Color.white);
     }
 
     private void BuildHeader(GameObject panel)
@@ -524,9 +524,9 @@ public class CharacterPanel : MonoBehaviour
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
+        go.AddComponent<RectTransform>();  // RT before any UIBehaviour
         var le = go.AddComponent<LayoutElement>();
         le.preferredHeight = 28f; le.flexibleWidth = 1f;
-        // RT added by TMP automatically; we don't need to store it
         txt = go.AddComponent<TextMeshProUGUI>();
         txt.color = Color.white; txt.fontSize = 14;
         txt.alignment = TextAlignmentOptions.MidlineLeft;
@@ -537,11 +537,10 @@ public class CharacterPanel : MonoBehaviour
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
+        var rt = go.AddComponent<RectTransform>();  // RT before any UIBehaviour
+        go.AddComponent<Image>().color = Color.clear;
         var le = go.AddComponent<LayoutElement>();
         le.preferredHeight = height; le.flexibleWidth = 1f;
-        // RT first, Image after
-        var rt = go.AddComponent<RectTransform>();
-        go.AddComponent<Image>().color = Color.clear;
         return rt;
     }
 
@@ -549,6 +548,7 @@ public class CharacterPanel : MonoBehaviour
     {
         var go = new GameObject("Sep");
         go.transform.SetParent(parent, false);
+        go.AddComponent<RectTransform>();  // RT before any UIBehaviour
         var le = go.AddComponent<LayoutElement>();
         le.preferredHeight = 2f; le.flexibleWidth = 1f;
         go.AddComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.4f);
