@@ -97,11 +97,11 @@ public class CombatHUD : MonoBehaviour
         lblRt.offsetMin = Vector2.zero;
         lblRt.offsetMax = Vector2.zero;
         var lbl = lblGo.AddComponent<TextMeshProUGUI>();
-        lbl.fontSize = 12;
+        lbl.fontSize = 18;
         lbl.color = Color.white;
         lbl.fontStyle = FontStyles.Bold;
         lbl.alignment = TextAlignmentOptions.Center;
-        lbl.outlineWidth = 0.2f;
+        lbl.outlineWidth = 0.35f;
         lbl.outlineColor = Color.black;
 
         return (fillRt, lbl);
