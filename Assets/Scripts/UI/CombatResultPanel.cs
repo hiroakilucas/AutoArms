@@ -207,8 +207,11 @@ public class CombatResultPanel : MonoBehaviour
         SkillDatabase skillDb, WeaponData[] allWeaponsPool, System.Action onChosen)
     {
         // Build available option pools
+        if (skillDb == null || skillDb.skills == null || skillDb.skills.Count == 0)
+            Debug.LogError("[LevelUp] ERRO: SkillDatabase não encontrado ou vazio");
+
         var availableSkills = new List<SkillData>();
-        if (skillDb != null)
+        if (skillDb != null && skillDb.skills != null)
             foreach (var s in skillDb.skills)
                 if (s != null && !profile.skills.Exists(ps => ps != null && ps.skillName == s.skillName))
                     availableSkills.Add(s);

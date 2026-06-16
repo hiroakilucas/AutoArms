@@ -28,12 +28,11 @@ public static class XpSystem
         return new LevelUpResult { didLevelUp = false, newLevel = profile.level };
     }
 
-    // +1 maxHealth every level; +1 STR every 2 levels; +1 agility every 3 levels.
+    // +2 maxHealth every level. STR/AGI/SPD only grow via the level-up choice screen
+    // (CombatResultPanel.ApplyBonus), never automatically.
     private static void ApplyLevelBonus(PlayerProfile profile)
     {
-        profile.maxHealth += 1;
-        if (profile.level % 2 == 0) profile.str++;
-        if (profile.level % 3 == 0) profile.agility++;
+        profile.maxHealth += 2;
     }
 
     private static void MarkDirty(PlayerProfile profile)

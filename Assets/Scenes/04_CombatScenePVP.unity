@@ -388,6 +388,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   player1: {fileID: 0}
   player2: {fileID: 45243676}
+  player1Profile: {fileID: 0}
+  skillDatabase: {fileID: 11400000, guid: ae7a17cba55b6e2489c8da3b2597907a, type: 2}
+  allWeapons:
+  - {fileID: 11400000, guid: af40afb8bb8443e4d8943e5fc48bfb25, type: 2}
+  - {fileID: 11400000, guid: f027d5453540da84fa7b171f2f781ee0, type: 2}
+  - {fileID: 11400000, guid: 19ea5491d0fb4ee41b2857c3f55495cd, type: 2}
+  - {fileID: 11400000, guid: 5b6ce6b9f1ad8d941aaa6628bb79451b, type: 2}
+  - {fileID: 11400000, guid: 455a2591cb26eb94ab312d7b69629227, type: 2}
   interTurnDelay: 0.2
 --- !u!4 &904002942
 Transform:
