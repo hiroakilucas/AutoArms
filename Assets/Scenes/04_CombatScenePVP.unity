@@ -759,6 +759,9 @@ MonoBehaviour:
   player1SpawnPoint: {fileID: 0}
   player2Object: {fileID: 45243663}
   selectedProfileHolder: {fileID: 11400000, guid: 922f3509158987247abc4e20f118b45c, type: 2}
+  player2MaxHealth: 50
+  player2Profile: {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  useSimulator: 1
 --- !u!4 &1332891506
 Transform:
   m_ObjectHideFlags: 0

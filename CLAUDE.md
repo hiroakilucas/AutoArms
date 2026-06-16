@@ -466,11 +466,13 @@ Coroutine-based replay of the event list. On each event, drives existing compone
 - `sequencer.OnCombatEnd(winner)` — triggers XP/result panel
 
 ### Integration in CombatSceneLoader
-Two new Inspector fields on `CombatSceneLoader`:
-- `player2Profile` (PlayerProfile) — assign Medieval Warrior Girl's profile to enable the simulator
-- `useSimulator` (bool, default false) — set to true to activate
+Two Inspector fields on `CombatSceneLoader`:
+- `player2Profile` (PlayerProfile) — Medieval Warrior Girl's profile, enables the simulator. Wired directly on the `CombatSceneLoader` component in `04_CombatScenePVP` (`guid: fcb3d4326a2a4f14b9f5de165814a1c6`). If left unassigned, `LoadPlayer2ProfileFallback()` loads it by path (`Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset`) via `AssetDatabase` — **editor-only**, logs `Debug.LogError` and stays null in a build, so the shipped scene must have `player2Profile` assigned in the Inspector.
+- `useSimulator` (bool, **default true**) — set to false to fall back to the original `AttackSequencer` coroutine loop.
 
-When both are set, after EntryFall the simulator runs instead of assigning `attackSequencer.player1`. The `AttackSequencer` stays idle (its `WaitUntil` never resolves). `CombatHUD.AddSpeedControls(player)` creates **2x** and **Skip** buttons in the bottom-center of the screen.
+When both are set, after EntryFall: `attackSequencer.player1Profile = profile` is assigned (so `OnCombatEnd` can still award XP / show `CombatResultPanel` even though `attackSequencer.player1` is never set), then the simulator runs instead of the coroutine loop. The `AttackSequencer` stays idle (its `WaitUntil` never resolves) — `TriggerCombatEnd` in `CombatPlayer` calls `sequencer.OnCombatEnd(winner)` directly once `CombatEnd` is reached. `CombatHUD.AddSpeedControls(player)` creates **2x** and **Skip** buttons in the bottom-center of the screen.
+
+`CombatSimulator.Simulate()` logs `[CombatSimulator] Iniciando simulação...` on entry and `[CombatSimulator] {n} eventos gerados` on exit — exceptions to the no-stray-logs rule (see Logging Policy), kept as permanent confirmation that the simulator actually ran.
 
 ### CombatEventType values
 `TurnStart, RunToDefender, ThrowWeapon, PickupWeapon, WeaponEquipped, Hit, Dodge, Block, Miss, Disarm, WeaponDrop, HealthChanged, SpeedBonus, TurnEnd, CombatEnd`
@@ -518,7 +520,9 @@ When both are set, after EntryFall the simulator runs instead of assigning `atta
 
 O projeto não usa `Debug.Log`/`Debug.LogWarning` soltos pelo código — só `Debug.LogError` para falhas críticas de setup (ex: `CombatSceneLoader` sem `PlayerProfile`, `SkillDatabase` vazio em `CombatResultPanel`). Antes de adicionar um novo `Debug.Log`, prefira: (a) um `Debug.LogError` se for uma falha real, ou (b) nada — UI/popups já comunicam o resultado ao jogador.
 
-Exceção única: `CombatSceneLoader.Initialize()` (caminho do `CombatSimulator`, quando `useSimulator=true`) imprime **um** `Debug.Log(CombatLogFormatter.Format(...))` com o resumo completo da luta inteira, gerado depois de `CombatSimulator.Simulate()` e antes de `CombatPlayer.PlayCombat()` começar a tocar as animações — ver `CombatLogFormatter` abaixo.
+Exceções (todas no caminho do `CombatSimulator`, quando `useSimulator=true`):
+- `CombatSceneLoader.Initialize()` imprime **um** `Debug.Log(CombatLogFormatter.Format(...))` com o resumo completo da luta inteira, gerado depois de `CombatSimulator.Simulate()` e antes de `CombatPlayer.PlayCombat()` começar a tocar as animações — ver `CombatLogFormatter` abaixo.
+- `CombatSimulator.Simulate()` loga `[CombatSimulator] Iniciando simulação...` na entrada e `[CombatSimulator] {n} eventos gerados` na saída — confirmação rápida de que o simulador rodou, sem precisar ler o log completo.
 
 ### CombatLogFormatter
 `Assets/Scripts/Combat/CombatLogFormatter.cs` — `Format(p1Name, p2Name, List<CombatEvent>)` é puro C# (sem MonoBehaviour) e devolve uma string multi-linha legível: um cabeçalho com os dois nomes, uma linha `--- Turno de {nome} ---` por `TurnStart`, e uma linha por ação relevante (pickup/equip/throw/hit com dano+crit/combo+HP resultante/dodge/block/miss/disarm/drop/speed bonus), terminando em `========== VENCEDOR: {nome} ==========`. `Hit` consome o `HealthChanged` emparelhado (mesmo `targetIndex`, evento seguinte) para anexar o HP resultante na mesma linha. `RunToDefender` e `TurnEnd` não geram linha própria.
@@ -872,4 +876,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 85 tarefas | Concluídas: 35
-- Última atualização: 2026-06-16 (Logging: removidos todos os Debug.Log/LogWarning soltos do projeto, mantidos só os Debug.LogError críticos; LogSkillCheck virou no-op; novo CombatLogFormatter gera um log único e legível da luta inteira — gerado após CombatSimulator.Simulate() e antes do CombatPlayer animar — impresso via Debug.Log em CombatSceneLoader)
+- Última atualização: 2026-06-16 (Fix: log pré-combate não aparecia porque useSimulator/player2Profile nunca eram atribuídos na cena 04_CombatScenePVP — wireados diretamente no CombatSceneLoader da cena; useSimulator default agora true no código + fallback de player2Profile via AssetDatabase no editor; attackSequencer.player1Profile agora também é atribuído no caminho do simulador para não quebrar XP/CombatResultPanel; CombatSimulator.Simulate loga início e contagem de eventos)

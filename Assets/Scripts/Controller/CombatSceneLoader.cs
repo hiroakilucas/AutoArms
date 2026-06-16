@@ -17,7 +17,10 @@ public class CombatSceneLoader : MonoBehaviour
 
     [Header("Simulator")]
     [Tooltip("Quando true e player2Profile estiver atribuído, usa CombatSimulator em vez de AttackSequencer.")]
-    [SerializeField] private bool useSimulator = false;
+    [SerializeField] private bool useSimulator = true;
+
+    private const string Player2ProfileFallbackPath =
+        "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
     void Start()
     {
@@ -117,10 +120,16 @@ public class CombatSceneLoader : MonoBehaviour
         StartCoroutine(EntryFall(player2Object, p2Land, () => p2Done = true));
         yield return new WaitUntil(() => p1Done && p2Done);
 
+        if (useSimulator && player2Profile == null)
+            player2Profile = LoadPlayer2ProfileFallback();
+
         if (useSimulator && player2Profile != null)
         {
             // Pre-calculate entire combat, then replay as animation via CombatPlayer.
-            // AttackSequencer stays idle (player1 never assigned → WaitUntil never resolves).
+            // AttackSequencer stays idle (player1 never assigned → WaitUntil never resolves),
+            // but player1Profile must still be set so OnCombatEnd can award XP / show the result panel.
+            attackSequencer.player1Profile = profile;
+
             var simulator = new CombatSimulator();
             var events    = simulator.Simulate(profile, player2Profile);
 
@@ -140,6 +149,23 @@ public class CombatSceneLoader : MonoBehaviour
             attackSequencer.player1        = player1Combat;
             attackSequencer.player1Profile = profile;
         }
+    }
+
+    // Editor-only convenience: if player2Profile wasn't wired in the Inspector, fetch
+    // the Medieval Warrior Girl profile directly by path so the simulator (and its
+    // pre-combat log) still runs during testing. In a build this has no effect — assign
+    // player2Profile in the Inspector for the shipped scene.
+    private static PlayerProfile LoadPlayer2ProfileFallback()
+    {
+#if UNITY_EDITOR
+        var fallback = UnityEditor.AssetDatabase.LoadAssetAtPath<PlayerProfile>(Player2ProfileFallbackPath);
+        if (fallback == null)
+            Debug.LogError($"[CombatSceneLoader] player2Profile não atribuído e fallback não encontrado em {Player2ProfileFallbackPath}");
+        return fallback;
+#else
+        Debug.LogError("[CombatSceneLoader] player2Profile não atribuído no Inspector.");
+        return null;
+#endif
     }
 
     private static int ApplySkillStats(PlayerCombat combat, int baseMaxHealth)

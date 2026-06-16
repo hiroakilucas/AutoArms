@@ -12,6 +12,8 @@ public class CombatSimulator
 
     public List<CombatEvent> Simulate(PlayerProfile p1Profile, PlayerProfile p2Profile, int seed = -1)
     {
+        Debug.Log("[CombatSimulator] Iniciando simulação...");
+
         _rng    = seed >= 0 ? new System.Random(seed) : new System.Random();
         _events = new List<CombatEvent>();
 
@@ -32,6 +34,8 @@ public class CombatSimulator
 
         int winnerIndex = _p1.isAlive ? 0 : 1;
         Emit(new CombatEvent { type = CombatEventType.CombatEnd, playerIndex = winnerIndex });
+
+        Debug.Log($"[CombatSimulator] {_events.Count} eventos gerados");
         return _events;
     }
 
