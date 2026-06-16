@@ -67,6 +67,27 @@ public class DamagePopup : MonoBehaviour
         go.AddComponent<DamagePopup>().InitDrop();
     }
 
+    public static void SpawnRapido(Vector3 worldPos)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitRapido();
+    }
+
+    void InitRapido()
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = "RAPIDO!";
+        label.fontSize       = 4f;
+        baseColor            = new Color(1f, 1f, 0f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void InitDrop()
     {
         label = gameObject.AddComponent<TextMeshPro>();

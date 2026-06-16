@@ -360,6 +360,24 @@ Ao carregar `04_CombatScenePVP`, ambos os personagens aparecem 12 unidades acima
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
 
+### Speed System
+Speed determina quantas vezes um personagem age por round via acúmulo de debt. Implementado em `AttackSequencer.CombatLoop`.
+
+**Algoritmo por round:**
+1. `p1SpeedDebt += player1.speed` | `p2SpeedDebt += player2.speed`
+2. Enquanto `p1SpeedDebt >= player2.speed`: p1 age mais 1x, `p1SpeedDebt -= player2.speed`
+3. Enquanto `p2SpeedDebt >= player1.speed`: p2 age mais 1x, `p2SpeedDebt -= player1.speed`
+4. Mínimo garantido: 1 ação por player por round
+
+**Exemplos:**
+- Speed 6 vs 2 → Round 1: P1 age 3x (6/2=3), P2 age 1x (2<6)
+- Speed 4 vs 3 → Maioria dos rounds 1x cada; a cada ~4 rounds P1 age 2x
+
+**Visual:** popup "RAPIDO!" amarelo aparece no início de cada ação extra (2ª em diante).
+**Log:** `[Speed] Round X: P1 debt=Y age=Z | P2 debt=Y age=Z`
+
+Initiative ainda determina quem age PRIMEIRO no round (maior initiative = `first`). Speed determina quantas vezes cada um age.
+
 ## Skill System
 
 ### Arquitetura
@@ -440,7 +458,7 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 |---|---|---|---|
 | `str` | int | 10 | `StrBonus()`: +0.5 dano/ponto acima de 10 (Heavy: +1/ponto via `HeavyStrBonus()`) |
 | `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +1.5%/ponto acima de 3 |
-| `speed` | int | 10 | Reservado — future initiative e movimento no mapa |
+| `speed` | int | 10 | `AttackSequencer.CombatLoop`: acumula debt a cada round; debt >= speed do oponente = ação extra (ver Speed System) |
 | `armor` | float | 0 | `HitRoutine`: `finalDamage = Max(1, RoundToInt(damage × (1 − armor)))` |
 | `evasion` | float | 0 | `DodgeChance()`: adicionado à chance base |
 | `accuracy` | float | 0 | future: reduz chance de esquiva do oponente |
