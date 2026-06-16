@@ -415,10 +415,12 @@ public class PlayerCombat : MonoBehaviour
         else
             weaponHandler.UnequipPermanent();
 
-        // targetPos calculado antes do flying weapon para usar no ângulo de rotação.
-        Vector3 targetPos = defender != null
-            ? defender.transform.position + Vector3.up * 0.3f
-            : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
+        // Bug fix: fly horizontally at hand height to avoid diagonal trajectory.
+        // targetPos shares launchPos.y so the weapon travels in a straight horizontal line.
+        float targetX = defender != null
+            ? defender.transform.position.x
+            : (transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f).x;
+        Vector3 targetPos = new Vector3(targetX, launchPos.y, launchPos.z);
 
         // Orienta o sprite na direção do voo (evita ponta para baixo/diagonal da rotação in-hand).
         Vector3 flightDir = (targetPos - launchPos).normalized;
@@ -441,9 +443,10 @@ public class PlayerCombat : MonoBehaviour
 
         animator.SetTrigger("Throwing");
 
-        // Somente Thrown rotaciona; todos os outros voam com rotação fixa.
-        bool rotate = weaponData?.type == WeaponType.Thrown;
-        yield return FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f, rotate);
+        // Thrown rotates and gets a slight arc; all others fly in a straight horizontal line.
+        bool  rotate = weaponData?.type == WeaponType.Thrown;
+        float arc    = isThrown ? 0.5f : 0f;
+        yield return FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f, rotate, arc);
         Destroy(flyingWeapon);  // sempre destruído antes de resolver hit/miss
 
         if (defender != null && Random.value < 0.80f)
@@ -523,12 +526,16 @@ public class PlayerCombat : MonoBehaviour
         fallenWeapons.Add(fallen);
     }
 
-    private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, bool rotate)
+    private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, bool rotate, float arc = 0f)
     {
         float elapsed = 0f;
         while (elapsed < duration)
         {
-            obj.position = Vector3.Lerp(from, to, elapsed / duration);
+            float t   = elapsed / duration;
+            Vector3 p = Vector3.Lerp(from, to, t);
+            if (arc > 0f)
+                p.y += arc * Mathf.Sin(t * Mathf.PI);
+            obj.position = p;
             if (rotate)
                 obj.Rotate(0, 0, 540f * Time.deltaTime);
             elapsed += Time.deltaTime;

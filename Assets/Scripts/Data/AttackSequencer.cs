@@ -10,6 +10,10 @@ public class AttackSequencer : MonoBehaviour
     [Header("Progresso")]
     public PlayerProfile player1Profile;
 
+    [Header("Level-Up Options")]
+    public SkillDatabase skillDatabase;
+    public WeaponData[]  allWeapons;
+
     [Header("Turn Settings")]
     public float interTurnDelay = 0.2f;
 
@@ -62,6 +66,7 @@ public class AttackSequencer : MonoBehaviour
         var result      = XpSystem.AddXP(player1Profile, xpGained);
 
         gameObject.AddComponent<CombatResultPanel>()
-            .Show(player1Won, xpGained, xpBefore, levelBefore, player1Profile, result.didLevelUp);
+            .Show(player1Won, xpGained, xpBefore, levelBefore, player1Profile, result.didLevelUp,
+                  skillDatabase, allWeapons);
     }
 }
