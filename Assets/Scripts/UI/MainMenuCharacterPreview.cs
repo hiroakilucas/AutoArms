@@ -12,11 +12,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
     {
         var profile = selectedProfileHolder.currentProfile;
 
-        if (profile == null)
-        {
-            Debug.LogWarning("Nenhum personagem selecionado para o Main Menu.");
-            return;
-        }
+        if (profile == null) return;
 
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
         currentCharacter.transform.localScale = profile.scale;

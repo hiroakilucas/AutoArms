@@ -430,7 +430,6 @@ Speed determina quantas vezes um personagem age por round via acúmulo de debt. 
 - Speed 4 vs 3 → Maioria dos rounds 1x cada; a cada ~4 rounds P1 age 2x
 
 **Visual:** popup "RAPIDO!" amarelo aparece no início de cada ação extra (2ª em diante).
-**Log:** `[Speed] Round X: P1 debt=Y age=Z | P2 debt=Y age=Z`
 
 Initiative ainda determina quem age PRIMEIRO no round (maior initiative = `first`). Speed determina quantas vezes cada um age.
 
@@ -445,6 +444,7 @@ Pre-calculation system that computes the full fight outcome before any animation
 | `Assets/Scripts/Combat/PlayerState.cs` | Pure C# | Mutable snapshot of one combatant during simulation |
 | `Assets/Scripts/Combat/CombatSimulator.cs` | Pure C# | Pre-calculation engine; mirrors PlayerCombat/AttackSequencer logic |
 | `Assets/Scripts/Combat/CombatPlayer.cs` | MonoBehaviour | Reads the event list and drives existing animation components |
+| `Assets/Scripts/Combat/CombatLogFormatter.cs` | Pure C# | `Format(p1Name, p2Name, events)` — builds the readable pre-combat log string (see Logging Policy) |
 
 ### CombatSimulator.Simulate(p1Profile, p2Profile, seed)
 Returns `List<CombatEvent>`. Optional `seed` makes the fight deterministic (replay / server-side validation).
@@ -504,22 +504,24 @@ When both are set, after EntryFall the simulator runs instead of assigning `atta
 ### SkillHolder no PlayerCombat
 `PlayerCombat` expõe:
 - `List<SkillData> skills` — skills equipadas; visível no Inspector para testes
-- `bool logSkills` — quando `true`, loga cada check de skill no Console
 - `HasSkill(string name)` — retorna `true` se a skill está equipada
 - `GetSkill(string name)` — retorna o `SkillData` ou `null`
-- `LogSkillCheck(string name, bool triggered, string detail)` — emite log no formato `[Skill] NomeDaSkill checked on PlayerX → triggered (detalhe)`
+- `LogSkillCheck(string name, bool triggered, string detail)` — **no-op** (logging removido do projeto, ver Logging Policy abaixo); mantido só para não quebrar os call sites existentes
 
 ### Como adicionar uma nova skill ao jogo
 1. Abrir Unity → **Tools → AutoArms → Generate Skill Assets** (só necessário na primeira vez ou ao adicionar skills)
 2. Encontrar o `.asset` em `Assets/ScriptableObjects/Skills/`
 3. No Inspector do `PlayerCombat` de um personagem, adicionar o asset em **Skills — Teste**
-4. Implementar o efeito em `PlayerCombat.cs` no método relevante (`ComboChance`, `DodgeChance`, `DisarmChance`, etc.) usando `HasSkill("Nome")` e `LogSkillCheck(...)`
+4. Implementar o efeito em `PlayerCombat.cs` no método relevante (`ComboChance`, `DodgeChance`, `DisarmChance`, etc.) usando `HasSkill("Nome")`
 
-### Convenção de log de skill
-```
-[Skill] Relentless checked on Player1 → triggered (combo chance: 40% → 55%)
-[Skill] Sixth Sense checked on Player2 → not triggered
-```
+## Logging Policy
+
+O projeto não usa `Debug.Log`/`Debug.LogWarning` soltos pelo código — só `Debug.LogError` para falhas críticas de setup (ex: `CombatSceneLoader` sem `PlayerProfile`, `SkillDatabase` vazio em `CombatResultPanel`). Antes de adicionar um novo `Debug.Log`, prefira: (a) um `Debug.LogError` se for uma falha real, ou (b) nada — UI/popups já comunicam o resultado ao jogador.
+
+Exceção única: `CombatSceneLoader.Initialize()` (caminho do `CombatSimulator`, quando `useSimulator=true`) imprime **um** `Debug.Log(CombatLogFormatter.Format(...))` com o resumo completo da luta inteira, gerado depois de `CombatSimulator.Simulate()` e antes de `CombatPlayer.PlayCombat()` começar a tocar as animações — ver `CombatLogFormatter` abaixo.
+
+### CombatLogFormatter
+`Assets/Scripts/Combat/CombatLogFormatter.cs` — `Format(p1Name, p2Name, List<CombatEvent>)` é puro C# (sem MonoBehaviour) e devolve uma string multi-linha legível: um cabeçalho com os dois nomes, uma linha `--- Turno de {nome} ---` por `TurnStart`, e uma linha por ação relevante (pickup/equip/throw/hit com dano+crit/combo+HP resultante/dodge/block/miss/disarm/drop/speed bonus), terminando em `========== VENCEDOR: {nome} ==========`. `Hit` consome o `HealthChanged` emparelhado (mesmo `targetIndex`, evento seguinte) para anexar o HP resultante na mesma linha. `RunToDefender` e `TurnEnd` não geram linha própria.
 
 ## Stats System
 
@@ -870,4 +872,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 85 tarefas | Concluídas: 35
-- Última atualização: 2026-06-16 (Level-up: removidos bônus automáticos de STR/AGI (XpSystem agora só aplica +2 maxHealth); corrigida tela de escolha de level-up — skillDatabase e allWeapons agora wireados no AttackSequencer da cena 04_CombatScenePVP, antes ficavam null e só apareciam opções de Atributo; log de erro quando SkillDatabase está vazio/ausente)
+- Última atualização: 2026-06-16 (Logging: removidos todos os Debug.Log/LogWarning soltos do projeto, mantidos só os Debug.LogError críticos; LogSkillCheck virou no-op; novo CombatLogFormatter gera um log único e legível da luta inteira — gerado após CombatSimulator.Simulate() e antes do CombatPlayer animar — impresso via Debug.Log em CombatSceneLoader)

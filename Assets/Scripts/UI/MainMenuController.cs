@@ -21,11 +21,7 @@ public class MainMenuController : MonoBehaviour
 
     public void OnPlayButton()
     {
-        if (selectedProfileHolder.currentProfile == null)
-        {
-            Debug.LogWarning("Nenhum personagem selecionado para o combate.");
-            return;
-        }
+        if (selectedProfileHolder.currentProfile == null) return;
 
         SceneManager.LoadScene("04_CombatScenePVP");
     }
@@ -37,7 +33,6 @@ public class MainMenuController : MonoBehaviour
     public void OnOptionsButton()
     {
         // Aqui voc� pode abrir um painel de configura��es
-        Debug.Log("Abrir Configura��es (a implementar)");
     }
 
     public void OnQuitButton()

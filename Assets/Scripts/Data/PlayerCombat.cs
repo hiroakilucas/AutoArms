@@ -43,16 +43,11 @@ public class PlayerCombat : MonoBehaviour
 
     [Header("Debug")]
     public PlayerProfile debugProfile;
-    public bool logSkills = true;
 
     [ContextMenu("Reset to Level 1")]
     private void ResetToLevel1()
     {
-        if (debugProfile == null)
-        {
-            Debug.LogWarning($"[Debug] debugProfile não atribuído em {name}");
-            return;
-        }
+        if (debugProfile == null) return;
         debugProfile.level            = 1;
         debugProfile.xpCurrent        = 0;
         debugProfile.battlesRemaining = 6;
@@ -61,7 +56,6 @@ public class PlayerCombat : MonoBehaviour
         UnityEditor.EditorUtility.SetDirty(debugProfile);
         UnityEditor.AssetDatabase.SaveAssets();
 #endif
-        Debug.Log($"[Debug] {debugProfile.profileName} resetado para Level 1");
     }
 
     public bool IsDead => GetComponent<HealthSystem>()?.IsDead ?? false;
@@ -165,9 +159,7 @@ public class PlayerCombat : MonoBehaviour
         float agiBonus    = Mathf.Max(0, agility - 3) * 0.015f;
         float weaponCombo = weaponHandler.CurrentWeaponData != null
             ? weaponHandler.CurrentWeaponData.comboBonus : UnarmedStats.ComboBonus;
-        float total = base_ + agiBonus + comboChanceBonus + weaponCombo;
-        Debug.Log($"[Combo] Base: {base_*100:F0}% + AGI bonus: {agiBonus*100:F1}% + weapon: {weaponCombo*100:F0}% = Total: {total*100:F1}% (AGI: {agility})");
-        return total;
+        return base_ + agiBonus + comboChanceBonus + weaponCombo;
     }
 
     // criticalChance: base do profile + bônus de skills (ex: Fierce Brute +0.10f) + bônus da arma.
@@ -236,9 +228,7 @@ public class PlayerCombat : MonoBehaviour
         float agiBonus       = Mathf.Max(0, defender.agility - 3) * 0.02f;
         float weaponEvasion  = defender.weaponHandler.CurrentWeaponData != null
             ? defender.weaponHandler.CurrentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
-        float total = Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion + weaponEvasion);
-        Debug.Log($"[Dodge] Base: {baseChance*100:F0}% + AGI bonus: {agiBonus*100:F0}% + weapon: {weaponEvasion*100:F0}% = Total: {total*100:F0}% (AGI: {defender.agility})");
-        return total;
+        return Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion + weaponEvasion);
     }
 
     // Dano base da arma (sem STR/crítico/armadura) — Heavy/Sword/Dagger têm variação aleatória estilo My Brute.
@@ -412,8 +402,6 @@ public class PlayerCombat : MonoBehaviour
         // Fórmula multiplicativa do My Brute: finalDamage = Max(1, Round(dmg × (1 - armor)))
         float defenderArmor = defender != null ? defender.armor : 0f;
         int   finalDamage   = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defenderArmor)));
-        if (defenderArmor > 0f)
-            Debug.Log($"[Armor] {defender.name} armor {defenderArmor:P0}: damage {Mathf.RoundToInt(dmg)} → {finalDamage}");
 
         defender?.GetComponent<HealthSystem>()?.TakeDamage(finalDamage);
 
@@ -467,8 +455,6 @@ public class PlayerCombat : MonoBehaviour
         Vector3 targetPos = defender != null
             ? defender.transform.position
             : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
-
-        Debug.Log($"[Throw] From: {launchPos} | To: {targetPos} | Direction: {(targetPos - launchPos).normalized}");
 
         // Orienta o sprite na direção do voo (evita ponta para baixo/diagonal da rotação in-hand).
         Vector3 flightDir = (targetPos - launchPos).normalized;
@@ -651,17 +637,8 @@ public class PlayerCombat : MonoBehaviour
         return null;
     }
 
-    // Call inside each chance method when a skill modifies the roll.
-    // Example: LogSkillCheck("Relentless", triggered, "combo chance: 40% → 55%")
-    public void LogSkillCheck(string skillName, bool triggered, string detail = "")
-    {
-        if (!logSkills) return;
-        string status = triggered ? "triggered" : "not triggered";
-        string owner  = isPlayer1 ? "Player1" : "Player2";
-        Debug.Log(string.IsNullOrEmpty(detail)
-            ? $"[Skill] {skillName} checked on {owner} → {status}"
-            : $"[Skill] {skillName} checked on {owner} → {status} ({detail})");
-    }
+    // No-op kept for call-site compatibility (logging removed project-wide).
+    public void LogSkillCheck(string skillName, bool triggered, string detail = "") { }
 
     private void SetAttackerLayers()
     {

@@ -124,6 +124,8 @@ public class CombatSceneLoader : MonoBehaviour
             var simulator = new CombatSimulator();
             var events    = simulator.Simulate(profile, player2Profile);
 
+            Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events));
+
             var combatPlayer = gameObject.AddComponent<CombatPlayer>();
             combatPlayer.p1Combat  = player1Combat;
             combatPlayer.p2Combat  = player2Combat;
@@ -131,8 +133,6 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);
-
-            Debug.Log($"[CombatSimulator] Simulated {events.Count} events. Playing via CombatPlayer.");
         }
         else
         {

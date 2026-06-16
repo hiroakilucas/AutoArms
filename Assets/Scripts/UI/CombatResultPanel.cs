@@ -236,8 +236,6 @@ public class CombatResultPanel : MonoBehaviour
         do { opt2 = DrawOption(availableSkills, availableWeapons); tries++; }
         while (tries < 50 && SameOption(opt1, opt2));
 
-        Debug.Log($"[LevelUp] Opção 1: {opt1.Name()} ({opt1.kind}) | Opção 2: {opt2.Name()} ({opt2.kind})");
-
         // Root container covers the whole canvas (renders above result panel as last sibling)
         var root = new GameObject("LevelUpChoiceRoot");
         root.transform.SetParent(canvasRoot, false);

@@ -29,7 +29,6 @@ public class AttackSequencer : MonoBehaviour
     {
         yield return new WaitUntil(() => player1 != null && player2 != null);
         bool p2First = player2.initiative > player1.initiative;
-        Debug.Log($"[Initiative] Player1: {player1.initiative} vs Player2: {player2.initiative} → {(p2First ? "Player2" : "Player1")} ataca primeiro");
         StartCoroutine(CombatLoop(p2First));
     }
 
@@ -37,12 +36,9 @@ public class AttackSequencer : MonoBehaviour
     {
         PlayerCombat first  = player2GoesFirst ? player2 : player1;
         PlayerCombat second = player2GoesFirst ? player1 : player2;
-        int round = 0;
 
         while (true)
         {
-            round++;
-
             // Accumulate speed debt for both players each round.
             _p1SpeedDebt += player1.speed;
             _p2SpeedDebt += player2.speed;
@@ -57,7 +53,6 @@ public class AttackSequencer : MonoBehaviour
 
             int firstAct  = player2GoesFirst ? p2Act : p1Act;
             int secondAct = player2GoesFirst ? p1Act : p2Act;
-            Debug.Log($"[Speed] Round {round}: P1 debt={_p1SpeedDebt} age={p1Act} | P2 debt={_p2SpeedDebt} age={p2Act}");
 
             // First player executes all their actions, then second player.
             for (int i = 0; i < firstAct; i++)
@@ -82,7 +77,6 @@ public class AttackSequencer : MonoBehaviour
 
     public void OnCombatEnd(PlayerCombat winner)
     {
-        Debug.Log($"[AttackSequencer] {winner.name} venceu o combate!");
         PlayerCombat.CleanupFallenWeapons();
 
         if (player1Profile == null) return;

@@ -28,16 +28,11 @@ public class CharacterSelectUI : MonoBehaviour
     public void OnSelect(PlayerProfile profile)
     {
         selected = profile;
-        Debug.Log($"Selecionado: {profile.profileName}");
     }
 
     public void OnConfirm()
     {
-        if (selected == null)
-        {
-            Debug.LogWarning("Nenhum personagem selecionado.");
-            return;
-        }
+        if (selected == null) return;
 
         selectedProfileHolder.currentProfile = selected;
         SceneManager.LoadScene("01_MainMenu");
