@@ -130,7 +130,7 @@ public class CharacterPanel : MonoBehaviour
     private void BuildHeader(GameObject panel)
     {
         var hdr = MakeSection("Header", panel, 0.92f, 1.00f);
-        hdr.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
+        hdr.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
 
         // Bottom gold line
         var line = new GameObject("Line"); line.transform.SetParent(hdr.transform, false);
@@ -163,7 +163,7 @@ public class CharacterPanel : MonoBehaviour
     private void BuildTabBar(GameObject panel)
     {
         var bar = MakeSection("TabBar", panel, 0.85f, 0.92f);
-        bar.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
+        bar.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
 
         string[] labels = { "Stats", "Skills", "Armas" };
         Button[] btns   = new Button[3];
@@ -229,7 +229,7 @@ public class CharacterPanel : MonoBehaviour
 
         // 2×2 stat grid
         var gridGo = MakeFixedRow(content, "StatGrid", 160f);
-        var glg = gridGo.AddComponent<GridLayoutGroup>();
+        var glg = gridGo.gameObject.AddComponent<GridLayoutGroup>();
         glg.cellSize = new Vector2(320f, 70f);
         glg.spacing = new Vector2(8f, 8f);
         glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
@@ -237,10 +237,10 @@ public class CharacterPanel : MonoBehaviour
         glg.childAlignment = TextAnchor.UpperLeft;
         glg.padding = new RectOffset(0, 0, 0, 0);
 
-        _hpVal  = BuildStatCell(gridGo, "❤  HP");
-        _strVal = BuildStatCell(gridGo, "⚔  STR");
-        _agiVal = BuildStatCell(gridGo, "✦  AGI");
-        _spdVal = BuildStatCell(gridGo, "⚡  SPD");
+        _hpVal  = BuildStatCell(gridGo.gameObject, "❤  HP");
+        _strVal = BuildStatCell(gridGo.gameObject, "⚔  STR");
+        _agiVal = BuildStatCell(gridGo.gameObject, "✦  AGI");
+        _spdVal = BuildStatCell(gridGo.gameObject, "⚡  SPD");
 
         // Gold separator
         MakeSeparator(content);
@@ -508,7 +508,7 @@ public class CharacterPanel : MonoBehaviour
         var le = go.AddComponent<LayoutElement>();
         le.preferredHeight = height; le.flexibleWidth = 1f;
         go.AddComponent<Image>().color = Color.clear;
-        return go.AddComponent<RectTransform>();
+        return go.GetComponent<RectTransform>();
     }
 
     private static void MakeSeparator(Transform parent)
