@@ -25,4 +25,13 @@ public class HealthSystem : MonoBehaviour
         OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
         if (IsDead) OnDeath?.Invoke();
     }
+
+    // Used by CombatPlayer to sync HP to pre-calculated simulator values.
+    public void SetHealth(int current, int max)
+    {
+        MaxHealth     = max;
+        CurrentHealth = Mathf.Clamp(current, 0, max);
+        OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
+        if (IsDead) OnDeath?.Invoke();
+    }
 }

@@ -378,6 +378,57 @@ Speed determina quantas vezes um personagem age por round via acúmulo de debt. 
 
 Initiative ainda determina quem age PRIMEIRO no round (maior initiative = `first`). Speed determina quantas vezes cada um age.
 
+## CombatSimulator Architecture
+
+Pre-calculation system that computes the full fight outcome before any animation plays. Enables instant replay, 2x speed, and future web/mobile server-side validation.
+
+### Files
+| File | Type | Purpose |
+|---|---|---|
+| `Assets/Scripts/Combat/CombatEvent.cs` | Pure C# | Data class + `CombatEventType` enum — one event per game action |
+| `Assets/Scripts/Combat/PlayerState.cs` | Pure C# | Mutable snapshot of one combatant during simulation |
+| `Assets/Scripts/Combat/CombatSimulator.cs` | Pure C# | Pre-calculation engine; mirrors PlayerCombat/AttackSequencer logic |
+| `Assets/Scripts/Combat/CombatPlayer.cs` | MonoBehaviour | Reads the event list and drives existing animation components |
+
+### CombatSimulator.Simulate(p1Profile, p2Profile, seed)
+Returns `List<CombatEvent>`. Optional `seed` makes the fight deterministic (replay / server-side validation).
+
+Internally:
+1. Builds `PlayerState` from both `PlayerProfile` objects
+2. Calls `ApplySkillStats` on each (mirrors `CombatSceneLoader.ApplySkillStats`)
+3. Runs `SimulateRound` in a loop (max 300 rounds, same speed-debt logic as `AttackSequencer`)
+4. Each round calls `SimulateTurn(attacker, defender)` → `SimulateHit` / `SimulateThrow`
+5. All outcomes (dodge, block, crit, disarm, throw, etc.) are resolved with `System.Random`
+6. Emits one `CombatEvent` per discrete action; final event is `CombatEnd`
+
+### CombatPlayer
+Coroutine-based replay of the event list. On each event, drives existing components:
+- `animationController.PlayRun/PlayCatchWeapon/PlayBlock/PlayHurt/PlayJumpStart`
+- `weaponHandler.EquipRandom/Unequip/UnequipPermanent`
+- `healthSystem.TakeDamage(delta)` — delta computed from event `newHp` vs current HP
+- `DamagePopup.Spawn/SpawnDodge/SpawnBlock/SpawnDisarm/SpawnDrop/SpawnMiss/SpawnRapido`
+- `sequencer.OnCombatEnd(winner)` — triggers XP/result panel
+
+### Integration in CombatSceneLoader
+Two new Inspector fields on `CombatSceneLoader`:
+- `player2Profile` (PlayerProfile) — assign Medieval Warrior Girl's profile to enable the simulator
+- `useSimulator` (bool, default false) — set to true to activate
+
+When both are set, after EntryFall the simulator runs instead of assigning `attackSequencer.player1`. The `AttackSequencer` stays idle (its `WaitUntil` never resolves). `CombatHUD.AddSpeedControls(player)` creates **2x** and **Skip** buttons in the bottom-center of the screen.
+
+### CombatEventType values
+`TurnStart, RunToDefender, ThrowWeapon, PickupWeapon, WeaponEquipped, Hit, Dodge, Block, Miss, Disarm, WeaponDrop, HealthChanged, SpeedBonus, TurnEnd, CombatEnd`
+
+### Key fields in CombatEvent
+| Field | Used by |
+|---|---|
+| `playerIndex` | always set — index of the acting/affected player (0=P1, 1=P2) |
+| `targetIndex` | defender or disarmed player |
+| `damage`, `isCrit`, `isCombo` | Hit event |
+| `newHp`, `maxHp` | HealthChanged event |
+| `weaponName` | ThrowWeapon, PickupWeapon, WeaponEquipped, Disarm, WeaponDrop |
+| `extraActions` | SpeedBonus (for RAPIDO! count) |
+
 ## Skill System
 
 ### Arquitetura
@@ -456,7 +507,7 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 
 | Campo | Tipo | Default | Onde é usado |
 |---|---|---|---|
-| `str` | int | 10 | Desarmado: `5 + str` (+1/ponto, sem divisão). Heavy: `HeavyStrBonus() = Max(0, str-10)` (+1/ponto acima de 10). Sword/Dagger: sem bônus direto de STR. |
+| `str` | int | 10 | Unarmed: `5 + str` dano total. `StrBonus() = max(0,(str-10)/2)` (armas melee não-Heavy). `HeavyStrBonus() = max(0, str-10)` (Heavy) |
 | `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +1.5%/ponto acima de 3 |
 | `speed` | int | 10 | `AttackSequencer.CombatLoop`: acumula debt a cada round; debt >= speed do oponente = ação extra (ver Speed System) |
 | `armor` | float | 0 | `HitRoutine`: `finalDamage = Max(1, RoundToInt(damage × (1 − armor)))` |
@@ -661,6 +712,8 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Sistema de XP e level (vitória +2 XP, derrota +1 XP)
 - [x] Curva de XP não linear: (level+1)×(level+2) — nível 1→2=6, 2→3=12, 3→4=20...
 - [x] Tela de fim de combate com resultado e XP ganho
+- [x] CombatSimulator: pré-cálculo determinístico de todo o combate (CombatEvent, PlayerState, CombatSimulator, CombatPlayer)
+- [x] Botões 2x e Skip no CombatHUD (controlam CombatPlayer)
 - [ ] Ao subir de nível: escolher atributo, skill ou arma
 
 ### Fase 3 — Armas & Pets
@@ -760,5 +813,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
 
 ### Progresso
-- Total: 83 tarefas | Concluídas: 32
-- Última atualização: 2026-06-16 (UI: HP numbers nas barras de vida, CharacterPanel slide-in com 3 abas, Summary HUD com nome/level/XP/skill icons na MainMenu; fix: duplicate EventSystem removido da cena, botão Personagem conectado ao CharacterPanel, SummaryHUD reposicionado acima dos botões)
+- Total: 85 tarefas | Concluídas: 34
+- Última atualização: 2026-06-16 (CombatSimulator: pré-cálculo de combate com CombatEvent/PlayerState/CombatSimulator/CombatPlayer; botões 2x e Skip no CombatHUD; AttackSequencer.OnCombatEnd public; HealthSystem.SetHealth; CLAUDE.md com seção de arquitetura do Simulator)

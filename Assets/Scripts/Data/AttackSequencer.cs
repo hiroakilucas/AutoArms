@@ -80,7 +80,7 @@ public class AttackSequencer : MonoBehaviour
         }
     }
 
-    private void OnCombatEnd(PlayerCombat winner)
+    public void OnCombatEnd(PlayerCombat winner)
     {
         Debug.Log($"[AttackSequencer] {winner.name} venceu o combate!");
         PlayerCombat.CleanupFallenWeapons();

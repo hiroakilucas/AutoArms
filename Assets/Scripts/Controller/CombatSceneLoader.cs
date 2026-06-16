@@ -12,6 +12,12 @@ public class CombatSceneLoader : MonoBehaviour
     [Header("Player 2")]
     [Tooltip("Vida maxima do Player2 (Medieval Warrior Girl). Ajustar conforme o perfil do personagem.")]
     [SerializeField] private int player2MaxHealth = 50;
+    [Tooltip("Perfil do Player2 para o CombatSimulator. Se nulo, usa o sistema de AttackSequencer original.")]
+    [SerializeField] private PlayerProfile player2Profile;
+
+    [Header("Simulator")]
+    [Tooltip("Quando true e player2Profile estiver atribuído, usa CombatSimulator em vez de AttackSequencer.")]
+    [SerializeField] private bool useSimulator = false;
 
     void Start()
     {
@@ -111,8 +117,29 @@ public class CombatSceneLoader : MonoBehaviour
         StartCoroutine(EntryFall(player2Object, p2Land, () => p2Done = true));
         yield return new WaitUntil(() => p1Done && p2Done);
 
-        attackSequencer.player1        = player1Combat;
-        attackSequencer.player1Profile = profile;
+        if (useSimulator && player2Profile != null)
+        {
+            // Pre-calculate entire combat, then replay as animation via CombatPlayer.
+            // AttackSequencer stays idle (player1 never assigned → WaitUntil never resolves).
+            var simulator = new CombatSimulator();
+            var events    = simulator.Simulate(profile, player2Profile);
+
+            var combatPlayer = gameObject.AddComponent<CombatPlayer>();
+            combatPlayer.p1Combat  = player1Combat;
+            combatPlayer.p2Combat  = player2Combat;
+            combatPlayer.sequencer = attackSequencer;
+            combatPlayer.PlayCombat(events);
+
+            combatHUD.AddSpeedControls(combatPlayer);
+
+            Debug.Log($"[CombatSimulator] Simulated {events.Count} events. Playing via CombatPlayer.");
+        }
+        else
+        {
+            // Original coroutine-based system.
+            attackSequencer.player1        = player1Combat;
+            attackSequencer.player1Profile = profile;
+        }
     }
 
     private static int ApplySkillStats(PlayerCombat combat, int baseMaxHealth)

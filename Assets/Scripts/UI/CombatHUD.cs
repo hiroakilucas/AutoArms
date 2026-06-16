@@ -12,6 +12,58 @@ public class CombatHUD : MonoBehaviour
 
     public Transform CanvasTransform => _canvasObject != null ? _canvasObject.transform : null;
 
+    // Creates 2x and Skip buttons wired to the given CombatPlayer.
+    public void AddSpeedControls(CombatPlayer player)
+    {
+        if (_canvasObject == null || player == null) return;
+
+        var row = new GameObject("SpeedControls");
+        row.transform.SetParent(_canvasObject.transform, false);
+        var rowRt = row.AddComponent<RectTransform>();
+        rowRt.anchorMin = new Vector2(0.38f, 0.01f);
+        rowRt.anchorMax = new Vector2(0.62f, 0.07f);
+        rowRt.offsetMin = Vector2.zero;
+        rowRt.offsetMax = Vector2.zero;
+
+        var hlg = row.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 8f;
+        hlg.childControlWidth  = true;
+        hlg.childControlHeight = true;
+
+        MakeSpeedButton(row, "2x", () => player.SetSpeed(2f));
+        MakeSpeedButton(row, "Skip", () => player.RequestSkip());
+    }
+
+    private static void MakeSpeedButton(GameObject parent, string label, System.Action onClick)
+    {
+        var go = new GameObject(label + "Btn");
+        go.transform.SetParent(parent.transform, false);
+        go.AddComponent<RectTransform>();
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(0.25f, 0.25f, 0.25f);
+        btn.colors = colors;
+        btn.onClick.AddListener(() => onClick());
+
+        var lblGo = new GameObject("Label");
+        lblGo.transform.SetParent(go.transform, false);
+        var lblRt = lblGo.AddComponent<RectTransform>();
+        lblRt.anchorMin = Vector2.zero;
+        lblRt.anchorMax = Vector2.one;
+        lblRt.offsetMin = Vector2.zero;
+        lblRt.offsetMax = Vector2.zero;
+        var txt = lblGo.AddComponent<TextMeshProUGUI>();
+        txt.text      = label;
+        txt.fontSize  = 20;
+        txt.color     = Color.white;
+        txt.fontStyle = FontStyles.Bold;
+        txt.alignment = TextAlignmentOptions.Center;
+    }
+
     public void Initialize(HealthSystem health1, HealthSystem health2)
     {
         _canvasObject = CreateCanvas();
