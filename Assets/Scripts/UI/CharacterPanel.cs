@@ -115,8 +115,8 @@ public class CharacterPanel : MonoBehaviour
         var panelGo = new GameObject("Panel");
         panelGo.transform.SetParent(canvasGo.transform, false);
         _panelRt = panelGo.AddComponent<RectTransform>();
-        _panelRt.anchorMin = new Vector2(1f, 0.10f);
-        _panelRt.anchorMax = new Vector2(1f, 0.90f);
+        _panelRt.anchorMin = new Vector2(1f, 0.22f);  // 0.22*1080=237px > button top 203px
+        _panelRt.anchorMax = new Vector2(1f, 0.92f);
         _panelRt.pivot     = new Vector2(1f, 0.5f);
         _panelRt.offsetMin = new Vector2(-PanelWidth, 0f);
         _panelRt.offsetMax = new Vector2(0f, 0f);
