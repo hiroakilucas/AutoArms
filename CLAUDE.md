@@ -234,7 +234,7 @@ Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a 
 
 | Campo | Efeito |
 |---|---|
-| `hitSpeed` | Multiplicador de velocidade da animação de slash: `slashSpeed = PlayerCombat.hitSpeed × weaponData.hitSpeed` |
+| `hitSpeed` | **Reservado, não aplicado à animação** (ver nota abaixo) |
 | `drawChance` | % chance de pegar esta arma ao pick up (campo reservado — sem mecânica de peso ainda) |
 | `reach` | Soma-se à distância base por tipo em `AttackPosition()` |
 | `critChanceBonus` | Soma-se em `CritChance()` |
@@ -266,6 +266,8 @@ Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a 
 | `comboBonus` | 0 | +0.30 | 0 | -0.60 |
 
 Os 5 `WeaponData.asset` existentes (`Satyr1`=Dagger, `Golem3`=Heavy, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie`=Sword) já têm esses valores aplicados.
+
+> **`hitSpeed` não escala `Animator.speed` (revertido em 2026-06-16):** a tentativa original (`slashSpeed = PlayerCombat.hitSpeed × weaponData.hitSpeed`, chamando `animationController.SetSpeed(slashSpeed)` no início do golpe e `SetSpeed(1f)` no fim) quebrava a animação — o `Animator` tocava 2× mais rápido (Adaga) enquanto os `WaitForSeconds(settings.slashingDuration * 0.5f)` em `HitRoutine` continuavam no tempo real normal, desincronizando a pose visual do timing de dano/dodge/block. `HitRoutine` em `PlayerCombat.cs` não chama mais `SetSpeed` em nenhum golpe — soco e Adaga tocam a animação no `Animator.speed` padrão (1). O campo `hitSpeed` continua existindo em `WeaponData`/`UnarmedStats` só como dado reservado; reimplementar essa mecânica exigiria escalar os `WaitForSeconds` de `HitRoutine` na mesma proporção do `Animator.speed`, não só a chamada de `SetSpeed`.
 
 ### Critical Hit
 `CritChance()` no atacante = base por tipo de arma + `weaponData.critChanceBonus` (ou `UnarmedStats.CritChanceBonus`) + `criticalChance` (profile/skills):
@@ -581,7 +583,7 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 | `reversal` | float | 0 | future: chance de reverter a iniciativa |
 | `counter` | float | 0 | `BlockChance()`: adicionado à chance base do defensor |
 | `criticalChance` | float | 0 | `CritChance()`: adicionado à chance base do atacante |
-| `hitSpeed` | float | 1 | `HitRoutine`: velocidade da animação de slash (`slashSpeed = hitSpeed × weaponData.hitSpeed`, ver tabela de Propriedades das Armas) |
+| `hitSpeed` | float | 1 | `HitRoutine`: só usado como guarda (`hitSpeed <= 0` → Monk guarda em vez de atacar). Não escala mais a animação — ver nota em Propriedades das Armas |
 | `comboChanceBonus` | float | 0 | `ComboChance()`: adicionado à chance base |
 | `runSpeedMultiplier` | float | 1 | `RuntimeRunSpeed = settings.runSpeed × runSpeedMultiplier` |
 
@@ -878,4 +880,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 85 tarefas | Concluídas: 35
-- Última atualização: 2026-06-16 (Removido botão 2x do CombatHUD e SetSpeed/_playbackSpeed do CombatPlayer — o multiplicador escalava valores de velocidade ao invés de só durações, deixando o combate mais lento e sem forma de voltar a 1x depois de clicar; só o botão Skip permanece; feature será reimplementada corretamente depois)
+- Última atualização: 2026-06-16 (Removido botão 2x do CombatHUD e SetSpeed/_playbackSpeed do CombatPlayer — o multiplicador escalava valores de velocidade ao invés de só durações, deixando o combate mais lento e sem forma de voltar a 1x depois de clicar; só o botão Skip permanece. Em seguida, removido também o SetSpeed(slashSpeed)/SetSpeed(1f) de PlayerCombat.HitRoutine — escalar Animator.speed na Adaga (hitSpeed=2.0) sem escalar os WaitForSeconds correspondentes quebrava a animação; soco e Adaga agora tocam sempre em Animator.speed=1)
