@@ -158,7 +158,7 @@ public class CharacterPanel : MonoBehaviour
     private void BuildHeader(GameObject panel)
     {
         var hdr = MakeStrip("Header", panel, 0.90f, 1.00f);
-        hdr.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
+        hdr.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
 
         // Bottom gold divider
         var line = new GameObject("Line");
@@ -184,7 +184,7 @@ public class CharacterPanel : MonoBehaviour
     private void BuildTabBar(GameObject panel)
     {
         var bar = MakeStrip("TabBar", panel, 0.82f, 0.90f);
-        bar.AddComponent<Image>().color = new Color(0.10f, 0.06f, 0.04f, 1f);
+        bar.gameObject.AddComponent<Image>().color = new Color(0.10f, 0.06f, 0.04f, 1f);
 
         string[] labels = { "Stats", "Skills", "Armas" };
         Button[] btns   = new Button[3];
