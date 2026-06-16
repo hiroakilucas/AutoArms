@@ -35,9 +35,8 @@ public class CharacterPanel : MonoBehaviour
     static readonly Color TabOn   = new Color(0.38f, 0.26f, 0.14f, 1f);
     static readonly Color TabOff  = new Color(0.18f, 0.12f, 0.08f, 1f);
 
-    const float PanelXMin    = 0.60f;
-    const float PanelYMin    = 0.12f;   // ~130px free at bottom in 1080p
-    const float OffScreenX   = 790f;    // > panel width (768px)
+    const float PanelWidth   = 320f;    // fixed pixel width
+    const float OffScreenX   = 340f;    // > PanelWidth to fully hide panel right
     const float SlideInTime  = 0.30f;
     const float SlideOutTime = 0.20f;
 
@@ -111,13 +110,16 @@ public class CharacterPanel : MonoBehaviour
         ovImg.color = new Color(0f, 0f, 0f, 0.45f);
         ovImg.raycastTarget = false;
 
-        // Panel — right 40% of screen, yMin leaves ~130px free at bottom
+        // Panel — 320px fixed width, anchored to right edge, y 10%–90%
+        // pivot (1,0.5) so anchoredPosition.x=0 → right edge flush, x=340 → off-screen right
         var panelGo = new GameObject("Panel");
         panelGo.transform.SetParent(canvasGo.transform, false);
         _panelRt = panelGo.AddComponent<RectTransform>();
-        _panelRt.anchorMin = new Vector2(PanelXMin, PanelYMin);
-        _panelRt.anchorMax = new Vector2(1f, 1f);
-        _panelRt.offsetMin = _panelRt.offsetMax = Vector2.zero;
+        _panelRt.anchorMin = new Vector2(1f, 0.10f);
+        _panelRt.anchorMax = new Vector2(1f, 0.90f);
+        _panelRt.pivot     = new Vector2(1f, 0.5f);
+        _panelRt.offsetMin = new Vector2(-PanelWidth, 0f);
+        _panelRt.offsetMax = new Vector2(0f, 0f);
         panelGo.AddComponent<Image>().color = PanelBg;
 
         // Left gold border strip (4px)
@@ -146,7 +148,7 @@ public class CharacterPanel : MonoBehaviour
         var rt = go.AddComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot     = new Vector2(1f, 1f);
-        rt.offsetMin = new Vector2(-78f, -78f);
+        rt.offsetMin = new Vector2(-68f, -68f);   // 60×60px with 8px margin
         rt.offsetMax = new Vector2(-8f,  -8f);
         // Image before Button so Button.targetGraphic is set automatically
         go.AddComponent<Image>().color = new Color(0.60f, 0.10f, 0.10f, 0.92f);

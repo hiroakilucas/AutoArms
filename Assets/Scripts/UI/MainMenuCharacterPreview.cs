@@ -20,7 +20,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
 
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
         currentCharacter.transform.localScale = profile.scale;
-        currentCharacter.transform.position = new Vector3(0, -2, 0);
+        currentCharacter.transform.position = new Vector3(-2f, -2, 0);
         Camera.main.orthographicSize = 5;
 
         DestroyImmediate(currentCharacter.GetComponent<PlayerCombat>());
