@@ -11,7 +11,6 @@ public class CombatPlayer : MonoBehaviour
     [HideInInspector] public AttackSequencer sequencer;
 
     private List<CombatEvent> _events;
-    private float             _playbackSpeed = 1f;
     private bool              _skipRequested;
     private HealthSystem      _h1, _h2;
 
@@ -23,8 +22,6 @@ public class CombatPlayer : MonoBehaviour
         _h2     = p2Combat.GetComponent<HealthSystem>();
         StartCoroutine(PlayEvents());
     }
-
-    public void SetSpeed(float speed) => _playbackSpeed = Mathf.Max(0.1f, speed);
 
     public void RequestSkip()
     {
@@ -56,7 +53,6 @@ public class CombatPlayer : MonoBehaviour
     {
         var attacker = GetCombat(evt.playerIndex);
         var defender = GetCombat(evt.targetIndex);
-        float t = 1f / _playbackSpeed;
 
         switch (evt.type)
         {
@@ -69,7 +65,7 @@ public class CombatPlayer : MonoBehaviour
                 {
                     Vector2 attackPos = CalcAttackPosition(attacker, defender);
                     yield return StartCoroutine(
-                        attacker.animationController.PlayRun(attackPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
+                        attacker.animationController.PlayRun(attackPos, attacker.settings?.runSpeed ?? 35f, attacker.movement));
                 }
                 break;
 
@@ -77,7 +73,7 @@ public class CombatPlayer : MonoBehaviour
                 if (attacker != null)
                 {
                     attacker.weaponHandler.EquipRandom();
-                    yield return StartCoroutine(attacker.animationController.PlayCatchWeapon(0.6f * t));
+                    yield return StartCoroutine(attacker.animationController.PlayCatchWeapon(0.6f));
                 }
                 break;
 
@@ -99,7 +95,7 @@ public class CombatPlayer : MonoBehaviour
                     };
                     attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
 
-                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
+                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f;
                     yield return new WaitForSeconds(slashHalf);
 
                     // Knockback in parallel with hurt
@@ -108,8 +104,8 @@ public class CombatPlayer : MonoBehaviour
                     float   kbDur   = attacker?.settings?.hurtDuration ?? 0.07f;
                     if (defender != null)
                     {
-                        StartCoroutine(defender.Knockback(pushDir, kbDist, kbDur * t));
-                        yield return StartCoroutine(defender.animationController.PlayHurt(kbDur * t));
+                        StartCoroutine(defender.Knockback(pushDir, kbDist, kbDur));
+                        yield return StartCoroutine(defender.animationController.PlayHurt(kbDur));
                     }
 
                     // Damage popup
@@ -147,12 +143,12 @@ public class CombatPlayer : MonoBehaviour
                     DamagePopup.SpawnBlock(blockPopupPos);
 
                     float kbDist = (attacker?.settings?.knockbackDistance ?? 0.5f) * 0.5f;
-                    float kbDur  = (attacker?.settings?.hurtDuration ?? 0.07f) * t;
+                    float kbDur  = attacker?.settings?.hurtDuration ?? 0.07f;
                     Vector2 blockDir = ComputePushDir(attacker, defender);
 
                     // Block animation and knockback in parallel
                     StartCoroutine(defender.Knockback(blockDir, kbDist, kbDur));
-                    yield return StartCoroutine(defender.animationController.PlayBlock(0.36666667f * t));
+                    yield return StartCoroutine(defender.animationController.PlayBlock(0.36666667f));
                 }
                 break;
 
@@ -197,7 +193,7 @@ public class CombatPlayer : MonoBehaviour
                     attacker.weaponHandler.Unequip();
                     attacker.GetComponent<Animator>()?.SetTrigger("Throwing");
                 }
-                yield return new WaitForSeconds(0.45f * t);
+                yield return new WaitForSeconds(0.45f);
                 break;
 
             case CombatEventType.SpeedBonus:
@@ -212,9 +208,9 @@ public class CombatPlayer : MonoBehaviour
                 {
                     float jsDur = attacker.settings?.jumpStartDuration ?? 0.02f;
                     float jh    = attacker.settings?.jumpHeight ?? 2f;
-                    float spd   = (attacker.settings?.runSpeed ?? 35f) * t;
+                    float spd   = attacker.settings?.runSpeed ?? 35f;
                     Vector2 spawnPos = RandomSpawnPos(attacker.isPlayer1);
-                    yield return StartCoroutine(attacker.animationController.PlayJumpStart(jsDur * t));
+                    yield return StartCoroutine(attacker.animationController.PlayJumpStart(jsDur));
                     yield return StartCoroutine(attacker.movement.JumpTo(spawnPos, spd, jh));
                     attacker.animationController.SetIdle(true);
                 }
