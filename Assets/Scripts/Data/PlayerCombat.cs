@@ -42,7 +42,27 @@ public class PlayerCombat : MonoBehaviour
     public List<SkillData> skills = new List<SkillData>();
 
     [Header("Debug")]
+    public PlayerProfile debugProfile;
     public bool logSkills = true;
+
+    [ContextMenu("Reset to Level 1")]
+    private void ResetToLevel1()
+    {
+        if (debugProfile == null)
+        {
+            Debug.LogWarning($"[Debug] debugProfile não atribuído em {name}");
+            return;
+        }
+        debugProfile.level            = 1;
+        debugProfile.xpCurrent        = 0;
+        debugProfile.battlesRemaining = 6;
+        debugProfile.xpRequired       = XpSystem.XpRequired(1);
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(debugProfile);
+        UnityEditor.AssetDatabase.SaveAssets();
+#endif
+        Debug.Log($"[Debug] {debugProfile.profileName} resetado para Level 1");
+    }
 
     public bool IsDead => GetComponent<HealthSystem>()?.IsDead ?? false;
 
@@ -398,14 +418,15 @@ public class PlayerCombat : MonoBehaviour
         var weaponData = weaponHandler.CurrentWeaponData;
         bool isThrown = weaponData?.type == WeaponType.Thrown;
 
-        // Captura posição e escala mundiais ANTES de destruir o objeto de arma.
-        // lossyScale reflete o tamanho visual real (personagem com scale 0.3 aplicado).
+        // Capture world position and scale BEFORE destroying the weapon object on Unequip.
+        // lossyScale reflects real visual size (character has scale ~0.3 applied).
         GameObject inHandWeapon = weaponHandler.CurrentWeapon;
-        Vector3 launchPos = inHandWeapon != null
-            ? inHandWeapon.transform.position
-            : weaponHandler.handBone != null
-                ? weaponHandler.handBone.position
-                : transform.position + Vector3.up * 0.5f;
+        // Prefer handBone.position for the exact hand Y; fall back to weapon object position.
+        Vector3 launchPos = weaponHandler.handBone != null
+            ? weaponHandler.handBone.position
+            : (inHandWeapon != null
+                ? inHandWeapon.transform.position
+                : transform.position + Vector3.up * 0.5f);
         Vector3 projectileScale = inHandWeapon != null
             ? inHandWeapon.transform.lossyScale
             : (weaponHandler.handBone != null ? weaponHandler.handBone.lossyScale : Vector3.one) * (weaponData?.scale ?? 1f);
@@ -415,12 +436,13 @@ public class PlayerCombat : MonoBehaviour
         else
             weaponHandler.UnequipPermanent();
 
-        // Bug fix: fly horizontally at hand height to avoid diagonal trajectory.
-        // targetPos shares launchPos.y so the weapon travels in a straight horizontal line.
-        float targetX = defender != null
-            ? defender.transform.position.x
-            : (transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f).x;
-        Vector3 targetPos = new Vector3(targetX, launchPos.y, launchPos.z);
+        // Fly straight from handBone to defender's actual position.
+        // For WeaponType.Thrown a slight upward arc is added inside FlyWeapon.
+        Vector3 targetPos = defender != null
+            ? defender.transform.position
+            : transform.position + (isPlayer1 ? Vector3.right : Vector3.left) * 5f;
+
+        Debug.Log($"[Throw] From: {launchPos} | To: {targetPos} | Direction: {(targetPos - launchPos).normalized}");
 
         // Orienta o sprite na direção do voo (evita ponta para baixo/diagonal da rotação in-hand).
         Vector3 flightDir = (targetPos - launchPos).normalized;

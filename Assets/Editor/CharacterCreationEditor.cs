@@ -3,6 +3,30 @@ using UnityEditor;
 
 public static class CharacterCreationEditor
 {
+    [MenuItem("Tools/AutoArms/Reset All Profiles to Level 1")]
+    public static void ResetAllProfilesToLevel1()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:PlayerProfile",
+            new[] { "Assets/ScriptableObjects/PlayerProfiles" });
+
+        foreach (string guid in guids)
+        {
+            string path    = AssetDatabase.GUIDToAssetPath(guid);
+            var    profile = AssetDatabase.LoadAssetAtPath<PlayerProfile>(path);
+            if (profile == null) continue;
+
+            profile.level             = 1;
+            profile.xpCurrent         = 0;
+            profile.battlesRemaining  = 6;
+            profile.xpRequired        = XpSystem.XpRequired(1);
+            EditorUtility.SetDirty(profile);
+            Debug.Log($"[Debug] Profile {profile.profileName} resetado para Level 1");
+        }
+
+        AssetDatabase.SaveAssets();
+        Debug.Log("[Debug] Todos os profiles resetados para Level 1.");
+    }
+
     [MenuItem("Tools/AutoArms/Randomize Level 1 Stats")]
     public static void RandomizeAllProfiles()
     {
