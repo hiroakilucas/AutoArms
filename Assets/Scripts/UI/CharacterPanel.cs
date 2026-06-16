@@ -35,10 +35,9 @@ public class CharacterPanel : MonoBehaviour
     static readonly Color TabOn   = new Color(0.38f, 0.26f, 0.14f, 1f);
     static readonly Color TabOff  = new Color(0.18f, 0.12f, 0.08f, 1f);
 
-    // Panel covers right 40% of screen, bottom margin leaves ~130px free for buttons
     const float PanelXMin    = 0.60f;
-    const float PanelYMin    = 0.12f;  // ~130px free at bottom in 1080p
-    const float OffScreenX   = 790f;   // > panel width (768px) to fully hide it
+    const float PanelYMin    = 0.12f;   // ~130px free at bottom in 1080p
+    const float OffScreenX   = 790f;    // > panel width (768px)
     const float SlideInTime  = 0.30f;
     const float SlideOutTime = 0.20f;
 
@@ -80,7 +79,7 @@ public class CharacterPanel : MonoBehaviour
         while (elapsed < duration)
         {
             float t    = elapsed / duration;
-            float ease = 1f - (1f - t) * (1f - t);   // EaseOut quad
+            float ease = 1f - (1f - t) * (1f - t);  // EaseOut quad
             _panelRt.anchoredPosition = Vector2.Lerp(from, to, ease);
             elapsed += Time.deltaTime;
             yield return null;
@@ -103,34 +102,35 @@ public class CharacterPanel : MonoBehaviour
         scaler.referenceResolution = new Vector2(1920, 1080);
         canvasGo.AddComponent<GraphicRaycaster>();
 
-        // Overlay — raycastTarget=false so bottom buttons remain clickable
+        // Overlay — raycastTarget=false so buttons below panel stay clickable
         _overlayGo = new GameObject("Overlay");
         _overlayGo.transform.SetParent(canvasGo.transform, false);
+        var ovRt = _overlayGo.AddComponent<RectTransform>();
+        Stretch(ovRt);
         var ovImg = _overlayGo.AddComponent<Image>();
         ovImg.color = new Color(0f, 0f, 0f, 0.45f);
         ovImg.raycastTarget = false;
-        FullStretch(_overlayGo.GetComponent<RectTransform>());
 
-        // Panel — right 40%, leaves bottom ~130px free
+        // Panel — right 40% of screen, yMin leaves ~130px free at bottom
         var panelGo = new GameObject("Panel");
         panelGo.transform.SetParent(canvasGo.transform, false);
-        panelGo.AddComponent<Image>().color = PanelBg;
-        _panelRt = panelGo.GetComponent<RectTransform>();
+        _panelRt = panelGo.AddComponent<RectTransform>();
         _panelRt.anchorMin = new Vector2(PanelXMin, PanelYMin);
         _panelRt.anchorMax = new Vector2(1f, 1f);
         _panelRt.offsetMin = _panelRt.offsetMax = Vector2.zero;
+        panelGo.AddComponent<Image>().color = PanelBg;
 
         // Left gold border strip (4px)
         var brd = new GameObject("Border");
         brd.transform.SetParent(panelGo.transform, false);
-        brd.AddComponent<Image>().color = Gold;
         var brdRt = brd.AddComponent<RectTransform>();
         brdRt.anchorMin = Vector2.zero;
         brdRt.anchorMax = new Vector2(0f, 1f);
         brdRt.offsetMin = Vector2.zero;
         brdRt.offsetMax = new Vector2(4f, 0f);
+        brd.AddComponent<Image>().color = Gold;
 
-        // Close button — 70×70px, floats at top-right corner of panel
+        // Close button — 70×70px at top-right corner of panel
         BuildCloseButton(panelGo);
 
         BuildHeader(panelGo);
@@ -141,54 +141,50 @@ public class CharacterPanel : MonoBehaviour
 
     private void BuildCloseButton(GameObject panel)
     {
-        var closeGo = new GameObject("CloseBtn");
-        closeGo.transform.SetParent(panel.transform, false);
-        // Image first so Button auto-detects it as targetGraphic
-        var img = closeGo.AddComponent<Image>();
-        img.color = new Color(0.60f, 0.10f, 0.10f, 0.92f);
-        var btn = closeGo.AddComponent<Button>();
-        btn.onClick.AddListener(Close);
-        // 70×70px anchored to top-right corner
-        var rt = closeGo.GetComponent<RectTransform>();
+        var go = new GameObject("CloseBtn");
+        go.transform.SetParent(panel.transform, false);
+        var rt = go.AddComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot     = new Vector2(1f, 1f);
         rt.offsetMin = new Vector2(-78f, -78f);
-        rt.offsetMax = new Vector2(-8f, -8f);
-        AddCenteredText(closeGo, "✕", 28, Color.white);
+        rt.offsetMax = new Vector2(-8f,  -8f);
+        // Image before Button so Button.targetGraphic is set automatically
+        go.AddComponent<Image>().color = new Color(0.60f, 0.10f, 0.10f, 0.92f);
+        var btn = go.AddComponent<Button>();
+        btn.onClick.AddListener(Close);
+        AddLabel(go, "✕", 28, Color.white);
     }
 
     private void BuildHeader(GameObject panel)
     {
-        // Header: top 10% of panel
-        var hdr = MakeSection("Header", panel, 0.90f, 1.00f);
-        hdr.gameObject.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
+        var hdr = MakeStrip("Header", panel, 0.90f, 1.00f);
+        hdr.AddComponent<Image>().color = new Color(0.12f, 0.08f, 0.05f, 1f);
 
-        // Bottom gold line
+        // Bottom gold divider
         var line = new GameObject("Line");
         line.transform.SetParent(hdr.transform, false);
-        line.AddComponent<Image>().color = Gold;
         var lrt = line.AddComponent<RectTransform>();
         lrt.anchorMin = Vector2.zero; lrt.anchorMax = new Vector2(1f, 0f);
-        lrt.offsetMin = Vector2.zero; lrt.offsetMax = new Vector2(0f, 2f);
+        lrt.offsetMin = Vector2.zero;  lrt.offsetMax = new Vector2(0f, 2f);
+        line.AddComponent<Image>().color = Gold;
 
-        // Character name — leaves right 18% free for close button
+        // Character name (leaves right 20% free for close button overlap)
         var nameGo = new GameObject("Name");
         nameGo.transform.SetParent(hdr.transform, false);
+        var nrt = nameGo.AddComponent<RectTransform>();
+        nrt.anchorMin = Vector2.zero; nrt.anchorMax = new Vector2(0.80f, 1f);
+        nrt.offsetMin = new Vector2(16f, 0f); nrt.offsetMax = Vector2.zero;
         _charName = nameGo.AddComponent<TextMeshProUGUI>();
         _charName.fontSize = 28;
         _charName.color = Gold;
         _charName.fontStyle = FontStyles.Bold;
         _charName.alignment = TextAlignmentOptions.MidlineLeft;
-        var nrt = nameGo.AddComponent<RectTransform>();
-        nrt.anchorMin = Vector2.zero; nrt.anchorMax = new Vector2(0.80f, 1f);
-        nrt.offsetMin = new Vector2(16f, 0f); nrt.offsetMax = Vector2.zero;
     }
 
     private void BuildTabBar(GameObject panel)
     {
-        // Tab bar: 8% below header
-        var bar = MakeSection("TabBar", panel, 0.82f, 0.90f);
-        bar.gameObject.AddComponent<Image>().color = new Color(0.10f, 0.06f, 0.04f, 1f);
+        var bar = MakeStrip("TabBar", panel, 0.82f, 0.90f);
+        bar.AddComponent<Image>().color = new Color(0.10f, 0.06f, 0.04f, 1f);
 
         string[] labels = { "Stats", "Skills", "Armas" };
         Button[] btns   = new Button[3];
@@ -197,22 +193,22 @@ public class CharacterPanel : MonoBehaviour
             float x0 = i / 3f, x1 = (i + 1) / 3f;
             var tabGo = new GameObject($"Tab{labels[i]}");
             tabGo.transform.SetParent(bar.transform, false);
+            var trt = tabGo.AddComponent<RectTransform>();
+            trt.anchorMin = new Vector2(x0, 0f); trt.anchorMax = new Vector2(x1, 1f);
+            trt.offsetMin = trt.offsetMax = Vector2.zero;
             tabGo.AddComponent<Image>().color = TabOff;
             var btn = tabGo.AddComponent<Button>();
             int idx = i;
             btn.onClick.AddListener(() => ShowTab(idx));
             btns[i] = btn;
-            var trt = tabGo.AddComponent<RectTransform>();
-            trt.anchorMin = new Vector2(x0, 0f); trt.anchorMax = new Vector2(x1, 1f);
-            trt.offsetMin = trt.offsetMax = Vector2.zero;
-            AddCenteredText(tabGo, labels[i], 18, Color.white);
+            AddLabel(tabGo, labels[i], 18, Color.white);
         }
         _statsBtn = btns[0]; _skillsBtn = btns[1]; _armasBtn = btns[2];
     }
 
     private void BuildContent(GameObject panel)
     {
-        var content = MakeSection("Content", panel, 0f, 0.82f);
+        var content = MakeStrip("Content", panel, 0f, 0.82f);
         _statsRoot  = BuildStatsTab(content.gameObject);
         _skillsRoot = BuildSkillsTab(content.gameObject);
         _armasRoot  = BuildArmasTab(content.gameObject);
@@ -222,8 +218,8 @@ public class CharacterPanel : MonoBehaviour
 
     private GameObject BuildStatsTab(GameObject parent)
     {
-        var root = MakeFullChild("StatsTab", parent.transform);
-        MakeScrollContent(root.transform, out Transform content);
+        var root = MakeChild("StatsTab", parent.transform);
+        MakeScroll(root.transform, out Transform content);
 
         var vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
         vlg.padding = new RectOffset(14, 14, 12, 12);
@@ -232,45 +228,44 @@ public class CharacterPanel : MonoBehaviour
         vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
 
         // Level row
-        MakeTextRow(content, "levelRow", out _levelText);
+        MakeRow(content, "levelRow", out _levelText);
         _levelText.fontSize = 18; _levelText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
 
-        // XP bar background
-        var xpBg = MakeFixedRow(content, "XpBar", 22f);
+        // XP bar
+        var xpBg = MakeTall(content, "XpBar", 22f);
         xpBg.GetComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.90f);
         var xpFillGo = new GameObject("Fill");
         xpFillGo.transform.SetParent(xpBg.transform, false);
-        xpFillGo.AddComponent<Image>().color = new Color(0.20f, 0.55f, 0.90f, 0.90f);
-        _xpFill = xpFillGo.GetComponent<RectTransform>();
+        _xpFill = xpFillGo.AddComponent<RectTransform>();
         _xpFill.anchorMin = Vector2.zero; _xpFill.anchorMax = new Vector2(0f, 1f);
         _xpFill.offsetMin = _xpFill.offsetMax = Vector2.zero;
+        xpFillGo.AddComponent<Image>().color = new Color(0.20f, 0.55f, 0.90f, 0.90f);
 
         // XP label
-        MakeTextRow(content, "xpRow", out _xpLabel);
+        MakeRow(content, "xpRow", out _xpLabel);
         _xpLabel.fontSize = 14; _xpLabel.color = new Color(0.6f, 0.6f, 0.6f, 1f);
 
-        MakeSeparator(content);
+        MakeSep(content);
 
         // 2×2 stat grid
-        var gridGo = MakeFixedRow(content, "StatGrid", 180f);
+        var gridGo = MakeTall(content, "StatGrid", 180f);
         var glg = gridGo.gameObject.AddComponent<GridLayoutGroup>();
         glg.cellSize = new Vector2(320f, 80f);
         glg.spacing = new Vector2(8f, 8f);
         glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         glg.constraintCount = 2;
         glg.childAlignment = TextAnchor.UpperLeft;
-        glg.padding = new RectOffset(0, 0, 0, 0);
 
         _hpVal  = BuildStatCell(gridGo.gameObject, "❤  HP");
         _strVal = BuildStatCell(gridGo.gameObject, "⚔  STR");
         _agiVal = BuildStatCell(gridGo.gameObject, "✦  AGI");
         _spdVal = BuildStatCell(gridGo.gameObject, "⚡  SPD");
 
-        MakeSeparator(content);
+        MakeSep(content);
 
-        MakeTextRow(content, "battlesRow", out _battlesText);
+        MakeRow(content, "battlesRow", out _battlesText);
         _battlesText.fontSize = 16; _battlesText.color = Color.white;
-        MakeTextRow(content, "winRow", out _winRateText);
+        MakeRow(content, "winRow", out _winRateText);
         _winRateText.fontSize = 16; _winRateText.color = Color.white;
 
         return root;
@@ -284,22 +279,22 @@ public class CharacterPanel : MonoBehaviour
 
         var hdrGo = new GameObject("Lbl");
         hdrGo.transform.SetParent(cell.transform, false);
+        var hrt = hdrGo.AddComponent<RectTransform>();
+        hrt.anchorMin = Vector2.zero; hrt.anchorMax = new Vector2(1f, 0.48f);
+        hrt.offsetMin = new Vector2(8f, 2f); hrt.offsetMax = Vector2.zero;
         var hdrTxt = hdrGo.AddComponent<TextMeshProUGUI>();
         hdrTxt.text = label; hdrTxt.fontSize = 20;
         hdrTxt.color = new Color(Gold.r, Gold.g, Gold.b, 0.85f);
         hdrTxt.alignment = TextAlignmentOptions.TopLeft;
-        var hrt = hdrGo.AddComponent<RectTransform>();
-        hrt.anchorMin = Vector2.zero; hrt.anchorMax = new Vector2(1f, 0.48f);
-        hrt.offsetMin = new Vector2(8f, 2f); hrt.offsetMax = Vector2.zero;
 
         var valGo = new GameObject("Val");
         valGo.transform.SetParent(cell.transform, false);
-        var valTxt = valGo.AddComponent<TextMeshProUGUI>();
-        valTxt.fontSize = 22; valTxt.fontStyle = FontStyles.Bold; valTxt.color = Color.white;
-        valTxt.alignment = TextAlignmentOptions.MidlineLeft;
         var vrt = valGo.AddComponent<RectTransform>();
         vrt.anchorMin = new Vector2(0f, 0.48f); vrt.anchorMax = Vector2.one;
         vrt.offsetMin = new Vector2(8f, 0f); vrt.offsetMax = Vector2.zero;
+        var valTxt = valGo.AddComponent<TextMeshProUGUI>();
+        valTxt.fontSize = 22; valTxt.fontStyle = FontStyles.Bold; valTxt.color = Color.white;
+        valTxt.alignment = TextAlignmentOptions.MidlineLeft;
         return valTxt;
     }
 
@@ -307,8 +302,8 @@ public class CharacterPanel : MonoBehaviour
 
     private GameObject BuildSkillsTab(GameObject parent)
     {
-        var root = MakeFullChild("SkillsTab", parent.transform);
-        MakeScrollContent(root.transform, out Transform content);
+        var root = MakeChild("SkillsTab", parent.transform);
+        MakeScroll(root.transform, out Transform content);
 
         var glg = content.gameObject.AddComponent<GridLayoutGroup>();
         glg.cellSize = new Vector2(130f, 145f);
@@ -321,7 +316,7 @@ public class CharacterPanel : MonoBehaviour
         csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         _skillsGrid = content;
 
-        _skillsEmpty = MakeCenteredMessage(root.transform, "Nenhuma skill ainda\n— suba de nível!");
+        _skillsEmpty = MakeMsg(root.transform, "Nenhuma skill ainda\n— suba de nível!");
         return root;
     }
 
@@ -329,8 +324,8 @@ public class CharacterPanel : MonoBehaviour
 
     private GameObject BuildArmasTab(GameObject parent)
     {
-        var root = MakeFullChild("ArmasTab", parent.transform);
-        MakeScrollContent(root.transform, out Transform content);
+        var root = MakeChild("ArmasTab", parent.transform);
+        MakeScroll(root.transform, out Transform content);
 
         var vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
         vlg.padding = new RectOffset(10, 10, 10, 10);
@@ -341,7 +336,7 @@ public class CharacterPanel : MonoBehaviour
         csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         _armasList = content;
 
-        _armasEmpty = MakeCenteredMessage(root.transform, "Sem armas equipadas");
+        _armasEmpty = MakeMsg(root.transform, "Sem armas equipadas");
         return root;
     }
 
@@ -407,21 +402,21 @@ public class CharacterPanel : MonoBehaviour
             {
                 var iconGo = new GameObject("Icon");
                 iconGo.transform.SetParent(cell.transform, false);
-                var img = iconGo.AddComponent<Image>();
-                img.sprite = skill.icon; img.preserveAspect = true;
                 var irt = iconGo.AddComponent<RectTransform>();
                 irt.anchorMin = new Vector2(0.08f, 0.28f); irt.anchorMax = new Vector2(0.92f, 0.92f);
                 irt.offsetMin = irt.offsetMax = Vector2.zero;
+                var img = iconGo.AddComponent<Image>();
+                img.sprite = skill.icon; img.preserveAspect = true;
             }
 
             var nameGo = new GameObject("Name");
             nameGo.transform.SetParent(cell.transform, false);
-            var nTxt = nameGo.AddComponent<TextMeshProUGUI>();
-            nTxt.text = skill.skillName ?? ""; nTxt.fontSize = 16; nTxt.color = Color.white;
-            nTxt.alignment = TextAlignmentOptions.Center;
             var nrt = nameGo.AddComponent<RectTransform>();
             nrt.anchorMin = Vector2.zero; nrt.anchorMax = new Vector2(1f, 0.26f);
             nrt.offsetMin = nrt.offsetMax = Vector2.zero;
+            var nTxt = nameGo.AddComponent<TextMeshProUGUI>();
+            nTxt.text = skill.skillName ?? ""; nTxt.fontSize = 16; nTxt.color = Color.white;
+            nTxt.alignment = TextAlignmentOptions.Center;
         }
     }
 
@@ -446,66 +441,69 @@ public class CharacterPanel : MonoBehaviour
     {
         var row = new GameObject(w.weaponName ?? "Weapon");
         row.transform.SetParent(_armasList, false);
-        row.AddComponent<Image>().color = SectBg;
-        var rrt = row.GetComponent<RectTransform>();
+        var rrt = row.AddComponent<RectTransform>();
         rrt.sizeDelta = new Vector2(0f, 68f);
+        row.AddComponent<Image>().color = SectBg;
 
         Sprite spr = (w.icon != null) ? w.icon : w.inHandSprite;
         if (spr != null)
         {
             var iconGo = new GameObject("Icon");
             iconGo.transform.SetParent(row.transform, false);
-            var img = iconGo.AddComponent<Image>();
-            img.sprite = spr; img.preserveAspect = true;
             var irt = iconGo.AddComponent<RectTransform>();
             irt.anchorMin = new Vector2(0f, 0.06f); irt.anchorMax = new Vector2(0f, 0.94f);
-            irt.offsetMin = new Vector2(10f, 0f); irt.offsetMax = new Vector2(60f, 0f);
+            irt.offsetMin = new Vector2(10f, 0f);   irt.offsetMax = new Vector2(60f, 0f);
+            var img = iconGo.AddComponent<Image>();
+            img.sprite = spr; img.preserveAspect = true;
         }
 
         var infoGo = new GameObject("Info");
         infoGo.transform.SetParent(row.transform, false);
+        var irt2 = infoGo.AddComponent<RectTransform>();
+        irt2.anchorMin = Vector2.zero; irt2.anchorMax = Vector2.one;
+        irt2.offsetMin = new Vector2(68f, 4f); irt2.offsetMax = new Vector2(-8f, -4f);
         var info = infoGo.AddComponent<TextMeshProUGUI>();
         info.text = $"<b>{w.weaponName}</b>\n<size=13><color=#C8A044>{w.type}</color>  DMG {w.damage}</size>";
         info.fontSize = 16; info.color = Color.white;
         info.alignment = TextAlignmentOptions.MidlineLeft;
-        var irt2 = infoGo.AddComponent<RectTransform>();
-        irt2.anchorMin = Vector2.zero; irt2.anchorMax = Vector2.one;
-        irt2.offsetMin = new Vector2(68f, 4f); irt2.offsetMax = new Vector2(-8f, -4f);
     }
 
     // ── Layout Helpers ───────────────────────────────────────────────────────
 
-    private static GameObject MakeFullChild(string name, Transform parent)
+    // Full-stretch child (transparent)
+    private static GameObject MakeChild(string name, Transform parent)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
-        FullStretch(go.AddComponent<RectTransform>());
+        Stretch(go.AddComponent<RectTransform>());
         return go;
     }
 
-    private static RectTransform MakeSection(string name, GameObject panel, float yMin, float yMax)
+    // Horizontal strip anchored by y-fraction in its parent
+    private static RectTransform MakeStrip(string name, GameObject parent, float yMin, float yMax)
     {
         var go = new GameObject(name);
-        go.transform.SetParent(panel.transform, false);
+        go.transform.SetParent(parent.transform, false);
         var rt = go.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(0f, yMin); rt.anchorMax = new Vector2(1f, yMax);
         rt.offsetMin = rt.offsetMax = Vector2.zero;
         return rt;
     }
 
-    private static RectTransform MakeScrollContent(Transform parent, out Transform content)
+    // ScrollRect + Viewport + Content
+    private static void MakeScroll(Transform parent, out Transform content)
     {
         var scrollGo = new GameObject("Scroll");
         scrollGo.transform.SetParent(parent, false);
+        Stretch(scrollGo.AddComponent<RectTransform>());
         scrollGo.AddComponent<Image>().color = Color.clear;
-        FullStretch(scrollGo.GetComponent<RectTransform>());
         var sr = scrollGo.AddComponent<ScrollRect>();
         sr.horizontal = false;
 
         var vpGo = new GameObject("Viewport");
         vpGo.transform.SetParent(scrollGo.transform, false);
+        Stretch(vpGo.AddComponent<RectTransform>());
         vpGo.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
-        FullStretch(vpGo.GetComponent<RectTransform>());
         var mask = vpGo.AddComponent<Mask>();
         mask.showMaskGraphic = false;
         sr.viewport = vpGo.GetComponent<RectTransform>();
@@ -517,32 +515,35 @@ public class CharacterPanel : MonoBehaviour
         crt.pivot = new Vector2(0.5f, 1f); crt.offsetMin = crt.offsetMax = Vector2.zero;
         sr.content = crt;
         content = cGo.transform;
-        return crt;
     }
 
-    private static GameObject MakeTextRow(Transform parent, string name, out TMP_Text txt)
+    // Text row managed by VerticalLayoutGroup
+    private static void MakeRow(Transform parent, string name, out TMP_Text txt)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         var le = go.AddComponent<LayoutElement>();
         le.preferredHeight = 28f; le.flexibleWidth = 1f;
+        // RT added by TMP automatically; we don't need to store it
         txt = go.AddComponent<TextMeshProUGUI>();
         txt.color = Color.white; txt.fontSize = 14;
         txt.alignment = TextAlignmentOptions.MidlineLeft;
-        return go;
     }
 
-    private static RectTransform MakeFixedRow(Transform parent, string name, float height)
+    // Fixed-height block managed by VerticalLayoutGroup
+    private static RectTransform MakeTall(Transform parent, string name, float height)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         var le = go.AddComponent<LayoutElement>();
         le.preferredHeight = height; le.flexibleWidth = 1f;
+        // RT first, Image after
+        var rt = go.AddComponent<RectTransform>();
         go.AddComponent<Image>().color = Color.clear;
-        return go.GetComponent<RectTransform>();
+        return rt;
     }
 
-    private static void MakeSeparator(Transform parent)
+    private static void MakeSep(Transform parent)
     {
         var go = new GameObject("Sep");
         go.transform.SetParent(parent, false);
@@ -551,7 +552,7 @@ public class CharacterPanel : MonoBehaviour
         go.AddComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.4f);
     }
 
-    private static TMP_Text MakeCenteredMessage(Transform parent, string text)
+    private static TMP_Text MakeMsg(Transform parent, string text)
     {
         var go = new GameObject("EmptyMsg");
         go.transform.SetParent(parent, false);
@@ -565,17 +566,18 @@ public class CharacterPanel : MonoBehaviour
         return txt;
     }
 
-    private static void AddCenteredText(GameObject parent, string text, float size, Color color)
+    // Centered label that fills its parent
+    private static void AddLabel(GameObject parent, string text, float size, Color color)
     {
         var go = new GameObject("Lbl");
         go.transform.SetParent(parent.transform, false);
+        Stretch(go.AddComponent<RectTransform>());
         var txt = go.AddComponent<TextMeshProUGUI>();
         txt.text = text; txt.fontSize = size; txt.color = color;
         txt.alignment = TextAlignmentOptions.Center;
-        FullStretch(go.GetComponent<RectTransform>());
     }
 
-    private static void FullStretch(RectTransform rt)
+    private static void Stretch(RectTransform rt)
     {
         rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
         rt.offsetMin = rt.offsetMax = Vector2.zero;
