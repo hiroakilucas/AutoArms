@@ -50,8 +50,8 @@ public class MainMenuCharacterPreview : MonoBehaviour
         container.transform.SetParent(canvasGo.transform, false);
         // RT first, then Image — safe order
         var crt = container.AddComponent<RectTransform>();
-        crt.anchorMin = new Vector2(0.30f, 0.03f);
-        crt.anchorMax = new Vector2(0.70f, 0.22f);
+        crt.anchorMin = new Vector2(0.30f, 0.21f);  // 226px > button top 203px
+        crt.anchorMax = new Vector2(0.70f, 0.40f);
         crt.offsetMin = crt.offsetMax = Vector2.zero;
         container.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
 
