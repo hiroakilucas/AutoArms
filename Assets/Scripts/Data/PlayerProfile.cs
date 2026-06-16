@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [CreateAssetMenu(fileName = "NewPlayerProfile", menuName = "Game/Player Profile", order = 100)]
 public class PlayerProfile : ScriptableObject
@@ -44,6 +45,9 @@ public class PlayerProfile : ScriptableObject
     public float counter = 0f;
     public float criticalChance = 0f;
     public float hitSpeed = 1f;
+
+    [Header("Skills")]
+    public List<SkillData> skills = new List<SkillData>();
 
     [Header("Progresso")]
     [Tooltip("N�vel atual do personagem")]

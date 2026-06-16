@@ -1,10 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class CombatHUD : MonoBehaviour
 {
     private RectTransform p1FillRect;
     private RectTransform p2FillRect;
+    private TMP_Text p1Label;
+    private TMP_Text p2Label;
     private GameObject _canvasObject;
 
     public Transform CanvasTransform => _canvasObject != null ? _canvasObject.transform : null;
@@ -12,12 +15,16 @@ public class CombatHUD : MonoBehaviour
     public void Initialize(HealthSystem health1, HealthSystem health2)
     {
         _canvasObject = CreateCanvas();
-        var canvas = _canvasObject;
-        p1FillRect = CreateBar(canvas, isLeft: true);
-        p2FillRect = CreateBar(canvas, isLeft: false);
+        (p1FillRect, p1Label) = CreateBar(_canvasObject, isLeft: true);
+        (p2FillRect, p2Label) = CreateBar(_canvasObject, isLeft: false);
 
-        health1.OnHealthChanged += (cur, max) => SetFill(p1FillRect, cur, max, isLeft: true);
-        health2.OnHealthChanged += (cur, max) => SetFill(p2FillRect, cur, max, isLeft: false);
+        health1.OnHealthChanged += (cur, max) => { SetFill(p1FillRect, cur, max, isLeft: true);  SetLabel(p1Label, cur, max); };
+        health2.OnHealthChanged += (cur, max) => { SetFill(p2FillRect, cur, max, isLeft: false); SetLabel(p2Label, cur, max); };
+    }
+
+    private static void SetLabel(TMP_Text lbl, int cur, int max)
+    {
+        if (lbl != null) lbl.text = $"{cur}/{max}";
     }
 
     // P1: anchorMax.x = health% → barra encolhe da direita para a esquerda
@@ -47,7 +54,7 @@ public class CombatHUD : MonoBehaviour
         return go;
     }
 
-    private static RectTransform CreateBar(GameObject canvas, bool isLeft)
+    private static (RectTransform fill, TMP_Text label) CreateBar(GameObject canvas, bool isLeft)
     {
         // Outer container — dark border
         var container = new GameObject(isLeft ? "P1Bar" : "P2Bar");
@@ -81,7 +88,23 @@ public class CombatHUD : MonoBehaviour
         fillRt.offsetMin = Vector2.zero;
         fillRt.offsetMax = Vector2.zero;
 
-        return fillRt;
+        // HP label — rendered on top of fill/red, centered over the whole bar
+        var lblGo = new GameObject("HPLabel");
+        lblGo.transform.SetParent(container.transform, false);
+        var lblRt = lblGo.AddComponent<RectTransform>();
+        lblRt.anchorMin = Vector2.zero;
+        lblRt.anchorMax = Vector2.one;
+        lblRt.offsetMin = Vector2.zero;
+        lblRt.offsetMax = Vector2.zero;
+        var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+        lbl.fontSize = 12;
+        lbl.color = Color.white;
+        lbl.fontStyle = FontStyles.Bold;
+        lbl.alignment = TextAlignmentOptions.Center;
+        lbl.outlineWidth = 0.2f;
+        lbl.outlineColor = Color.black;
+
+        return (fillRt, lbl);
     }
 
     private static void AddImage(GameObject parent, string name, Color color)

@@ -6,6 +6,19 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private string selectWeapons = "03_SelectWeapons";
     [SerializeField] private SelectedProfileHolder selectedProfileHolder;
 
+    private CharacterPanel _charPanel;
+
+    public void OnCharacterButton()
+    {
+        if (_charPanel == null)
+        {
+            var go = new GameObject("CharacterPanel");
+            _charPanel = go.AddComponent<CharacterPanel>();
+            _charPanel.Setup(selectedProfileHolder);
+        }
+        _charPanel.Open();
+    }
+
     public void OnPlayButton()
     {
         if (selectedProfileHolder.currentProfile == null)
@@ -23,8 +36,8 @@ public class MainMenuController : MonoBehaviour
     }
     public void OnOptionsButton()
     {
-        // Aqui você pode abrir um painel de configurações
-        Debug.Log("Abrir Configurações (a implementar)");
+        // Aqui vocï¿½ pode abrir um painel de configuraï¿½ï¿½es
+        Debug.Log("Abrir Configuraï¿½ï¿½es (a implementar)");
     }
 
     public void OnQuitButton()

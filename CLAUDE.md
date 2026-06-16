@@ -693,6 +693,11 @@ Precisam de ícone em Assets/Data/UI/Skills/:
 ### Como atualizar
 Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
+### Fase 0 — UI Básica de Personagem
+- [x] HP numbers (HP_ATUAL/HP_MAX) nas barras de vida do combate via TMP_Text
+- [x] Painel de personagem slide-in pela direita na MainMenu (3 abas: Stats / Skills / Armas)
+- [x] HUD permanente abaixo do personagem na MainMenu (nome + Level, barra de XP, 3 ícones de skill)
+
 ### Fase 1 — Interface & Personagens
 - [ ] Melhorar interface da página inicial
 - [ ] Melhorar interface da tela de escolha de personagens
@@ -818,5 +823,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
 
 ### Progresso
-- Total: 80 tarefas | Concluídas: 29
-- Última atualização: 2026-06-15 (Stats System: 9 novos campos em PlayerProfile/PlayerCombat, CombatSceneLoader.ApplySkillStats com 15 skills passivas, initiative-based attack order em AttackSequencer, armor/leadSkeleton/ballet shoes em HitRoutine)
+- Total: 83 tarefas | Concluídas: 32
+- Última atualização: 2026-06-16 (UI: HP numbers nas barras de vida, CharacterPanel slide-in com 3 abas, Summary HUD com nome/level/XP/skill icons na MainMenu)
