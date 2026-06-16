@@ -271,10 +271,10 @@ Verificado **no início do `AttackRoutine`, ANTES do melee**, após o idle. Se t
 | WeaponType | Chance |
 |---|---|
 | Thrown | 100% |
-| Dagger | 60% |
-| Fast | 60% |
-| Sword | 60% |
-| Heavy | 60% |
+| Dagger | 15% |
+| Fast | 15% |
+| Sword | 15% |
+| Heavy | 10% |
 | outros / sem arma | 0% |
 
 Flow:
@@ -299,14 +299,14 @@ Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, s
 `PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
 ### Unarmed Combat
-When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `1 + StrBonus()`. Animation speed boosted to 2× via `AnimationController.SetSpeed(2f)` during the slash, reset to `1f` afterward (all exit paths including dodge/block).
+When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `5 + str` (base 5, +1 per STR point, no division). Armor is applied afterward as usual. Animation speed boosted to 2× via `AnimationController.SetSpeed(2f)` during the slash, reset to `1f` afterward (all exit paths including dodge/block).
 `ComboChance()` returns 10% while unarmed (plus AGI bonus).
 
 ### STR Attribute
 `PlayerCombat.str` (default 10). `StrBonus() = max(0, (str-10)/2)`. Heavy weapons use `HeavyStrBonus() = max(0, str-10)` (dobro do bônus normal).
 | Situation | Damage |
 |---|---|
-| Unarmed (punch) | `1 + StrBonus()` |
+| Unarmed (punch) | `5 + str` (base 5, +1/STR; armor applied after) |
 | Heavy weapon | `Random.Range(30, 50) + HeavyStrBonus()` |
 | Sword | `Random.Range(10, 18)` (~10–17) |
 | Dagger | `Random.Range(7, 13)` (~7–12) |
@@ -507,7 +507,7 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 
 | Campo | Tipo | Default | Onde é usado |
 |---|---|---|---|
-| `str` | int | 10 | `StrBonus()`: +0.5 dano/ponto acima de 10 (Heavy: +1/ponto via `HeavyStrBonus()`) |
+| `str` | int | 10 | Unarmed: `5 + str` dano total. `StrBonus() = max(0,(str-10)/2)` (armas melee não-Heavy). `HeavyStrBonus() = max(0, str-10)` (Heavy) |
 | `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +1.5%/ponto acima de 3 |
 | `speed` | int | 10 | `AttackSequencer.CombatLoop`: acumula debt a cada round; debt >= speed do oponente = ação extra (ver Speed System) |
 | `armor` | float | 0 | `HitRoutine`: `finalDamage = Max(1, RoundToInt(damage × (1 − armor)))` |

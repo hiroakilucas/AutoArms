@@ -347,10 +347,10 @@ public class CombatSimulator
         return attacker.currentWeaponData.type switch
         {
             WeaponType.Thrown  => 1.00f,
-            WeaponType.Dagger  => 0.60f,
-            WeaponType.Fast    => 0.60f,
-            WeaponType.Sword   => 0.60f,
-            WeaponType.Heavy   => 0.60f,
+            WeaponType.Dagger  => 0.15f,
+            WeaponType.Fast    => 0.15f,
+            WeaponType.Sword   => 0.15f,
+            WeaponType.Heavy   => 0.10f,
             _                  => 0f
         };
     }
@@ -360,7 +360,7 @@ public class CombatSimulator
     private int CalcBaseDamage(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null)
-            return 1 + StrBonus(attacker);
+            return 5 + attacker.str;
         return attacker.currentWeaponData.type switch
         {
             WeaponType.Heavy  => _rng.Next(30, 50) + HeavyStrBonus(attacker),

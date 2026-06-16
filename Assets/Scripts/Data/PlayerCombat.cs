@@ -144,10 +144,10 @@ public class PlayerCombat : MonoBehaviour
         return weaponHandler.currentType switch
         {
             WeaponType.Thrown  => 1.00f,
-            WeaponType.Dagger  => 0.60f,
-            WeaponType.Fast    => 0.60f,
-            WeaponType.Sword   => 0.60f,
-            WeaponType.Heavy   => 0.60f,
+            WeaponType.Dagger  => 0.15f,
+            WeaponType.Fast    => 0.15f,
+            WeaponType.Sword   => 0.15f,
+            WeaponType.Heavy   => 0.10f,
             _                  => 0f
         };
     }
@@ -237,7 +237,7 @@ public class PlayerCombat : MonoBehaviour
     private int CalcDamage()
     {
         if (weaponHandler.CurrentWeapon == null)
-            return 1 + StrBonus();
+            return 5 + str;
         return weaponHandler.currentType switch
         {
             WeaponType.Heavy  => Random.Range(30, 50) + HeavyStrBonus(),
