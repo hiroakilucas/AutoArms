@@ -216,16 +216,66 @@ The combo fires `SetTrigger(slashTrigger)` from within the Slashing state. This 
 
 ## Combat Systems
 
+### Fórmula de Dano (multiplicativa, estilo My Brute)
+`PlayerCombat.CalcDamage(isCrit)` / `CombatSimulator.CalcDamage(attacker, isCrit)`:
+
+```
+finalDamage = Max(1, RoundToInt(weaponBaseDamage × (1 + str/10) × critMultiplier × (1 - defenderArmor)))
+```
+
+- `weaponBaseDamage` — `WeaponBaseDamage()`: Unarmed 5, Dagger `Random.Range(7,13)`, Sword `Random.Range(10,18)`, Heavy `Random.Range(30,50)`, outros tipos usam `weaponData.damage` (ou 3 se ≤0).
+- `critMultiplier` — `1f` se não for crítico; senão `weaponData.critDamageMultiplier` (ou `UnarmedStats.CritDamageMultiplier = 1.5f` se desarmado).
+- Lead Skeleton (`×0.85`) é aplicado **depois** do crit e **antes** da armadura, só para armas Heavy.
+- Verificação: STR 4, soco base 5 → `5 × (1 + 4/10) = 7`.
+
+### Propriedades das Armas (`WeaponData`, inspirado no My Brute)
+Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a classe estática `UnarmedStats` (mesmo arquivo) em vez de uma instância de `WeaponData`.
+
+| Campo | Efeito |
+|---|---|
+| `hitSpeed` | Multiplicador de velocidade da animação de slash: `slashSpeed = PlayerCombat.hitSpeed × weaponData.hitSpeed` |
+| `drawChance` | % chance de pegar esta arma ao pick up (campo reservado — sem mecânica de peso ainda) |
+| `reach` | Soma-se à distância base por tipo em `AttackPosition()` |
+| `critChanceBonus` | Soma-se em `CritChance()` |
+| `critDamageMultiplier` | Multiplicador de dano em crítico (substitui o antigo `×2` fixo) |
+| `evasionBonus` | Soma-se em `DodgeChance()` (bônus do **defensor**) |
+| `dexterityBonus` | Reservado (sem mecânica ainda, como `accuracy`/`reversal` em `PlayerProfile`) |
+| `reversalBonus` | Reservado |
+| `blockBonus` | Soma-se em `BlockChance()` (bônus do **defensor**) |
+| `accuracyBonus` | Reservado |
+| `disarmBonus` | Soma-se em `DisarmChance()` (bônus do **atacante**) |
+| `comboBonus` | Soma-se em `ComboChance()` (bônus do **atacante**) |
+| `deflectBonus` | Reservado |
+
+**Valores por tipo:**
+| Propriedade | Unarmed | Knife/Dagger | Broadsword/Sword | Bumps/Heavy |
+|---|---|---|---|---|
+| `hitSpeed` | 1.0 | 2.0 | 1.0 | 0.6 |
+| damage (base) | 5 | 10 (7–13) | 14 (10–18) | 40 (30–50) |
+| `drawChance` | — | 0.33 | 0.33 | 0.33 |
+| `reach` | 0 | 0 | +1 | +1 |
+| `critChanceBonus` | +0.05 | +0.25 | +0.30 | +0.20 |
+| `critDamageMultiplier` | 1.5 | 1.25 | 1.30 | 1.20 |
+| `evasionBonus` | +0.10 | +0.10 | 0 | -0.30 |
+| `dexterityBonus` | +0.20 | +0.50 | 0 | -0.65 |
+| `reversalBonus` | 0 | — | +0.10 | -0.30 |
+| `blockBonus` | -0.25 | — | +0.15 | -0.30 |
+| `accuracyBonus` | 0 | — | 0 | +0.30 |
+| `disarmBonus` | +0.05 | — | +0.15 | +0.10 |
+| `comboBonus` | 0 | +0.30 | 0 | -0.60 |
+
+Os 5 `WeaponData.asset` existentes (`Satyr1`=Dagger, `Golem3`=Heavy, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie`=Sword) já têm esses valores aplicados.
+
 ### Critical Hit
-`CritChance()` on the attacker, based on attacker's weapon type:
-| WeaponType | Chance |
+`CritChance()` no atacante = base por tipo de arma + `weaponData.critChanceBonus` (ou `UnarmedStats.CritChanceBonus`) + `criticalChance` (profile/skills):
+| WeaponType | Chance base |
 |---|---|
 | Dagger | 8% |
 | Sword | 5% |
 | Heavy | 3% |
 | others | 5% |
 
-On crit: `finalDamage = baseDamage × 2`. Popup shows "CRIT!\n{damage}" in red, font 5.
+On crit: `critMultiplier = weaponData.critDamageMultiplier` (ver tabela de propriedades acima) entra na fórmula multiplicativa de dano. Popup mostra "CRIT!\n{damage}" em vermelho, fonte 5.
 > Future skill **Fierce Brute**: +10% crit permanente.
 
 ### Dodge
@@ -238,7 +288,7 @@ On crit: `finalDamage = baseDamage × 2`. Popup shows "CRIT!\n{damage}" in red, 
 | Heavy | 5% |
 | others | 10% |
 
-Each agility point above 3 adds +2% dodge (teto máximo de esquiva total: 60%). Same AGI threshold adds +1.5% combo in `ComboChance()`.
+Each agility point above 3 adds +2% dodge, plus the defender's `weaponData.evasionBonus` (or `UnarmedStats.EvasionBonus = +10%` if unarmed) — teto máximo de esquiva total: 60%. Same AGI threshold adds +1.5% combo in `ComboChance()`.
 
 When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4). Popup shows "ESQUIVA!" in blue. Combo continues normally.
 > Future skill **Sixth Sense**: +10% dodge permanente.
@@ -254,6 +304,8 @@ When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays 
 | Slow | 5% |
 | Sem arma (`CurrentWeapon == null`) | 0% |
 | outros | 0% |
+
+Soma-se ainda o `weaponData.blockBonus` do defensor (ou `UnarmedStats.BlockBonus = -25%` se desarmado) + `defender.counter`.
 
 Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal → Desarmar**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
 
@@ -299,20 +351,21 @@ Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, s
 `PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
 ### Unarmed Combat
-When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with damage = `5 + str` (base 5, +1 per STR point, no division). Armor is applied afterward as usual. Animation speed boosted to 2× via `AnimationController.SetSpeed(2f)` during the slash, reset to `1f` afterward (all exit paths including dodge/block).
-`ComboChance()` returns 10% while unarmed (plus AGI bonus).
+When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with `weaponBaseDamage = UnarmedStats.Damage = 5`, fed into the multiplicative damage formula (see above). Slash animation speed = `hitSpeed × UnarmedStats.HitSpeed (1.0)`, reset to `1f` afterward (all exit paths including dodge/block).
+`ComboChance()` returns 10% base while unarmed, plus AGI bonus and `UnarmedStats.ComboBonus` (0).
 
 ### STR Attribute
-`PlayerCombat.str` (default 10). `StrBonus() = max(0, (str-10)/2)`. Heavy weapons use `HeavyStrBonus() = max(0, str-10)` (dobro do bônus normal).
-| Situation | Damage |
+`PlayerCombat.str` (default 10) feeds directly into the multiplicative damage formula: `(1 + str/10)`. There is no longer a "baseline 10 = no bonus" offset — STR scales damage linearly from 0 (no bonus) upward (STR 10 → ×2.0, STR 4 → ×1.4). See **Fórmula de Dano** above for the full formula (`weaponBaseDamage × (1 + str/10) × critMultiplier × (1 - defenderArmor)`).
+
+| `weaponBaseDamage` | Value |
 |---|---|
-| Unarmed (punch) | `5 + str` (base 5, +1/STR; armor applied after) |
-| Heavy weapon | `Random.Range(30, 50) + HeavyStrBonus()` |
+| Unarmed (punch) | `UnarmedStats.Damage = 5` |
+| Heavy weapon | `Random.Range(30, 50)` |
 | Sword | `Random.Range(10, 18)` (~10–17) |
 | Dagger | `Random.Range(7, 13)` (~7–12) |
 | Other types | `weaponData.damage` if > 0, else `3` |
 
-Throw damage uses the same ranges WITHOUT StrBonus (the weapon flies, not a melee hit).
+Throw damage uses the same ranges WITHOUT the STR multiplier (the weapon flies, not a melee hit).
 
 > Future skill **Iron Fist**: increases unarmed damage.
 
@@ -325,6 +378,8 @@ Throw damage uses the same ranges WITHOUT StrBonus (the weapon flies, not a mele
 | Sword | 10% |
 | Heavy | 5% |
 | outros / desarmado | 0% |
+
+Soma-se ainda o `weaponData.disarmBonus` do atacante (ou `UnarmedStats.DisarmBonus = +5%` se desarmado — soco também pode desarmar).
 
 > Future skill **Impact**: +15% disarm permanente.
 
@@ -507,17 +562,17 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 
 | Campo | Tipo | Default | Onde é usado |
 |---|---|---|---|
-| `str` | int | 10 | Unarmed: `5 + str` dano total. `StrBonus() = max(0,(str-10)/2)` (armas melee não-Heavy). `HeavyStrBonus() = max(0, str-10)` (Heavy) |
+| `str` | int | 10 | Fórmula multiplicativa de dano: `weaponBaseDamage × (1 + str/10) × critMultiplier × (1 − defenderArmor)` (ver Combat Systems → Fórmula de Dano) |
 | `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +1.5%/ponto acima de 3 |
 | `speed` | int | 10 | `AttackSequencer.CombatLoop`: acumula debt a cada round; debt >= speed do oponente = ação extra (ver Speed System) |
-| `armor` | float | 0 | `HitRoutine`: `finalDamage = Max(1, RoundToInt(damage × (1 − armor)))` |
+| `armor` | float | 0 | Fator `(1 − armor)` na fórmula multiplicativa de dano |
 | `evasion` | float | 0 | `DodgeChance()`: adicionado à chance base |
 | `accuracy` | float | 0 | future: reduz chance de esquiva do oponente |
 | `initiative` | int | 0 | `AttackSequencer.StartWhenReady`: quem tem mais initiative ataca primeiro |
 | `reversal` | float | 0 | future: chance de reverter a iniciativa |
 | `counter` | float | 0 | `BlockChance()`: adicionado à chance base do defensor |
 | `criticalChance` | float | 0 | `CritChance()`: adicionado à chance base do atacante |
-| `hitSpeed` | float | 1 | `HitRoutine`: velocidade da animação de slash (`slashSpeed = isUnarmed ? 2f : hitSpeed`) |
+| `hitSpeed` | float | 1 | `HitRoutine`: velocidade da animação de slash (`slashSpeed = hitSpeed × weaponData.hitSpeed`, ver tabela de Propriedades das Armas) |
 | `comboChanceBonus` | float | 0 | `ComboChance()`: adicionado à chance base |
 | `runSpeedMultiplier` | float | 1 | `RuntimeRunSpeed = settings.runSpeed × runSpeedMultiplier` |
 

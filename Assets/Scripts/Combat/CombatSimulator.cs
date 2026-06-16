@@ -198,18 +198,16 @@ public class CombatSimulator
             return;
         }
 
-        // Normal hit
-        bool isCrit      = Roll(CritChance(attacker));
-        int  baseDamage  = CalcBaseDamage(attacker);
-        int  finalDamage = isCrit ? baseDamage * 2 : baseDamage;
+        // Normal hit — fórmula multiplicativa do My Brute
+        bool  isCrit = Roll(CritChance(attacker));
+        float dmg    = CalcDamage(attacker, isCrit);
 
         // Lead Skeleton: -15% heavy damage
         if (defender.leadSkeleton && attacker.currentWeaponData?.type == WeaponType.Heavy)
-            finalDamage = Mathf.Max(1, Mathf.RoundToInt(finalDamage * 0.85f));
+            dmg *= 0.85f;
 
         // Armor reduction
-        if (defender.armor > 0f)
-            finalDamage = Mathf.Max(1, Mathf.RoundToInt(finalDamage * (1f - defender.armor)));
+        int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
 
         Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, isCombo = isCombo });
 
@@ -281,28 +279,32 @@ public class CombatSimulator
                 WeaponType.Heavy  => 0.05f,
                 _                 => 0.10f
             };
-        float agiBonus = Mathf.Max(0, defender.agility - 3) * 0.02f;
-        return Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion);
+        float agiBonus      = Mathf.Max(0, defender.agility - 3) * 0.02f;
+        float weaponEvasion = defender.currentWeaponData != null
+            ? defender.currentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
+        return Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion + weaponEvasion);
     }
 
     private float BlockChance(PlayerState attacker, PlayerState defender)
     {
-        if (defender.currentWeaponData == null) return 0f;
-        float weaponBonus = defender.currentWeaponData.type switch
-        {
-            WeaponType.Block  => 0.50f,
-            WeaponType.Dagger => 0.15f,
-            WeaponType.Sword  => 0.15f,
-            WeaponType.Heavy  => 0.15f,
-            WeaponType.Slow   => 0.05f,
-            _                 => 0f
-        };
-        return weaponBonus + defender.counter;
+        float weaponBonus = defender.currentWeaponData == null ? 0f :
+            defender.currentWeaponData.type switch
+            {
+                WeaponType.Block  => 0.50f,
+                WeaponType.Dagger => 0.15f,
+                WeaponType.Sword  => 0.15f,
+                WeaponType.Heavy  => 0.15f,
+                WeaponType.Slow   => 0.05f,
+                _                 => 0f
+            };
+        float weaponBlockBonus = defender.currentWeaponData != null
+            ? defender.currentWeaponData.blockBonus : UnarmedStats.BlockBonus;
+        return weaponBonus + defender.counter + weaponBlockBonus;
     }
 
     private float CritChance(PlayerState attacker)
     {
-        float weaponBonus = attacker.currentWeaponData == null ? 0.05f :
+        float baseChance = attacker.currentWeaponData == null ? 0.05f :
             attacker.currentWeaponData.type switch
             {
                 WeaponType.Dagger => 0.08f,
@@ -310,7 +312,9 @@ public class CombatSimulator
                 WeaponType.Heavy  => 0.03f,
                 _                 => 0.05f
             };
-        return weaponBonus + attacker.criticalChance;
+        float weaponBonus = attacker.currentWeaponData != null
+            ? attacker.currentWeaponData.critChanceBonus : UnarmedStats.CritChanceBonus;
+        return baseChance + weaponBonus + attacker.criticalChance;
     }
 
     private float ComboChance(PlayerState attacker)
@@ -324,21 +328,26 @@ public class CombatSimulator
                 WeaponType.Heavy  => 0.10f,
                 _                 => 0.25f
             };
-        float agiBonus = Mathf.Max(0, attacker.agility - 3) * 0.015f;
-        return baseChance + agiBonus + attacker.comboChanceBonus;
+        float agiBonus    = Mathf.Max(0, attacker.agility - 3) * 0.015f;
+        float weaponCombo = attacker.currentWeaponData != null
+            ? attacker.currentWeaponData.comboBonus : UnarmedStats.ComboBonus;
+        return baseChance + agiBonus + attacker.comboChanceBonus + weaponCombo;
     }
 
     private float DisarmChance(PlayerState attacker)
     {
-        if (attacker.currentWeaponData == null) return 0f;
-        return attacker.currentWeaponData.type switch
-        {
-            WeaponType.Dagger => 0.20f,
-            WeaponType.Fast   => 0.15f,
-            WeaponType.Sword  => 0.10f,
-            WeaponType.Heavy  => 0.05f,
-            _                 => 0f
-        };
+        float baseChance = attacker.currentWeaponData == null ? 0f :
+            attacker.currentWeaponData.type switch
+            {
+                WeaponType.Dagger => 0.20f,
+                WeaponType.Fast   => 0.15f,
+                WeaponType.Sword  => 0.10f,
+                WeaponType.Heavy  => 0.05f,
+                _                 => 0f
+            };
+        float weaponBonus = attacker.currentWeaponData != null
+            ? attacker.currentWeaponData.disarmBonus : UnarmedStats.DisarmBonus;
+        return baseChance + weaponBonus;
     }
 
     private float ThrowChance(PlayerState attacker)
@@ -355,19 +364,32 @@ public class CombatSimulator
         };
     }
 
-    // --- Damage calculations (mirrors CalcDamage / ThrowDamage) ---
+    // --- Damage calculations (mirrors WeaponBaseDamage / CalcDamage / ThrowDamage) ---
 
-    private int CalcBaseDamage(PlayerState attacker)
+    // Dano base da arma (sem STR/crítico/armadura) — Heavy/Sword/Dagger têm variação aleatória estilo My Brute.
+    private int WeaponBaseDamage(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null)
-            return 5 + attacker.str;
+            return UnarmedStats.Damage;
         return attacker.currentWeaponData.type switch
         {
-            WeaponType.Heavy  => _rng.Next(30, 50) + HeavyStrBonus(attacker),
+            WeaponType.Heavy  => _rng.Next(30, 50),
             WeaponType.Sword  => _rng.Next(10, 18),
             WeaponType.Dagger => _rng.Next(7, 13),
             _                 => attacker.currentWeaponData.damage > 0 ? attacker.currentWeaponData.damage : 3
         };
+    }
+
+    private float CritDamageMultiplier(PlayerState attacker) => attacker.currentWeaponData != null
+        ? attacker.currentWeaponData.critDamageMultiplier : UnarmedStats.CritDamageMultiplier;
+
+    // Fórmula multiplicativa do My Brute: weaponBaseDamage × (1 + str/10) × (critMultiplier se crítico).
+    // Lead Skeleton e armadura são aplicados depois, em SimulateHit.
+    private float CalcDamage(PlayerState attacker, bool isCrit)
+    {
+        int   weaponBaseDamage = WeaponBaseDamage(attacker);
+        float critMult         = isCrit ? CritDamageMultiplier(attacker) : 1f;
+        return weaponBaseDamage * (1f + attacker.str / 10f) * critMult;
     }
 
     private int CalcThrowDamage(WeaponData data)
@@ -381,9 +403,6 @@ public class CombatSimulator
             _                 => data.damage > 0 ? data.damage : 3
         };
     }
-
-    private int StrBonus(PlayerState s)      => Mathf.Max(0, (s.str - 10) / 2);
-    private int HeavyStrBonus(PlayerState s) => Mathf.Max(0, s.str - 10);
 
     // --- Utilities ---
 

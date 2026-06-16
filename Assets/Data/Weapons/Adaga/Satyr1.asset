@@ -19,3 +19,16 @@ MonoBehaviour:
   speedModifier: 1
   type: 2
   scale: 1.5
+  hitSpeed: 2
+  drawChance: 0.33
+  reach: 0
+  critChanceBonus: 0.25
+  critDamageMultiplier: 1.25
+  evasionBonus: 0.1
+  dexterityBonus: 0.5
+  reversalBonus: 0
+  blockBonus: 0
+  accuracyBonus: 0
+  disarmBonus: 0
+  comboBonus: 0.3
+  deflectBonus: 0

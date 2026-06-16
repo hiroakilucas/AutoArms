@@ -162,22 +162,30 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Heavy  => 0.10f,
             _                 => 0.25f
         };
-        float agiBonus = Mathf.Max(0, agility - 3) * 0.015f;
-        float total    = base_ + agiBonus + comboChanceBonus;
-        Debug.Log($"[Combo] Base: {base_*100:F0}% + AGI bonus: {agiBonus*100:F1}% = Total: {total*100:F1}% (AGI: {agility})");
+        float agiBonus    = Mathf.Max(0, agility - 3) * 0.015f;
+        float weaponCombo = weaponHandler.CurrentWeaponData != null
+            ? weaponHandler.CurrentWeaponData.comboBonus : UnarmedStats.ComboBonus;
+        float total = base_ + agiBonus + comboChanceBonus + weaponCombo;
+        Debug.Log($"[Combo] Base: {base_*100:F0}% + AGI bonus: {agiBonus*100:F1}% + weapon: {weaponCombo*100:F0}% = Total: {total*100:F1}% (AGI: {agility})");
         return total;
     }
 
-    // criticalChance: base do profile + bônus de skills (ex: Fierce Brute +0.10f).
-    private float CritChance() => (weaponHandler.currentType switch
+    // criticalChance: base do profile + bônus de skills (ex: Fierce Brute +0.10f) + bônus da arma.
+    private float CritChance()
     {
-        WeaponType.Dagger => 0.08f,
-        WeaponType.Sword  => 0.05f,
-        WeaponType.Heavy  => 0.03f,
-        _                 => 0.05f
-    }) + criticalChance;
+        float baseChance = weaponHandler.currentType switch
+        {
+            WeaponType.Dagger => 0.08f,
+            WeaponType.Sword  => 0.05f,
+            WeaponType.Heavy  => 0.03f,
+            _                 => 0.05f
+        };
+        float weaponBonus = weaponHandler.CurrentWeaponData != null
+            ? weaponHandler.CurrentWeaponData.critChanceBonus : UnarmedStats.CritChanceBonus;
+        return baseChance + weaponBonus + criticalChance;
+    }
 
-    // counter: base por arma do defensor + bônus de skills (Shield +0.45f, Counter Attack +0.10f, Monk +0.40f).
+    // counter: base por arma do defensor + bônus de skills (Shield +0.45f, Counter Attack +0.10f, Monk +0.40f) + bônus da arma.
     private float BlockChance()
     {
         if (defender == null) return 0f;
@@ -191,14 +199,15 @@ public class PlayerCombat : MonoBehaviour
                 WeaponType.Heavy  => 0.15f,
                 _                 => 0f
             };
-        return weaponBonus + defender.counter;
+        float weaponBlockBonus = defender.weaponHandler.CurrentWeaponData != null
+            ? defender.weaponHandler.CurrentWeaponData.blockBonus : UnarmedStats.BlockBonus;
+        return weaponBonus + defender.counter + weaponBlockBonus;
     }
 
     // Impact (skill futura): adiciona +0.15f a este valor permanentemente.
     private float DisarmChance()
     {
-        if (weaponHandler.CurrentWeapon == null) return 0f;
-        return weaponHandler.currentType switch
+        float baseChance = weaponHandler.CurrentWeapon == null ? 0f : weaponHandler.currentType switch
         {
             WeaponType.Dagger => 0.20f,
             WeaponType.Fast   => 0.15f,
@@ -206,9 +215,12 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Heavy  => 0.05f,
             _                 => 0f
         };
+        float weaponDisarmBonus = weaponHandler.CurrentWeaponData != null
+            ? weaponHandler.CurrentWeaponData.disarmBonus : UnarmedStats.DisarmBonus;
+        return baseChance + weaponDisarmBonus;
     }
 
-    // evasion: base por tipo de arma do defensor + bônus de agilidade + evasion do defensor.
+    // evasion: base por tipo de arma do defensor + bônus de agilidade + evasion do defensor + bônus da arma.
     // Skills: Sixth Sense +0.10f, Untouchable +0.30f, Ballet Shoes +0.10f.
     private float DodgeChance()
     {
@@ -221,31 +233,39 @@ public class PlayerCombat : MonoBehaviour
             WeaponType.Heavy  => 0.05f,
             _                 => 0.10f
         };
-        float agiBonus = Mathf.Max(0, defender.agility - 3) * 0.02f;
-        float total    = Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion);
-        Debug.Log($"[Dodge] Base: {baseChance*100:F0}% + AGI bonus: {agiBonus*100:F0}% = Total: {total*100:F0}% (AGI: {defender.agility})");
+        float agiBonus       = Mathf.Max(0, defender.agility - 3) * 0.02f;
+        float weaponEvasion  = defender.weaponHandler.CurrentWeaponData != null
+            ? defender.weaponHandler.CurrentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
+        float total = Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion + weaponEvasion);
+        Debug.Log($"[Dodge] Base: {baseChance*100:F0}% + AGI bonus: {agiBonus*100:F0}% + weapon: {weaponEvasion*100:F0}% = Total: {total*100:F0}% (AGI: {defender.agility})");
         return total;
     }
 
-    // Iron Fist (skill futura): aumenta dano desarmado.
-    private int StrBonus() => Mathf.Max(0, (str - 10) / 2);
-    // Heavy weapons get double STR bonus (full str-10, not halved).
-    private int HeavyStrBonus() => Mathf.Max(0, str - 10);
-
-    // Dano base por tipo de arma (ataque normal em HitRoutine).
-    // Heavy recebe bônus de STR dobrado; Sword/Dagger têm variação aleatória estilo My Brute.
-    private int CalcDamage()
+    // Dano base da arma (sem STR/crítico/armadura) — Heavy/Sword/Dagger têm variação aleatória estilo My Brute.
+    private int WeaponBaseDamage()
     {
         if (weaponHandler.CurrentWeapon == null)
-            return 5 + str;
+            return UnarmedStats.Damage;
         return weaponHandler.currentType switch
         {
-            WeaponType.Heavy  => Random.Range(30, 50) + HeavyStrBonus(),
+            WeaponType.Heavy  => Random.Range(30, 50),
             WeaponType.Sword  => Random.Range(10, 18),
             WeaponType.Dagger => Random.Range(7, 13),
             _                 => weaponHandler.CurrentWeaponData?.damage > 0
                                  ? weaponHandler.CurrentWeaponData.damage : 3
         };
+    }
+
+    private float CritDamageMultiplier() => weaponHandler.CurrentWeaponData != null
+        ? weaponHandler.CurrentWeaponData.critDamageMultiplier : UnarmedStats.CritDamageMultiplier;
+
+    // Fórmula multiplicativa do My Brute: weaponBaseDamage × (1 + str/10) × (critMultiplier se crítico).
+    // Lead Skeleton e armadura são aplicados depois, em HitRoutine.
+    private float CalcDamage(bool isCrit)
+    {
+        int   weaponBaseDamage = WeaponBaseDamage();
+        float critMult         = isCrit ? CritDamageMultiplier() : 1f;
+        return weaponBaseDamage * (1f + str / 10f) * critMult;
     }
 
     // Dano do arremesso usa os mesmos ranges sem bônus de STR.
@@ -262,17 +282,19 @@ public class PlayerCombat : MonoBehaviour
     }
 
     // Posição de ataque: imediatamente fora do alcance da arma, na direção do defensor.
+    // weaponData.reach soma-se à distância base do tipo de arma.
     private Vector2 AttackPosition()
     {
         if (defender == null) return spawnPosition;
         Vector2 defPos = (Vector2)defender.transform.position;
-        float reach = weaponHandler.CurrentWeapon == null ? 0.8f :
+        float baseReach = weaponHandler.CurrentWeapon == null ? 0.8f :
             weaponHandler.currentType switch
             {
                 WeaponType.Dagger => 1.5f,
                 WeaponType.Heavy  => 2.8f,
                 _                 => 2.0f
             };
+        float reach = baseReach + (weaponHandler.CurrentWeaponData?.reach ?? 0);
         Vector2 dir = (defPos - (Vector2)transform.position).normalized;
         return defPos - dir * reach;
     }
@@ -325,8 +347,9 @@ public class PlayerCombat : MonoBehaviour
             yield break;
         }
 
-        bool  isUnarmed  = weaponHandler.CurrentWeapon == null;
-        float slashSpeed = isUnarmed ? 2f : hitSpeed;
+        float weaponHitSpeed = weaponHandler.CurrentWeaponData != null
+            ? weaponHandler.CurrentWeaponData.hitSpeed : UnarmedStats.HitSpeed;
+        float slashSpeed = hitSpeed * weaponHitSpeed;
         if (slashSpeed != 1f) animationController.SetSpeed(slashSpeed);
 
         animator.SetTrigger(slashTrigger);
@@ -376,25 +399,21 @@ public class PlayerCombat : MonoBehaviour
         if (defenderAnimationController != null)
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
 
-        bool isCrit      = Random.value < CritChance();
-        int  baseDamage  = CalcDamage();
-        int  finalDamage = isCrit ? baseDamage * 2 : baseDamage;
+        bool  isCrit = Random.value < CritChance();
+        float dmg    = CalcDamage(isCrit);
 
         // Lead Skeleton: -15% dano de armas Heavy
         if (defender != null && defender.leadSkeleton && weaponHandler.currentType == WeaponType.Heavy)
         {
-            int beforeLS = finalDamage;
-            finalDamage  = Mathf.Max(1, Mathf.RoundToInt(finalDamage * 0.85f));
-            defender.LogSkillCheck("Lead Skeleton", true, $"heavy damage {beforeLS} → {finalDamage}");
+            dmg *= 0.85f;
+            defender.LogSkillCheck("Lead Skeleton", true, "heavy damage ×0.85");
         }
 
-        // Armor: reduz % do dano recebido
-        if (defender != null && defender.armor > 0f)
-        {
-            int beforeArmor = finalDamage;
-            finalDamage     = Mathf.Max(1, Mathf.RoundToInt(finalDamage * (1f - defender.armor)));
-            Debug.Log($"[Armor] {defender.name} armor {defender.armor:P0}: damage {beforeArmor} → {finalDamage}");
-        }
+        // Fórmula multiplicativa do My Brute: finalDamage = Max(1, Round(dmg × (1 - armor)))
+        float defenderArmor = defender != null ? defender.armor : 0f;
+        int   finalDamage   = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defenderArmor)));
+        if (defenderArmor > 0f)
+            Debug.Log($"[Armor] {defender.name} armor {defenderArmor:P0}: damage {Mathf.RoundToInt(dmg)} → {finalDamage}");
 
         defender?.GetComponent<HealthSystem>()?.TakeDamage(finalDamage);
 
