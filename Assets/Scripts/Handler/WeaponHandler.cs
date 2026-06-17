@@ -13,7 +13,7 @@ public class WeaponHandler : MonoBehaviour
     public float zOffset;
 
     [Header("Renderizacao")]
-    public string sortingLayer = "Weapon";
+    public string sortingLayer = "Weapons";
     public int sortingOrder = 0;
 
     private GameObject current;
@@ -40,6 +40,21 @@ public class WeaponHandler : MonoBehaviour
     public void EquipRandom()
     {
         var data = loadout.GetRandomWeapon();
+        if (data?.inHandSprite == null)
+        {
+            Unequip();
+            return;
+        }
+
+        if (current) Destroy(current);
+        EquipData(data);
+    }
+
+    // Equipa uma WeaponData específica (em vez de sortear) — usado pelo CombatPlayer para
+    // que a arma exibida visualmente seja sempre a mesma que o CombatSimulator usou no cálculo
+    // de dano daquele evento, em vez de um sorteio independente que podia divergir.
+    public void EquipSpecific(WeaponData data)
+    {
         if (data?.inHandSprite == null)
         {
             Unequip();

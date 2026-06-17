@@ -6,6 +6,8 @@ public enum CombatEventType
     PickupWeapon,    // playerIndex = picker, weaponName
     WeaponEquipped,  // playerIndex = who equipped, weaponName (after throw: 40% re-equip)
     Hit,             // playerIndex = attacker, targetIndex = defender, damage, isCrit, isCombo, isThrow
+    Counter,         // playerIndex = counterer (deals damage), targetIndex = original attacker (countered), damage, isCrit. Cancela o hit do atacante e o resto do combo.
+    Reversal,        // playerIndex = quem reverte (deals damage), targetIndex = original attacker (alvo), damage, isCrit. Acontece depois do atacante já ter acertado; cancela o resto do combo dele.
     Dodge,           // playerIndex = attacker, targetIndex = dodger
     Block,           // playerIndex = attacker, targetIndex = blocker (50% knockback, no damage)
     Miss,            // playerIndex = attacker, targetIndex = missed (defender DodgeLeaps)

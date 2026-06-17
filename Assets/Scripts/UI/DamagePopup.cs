@@ -39,6 +39,36 @@ public class DamagePopup : MonoBehaviour
         go.AddComponent<DamagePopup>().InitMiss();
     }
 
+    public static void SpawnCounter(Vector3 worldPos, int damage, bool isCrit)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitRetaliation("CONTRA-ATAQUE!", damage, isCrit);
+    }
+
+    public static void SpawnReversal(Vector3 worldPos, int damage, bool isCrit)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitRetaliation("REVERSAL!", damage, isCrit);
+    }
+
+    // Counter e Reversal compartilham o mesmo visual (roxo, pra distinguir de crit/normal/
+    // disarm/drop), só o texto do título muda.
+    void InitRetaliation(string title, int damage, bool isCrit)
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = isCrit ? $"{title}\nCRIT! {damage}" : $"{title}\n{damage}";
+        label.fontSize       = 4f;
+        baseColor            = new Color(0.7f, 0.3f, 0.9f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     public static void SpawnDisarm(Vector3 worldPos)
     {
         var go = new GameObject("DamagePopup");

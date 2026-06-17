@@ -18,7 +18,9 @@ public class PlayerState
     public float evasion;
     public float accuracy;
     public float counter;
+    public float reversal;
     public float criticalChance;
+    public float critDamageBonus;
     public float comboChanceBonus;
     public float hitSpeed;
     public float runSpeedMultiplier;
@@ -26,6 +28,7 @@ public class PlayerState
     // Skill state flags
     public bool leadSkeleton;
     public bool firstHitAvoided;
+    public bool noEvasion;
 
     // Weapons
     public List<WeaponData> weaponLoadout = new List<WeaponData>();

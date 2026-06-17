@@ -28,7 +28,11 @@ public class AttackSequencer : MonoBehaviour
     private IEnumerator StartWhenReady()
     {
         yield return new WaitUntil(() => player1 != null && player2 != null);
-        bool p2First = player2.initiative > player1.initiative;
+        // Initiative decide quem age primeiro; em empate (default 0 pra todo personagem sem
+        // skill que a altere), quem tem mais speed age primeiro. Empate total continua player1.
+        bool p2First = player1.initiative != player2.initiative
+            ? player2.initiative > player1.initiative
+            : player2.speed > player1.speed;
         StartCoroutine(CombatLoop(p2First));
     }
 
@@ -81,7 +85,11 @@ public class AttackSequencer : MonoBehaviour
 
         if (player1Profile == null) return;
 
-        bool player1Won = winner == player1;
+        // Não usar "winner == player1": o campo player1 nunca é atribuído no caminho do
+        // simulador (CombatSceneLoader só seta player1Profile, pra StartWhenReady/CombatLoop
+        // legado não disparar em paralelo com o CombatPlayer) — isso fazia player1Won ser
+        // sempre falso, mostrando DERROTA e dando XP de derrota mesmo quando P1 vencia.
+        bool player1Won = winner.isPlayer1;
         int  xpGained   = player1Won ? 2 : 1;
 
         player1Profile.battlesRemaining = Mathf.Max(0, player1Profile.battlesRemaining - 1);

@@ -14,13 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   idleDuration: 0.3
   runSpeed: 35
-  slashingDuration: 0.5
+  slashingDuration: 0.4
   slashingToJumpDelay: 0.2
   jumpStartDuration: 0.02
   jumpHeight: 2
-  hurtDuration: 0.15
-  dodgeDuration: 0.25
+  hurtDuration: 0.12
+  dodgeDuration: 0.2
   knockbackDistance: 0.5
-  comboDelay: 0.15
+  comboDelay: 0.1
   startPos: {x: 6.3, y: -2.407897}
   targetPos: {x: 0, y: 0}

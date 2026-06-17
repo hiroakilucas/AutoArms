@@ -184,7 +184,23 @@ public class CombatResultPanel : MonoBehaviour
                 break;
             case LevelUpOption.Kind.Skill:
                 if (opt.skill != null && !profile.skills.Contains(opt.skill))
+                {
                     profile.skills.Add(opt.skill);
+                    // Vitality / Herculean Strength / Feline Agility / Lightning Bolt: flat
+                    // permanente (HP/STR/AGI/SPD) aplicado uma única vez na escolha (igual a um
+                    // pick de Atributo) — o +50% restante é percentual em runtime sobre esse
+                    // valor já somado (ApplySkillStats/GetEffectiveStats).
+                    if (opt.skill.skillName == "Vitality")
+                        profile.maxHealth += 18;
+                    else if (opt.skill.skillName == "Herculean Strength")
+                        profile.str += 3;
+                    else if (opt.skill.skillName == "Feline Agility")
+                        profile.agility += 3;
+                    else if (opt.skill.skillName == "Lightning Bolt")
+                        profile.speed += 3;
+                    else if (opt.skill.skillName == "Reconnaissance")
+                        profile.speed += 5;
+                }
                 break;
             case LevelUpOption.Kind.Weapon:
                 if (opt.weapon != null && profile.weaponLoadout != null)
@@ -203,6 +219,11 @@ public class CombatResultPanel : MonoBehaviour
 #endif
     }
 
+    // TESTE: mostra todas as skills/armas/atributos disponíveis em vez de sortear 2 opções
+    // ponderadas. Reverter para o sorteio original (DrawOption/SameOption abaixo) trocando
+    // esta flag para false quando o teste terminar.
+    private const bool ShowAllOptionsForTesting = true;
+
     private static void ShowLevelUpChoice(Transform canvasRoot, PlayerProfile profile,
         SkillDatabase skillDb, WeaponData[] allWeaponsPool, System.Action onChosen)
     {
@@ -213,7 +234,10 @@ public class CombatResultPanel : MonoBehaviour
         var availableSkills = new List<SkillData>();
         if (skillDb != null && skillDb.skills != null)
             foreach (var s in skillDb.skills)
-                if (s != null && !profile.skills.Exists(ps => ps != null && ps.skillName == s.skillName))
+                // s.icon != null: testando skill por skill — só entram na lista de escolha as
+                // que já têm um ícone de volta em Assets/Data/UI/Skills/ (removidos todos,
+                // re-adicionados um a um conforme testados; immortality é a primeira).
+                if (s != null && s.icon != null && !profile.skills.Exists(ps => ps != null && ps.skillName == s.skillName))
                     availableSkills.Add(s);
 
         var availableWeapons = new List<WeaponData>();
@@ -228,6 +252,12 @@ public class CombatResultPanel : MonoBehaviour
                         if (lw != null && lw.weaponName == w.weaponName) { inLoadout = true; break; }
                 if (!inLoadout) availableWeapons.Add(w);
             }
+
+        if (ShowAllOptionsForTesting)
+        {
+            ShowAllOptionsChoice(canvasRoot, profile, availableSkills, availableWeapons, onChosen);
+            return;
+        }
 
         // Draw 2 unique options
         var opt1 = DrawOption(availableSkills, availableWeapons);
@@ -271,6 +301,93 @@ public class CombatResultPanel : MonoBehaviour
             () => { ApplyBonus(opt1, profile); Object.Destroy(root); onChosen(); });
         MakeLevelUpCard(bg, opt2, new Vector2( 155f, 5f),
             () => { ApplyBonus(opt2, profile); Object.Destroy(root); onChosen(); });
+    }
+
+    // TESTE: grade rolável com as opções disponíveis (4 atributos + skills com ícone já
+    // re-adicionado em Assets/Data/UI/Skills/) — sem sorteio, escolhe livremente qualquer uma.
+    // Armas removidas temporariamente da lista enquanto o teste foca em testar as skills uma
+    // a uma (availableWeapons mantido como parâmetro, sem uso, pra reativar depois bastando
+    // descomentar o foreach abaixo).
+    private static void ShowAllOptionsChoice(Transform canvasRoot, PlayerProfile profile,
+        List<SkillData> availableSkills, List<WeaponData> availableWeapons, System.Action onChosen)
+    {
+        var allOptions = new List<LevelUpOption>();
+        for (int i = 0; i < 4; i++)
+            allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = i });
+        foreach (var s in availableSkills)
+            allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = s });
+        // foreach (var w in availableWeapons)
+        //     allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = w });
+
+        var root = new GameObject("LevelUpChoiceRoot");
+        root.transform.SetParent(canvasRoot, false);
+        var rootRt = root.AddComponent<RectTransform>();
+        rootRt.anchorMin = Vector2.zero;
+        rootRt.anchorMax = Vector2.one;
+        rootRt.offsetMin = rootRt.offsetMax = Vector2.zero;
+
+        var ov = new GameObject("Overlay");
+        ov.transform.SetParent(root.transform, false);
+        var ovRt = ov.AddComponent<RectTransform>();
+        ovRt.anchorMin = Vector2.zero;
+        ovRt.anchorMax = Vector2.one;
+        ovRt.offsetMin = ovRt.offsetMax = Vector2.zero;
+        var ovImg = ov.AddComponent<Image>();
+        ovImg.color = new Color(0, 0, 0, 0.75f);
+        ovImg.raycastTarget = true;
+
+        var bg = new GameObject("ChoicePanelAll");
+        bg.transform.SetParent(root.transform, false);
+        var bgRt = bg.AddComponent<RectTransform>();
+        bgRt.anchorMin = bgRt.anchorMax = bgRt.pivot = new Vector2(0.5f, 0.5f);
+        bgRt.sizeDelta = new Vector2(1100f, 700f);
+        bgRt.anchoredPosition = Vector2.zero;
+        bg.AddComponent<Image>().color = new Color(0.04f, 0.04f, 0.14f, 0.98f);
+
+        MakeLabel(bg, $"[TESTE] ESCOLHA 1 BÔNUS ({allOptions.Count} opções):", 24,
+            new Color(1f, 0.84f, 0f), new Vector2(0, 320f), new Vector2(1000f, 36f), bold: true);
+
+        var scrollGo = new GameObject("ScrollView");
+        scrollGo.transform.SetParent(bg.transform, false);
+        var scrollRt = scrollGo.AddComponent<RectTransform>();
+        scrollRt.anchorMin = scrollRt.anchorMax = scrollRt.pivot = new Vector2(0.5f, 0.5f);
+        scrollRt.sizeDelta = new Vector2(1060f, 580f);
+        scrollRt.anchoredPosition = new Vector2(0, -20f);
+        scrollGo.AddComponent<Image>().color = new Color(0, 0, 0, 0.15f);
+        var scrollRect = scrollGo.AddComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+        scrollRect.vertical   = true;
+
+        var viewport = new GameObject("Viewport");
+        viewport.transform.SetParent(scrollGo.transform, false);
+        var viewportRt = viewport.AddComponent<RectTransform>();
+        viewportRt.anchorMin = Vector2.zero;
+        viewportRt.anchorMax = Vector2.one;
+        viewportRt.offsetMin = viewportRt.offsetMax = Vector2.zero;
+        viewport.AddComponent<Image>().color = new Color(0, 0, 0, 0.01f);
+        viewport.AddComponent<Mask>().showMaskGraphic = false;
+        scrollRect.viewport = viewportRt;
+
+        var content = new GameObject("Content");
+        content.transform.SetParent(viewport.transform, false);
+        var contentRt = content.AddComponent<RectTransform>();
+        contentRt.anchorMin = new Vector2(0f, 1f);
+        contentRt.anchorMax = new Vector2(1f, 1f);
+        contentRt.pivot     = new Vector2(0.5f, 1f);
+        contentRt.anchoredPosition = Vector2.zero;
+        var grid = content.AddComponent<GridLayoutGroup>();
+        grid.cellSize        = new Vector2(170f, 200f);
+        grid.spacing         = new Vector2(10f, 10f);
+        grid.childAlignment  = TextAnchor.UpperCenter;
+        content.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        scrollRect.content = contentRt;
+
+        foreach (var opt in allOptions)
+        {
+            var capturedOpt = opt;
+            MakeLevelUpCard(content, capturedOpt, Vector2.zero,
+                () => { ApplyBonus(capturedOpt, profile); Object.Destroy(root); onChosen(); });
+        }
     }
 
     private static void MakeLevelUpCard(GameObject parent, LevelUpOption opt, Vector2 pos, System.Action onClick)

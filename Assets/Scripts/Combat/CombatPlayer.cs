@@ -76,7 +76,15 @@ public class CombatPlayer : MonoBehaviour
         switch (evt.type)
         {
             case CombatEventType.TurnStart:
-                yield return null;
+                // Pequeno buffer antes de qualquer PickupWeapon/CatchWeapon deste turno.
+                // A transição "Idle → Catch Weapon" no Animator só existe a partir do
+                // estado Idle (não AnyState) — em turnos extras por velocidade, o TurnEnd
+                // anterior chama SetIdle(true) e o próximo TurnStart rodava 1 frame depois,
+                // sem tempo do Animator de fato concluir a transição pro estado Idle antes
+                // do trigger CatchWeapon ser setado. O trigger ficava pendente e só disparava
+                // quando o Animator finalmente entrava em Idle — tarde, parecendo a animação
+                // de pegar arma rodando no fim do turno em vez do início.
+                yield return new WaitForSeconds(0.1f * t);
                 break;
 
             case CombatEventType.RunToDefender:
@@ -91,14 +99,24 @@ public class CombatPlayer : MonoBehaviour
             case CombatEventType.PickupWeapon:
                 if (attacker != null)
                 {
-                    attacker.weaponHandler.EquipRandom();
+                    // Equipa exatamente a arma que o CombatSimulator sorteou para este evento
+                    // (evt.weaponName) — EquipRandom() fazia um sorteio independente aqui,
+                    // que podia equipar visualmente uma arma diferente da usada no cálculo
+                    // de dano daquele turno.
+                    var weaponToEquip = FindWeaponByName(attacker.weaponHandler.loadout, evt.weaponName);
+                    if (weaponToEquip != null) attacker.weaponHandler.EquipSpecific(weaponToEquip);
+                    else attacker.weaponHandler.EquipRandom();
                     yield return StartCoroutine(attacker.animationController.PlayCatchWeapon(0.6f * t));
                 }
                 break;
 
             case CombatEventType.WeaponEquipped:
                 if (attacker != null)
-                    attacker.weaponHandler.EquipRandom();
+                {
+                    var weaponToEquip = FindWeaponByName(attacker.weaponHandler.loadout, evt.weaponName);
+                    if (weaponToEquip != null) attacker.weaponHandler.EquipSpecific(weaponToEquip);
+                    else attacker.weaponHandler.EquipRandom();
+                }
                 yield return null;
                 break;
 
@@ -112,6 +130,8 @@ public class CombatPlayer : MonoBehaviour
                     // swing or wait out slashHalf again; apply the impact immediately instead.
                     if (!evt.isThrow)
                     {
+                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+
                         string trigger = attacker?.weaponHandler.currentType switch
                         {
                             WeaponType.Heavy  => "SlashingHeavy",
@@ -149,6 +169,64 @@ public class CombatPlayer : MonoBehaviour
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
+            // Counter (defensor bate antes do hit do atacante conectar) e Reversal (defensor
+            // bate de volta depois de já ter tomado o hit) — em ambos, playerIndex é quem
+            // retalia (o "attacker" deste evento) e targetIndex é o atacante original (que
+            // agora toma o dano). Mesmo fluxo do Hit, só troca o popup.
+            case CombatEventType.Counter:
+            case CombatEventType.Reversal:
+                if (defender != null)
+                {
+                    // Sem RepositionIfNeeded aqui: quem retalia (attacker deste evento) nunca
+                    // saiu do lugar — é o atacante original (defender deste evento) que correu
+                    // até ele. Counter/Reversal disparam antes de qualquer dano nesta troca
+                    // (ver SimulateHit), então não há knockback prévio que o tenha deslocado.
+
+                    float retSlashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
+                    string retTrigger = attacker?.weaponHandler.currentType switch
+                    {
+                        WeaponType.Heavy  => "SlashingHeavy",
+                        WeaponType.Dagger => "SlashingDagger",
+                        _                 => "Slashing"
+                    };
+                    attacker?.GetComponent<Animator>()?.SetTrigger(retTrigger);
+                    yield return new WaitForSeconds(retSlashHalf);
+
+                    Vector2 retPushDir = ComputePushDir(attacker, defender);
+                    float   retKbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
+                    float   retKbDur   = attacker?.settings?.hurtDuration ?? 0.07f;
+
+                    var retHs = evt.targetIndex == 0 ? _h1 : _h2;
+                    retHs?.TakeDamage(evt.damage);
+
+                    Vector3 retPopupPos = defender.transform.position + Vector3.up * 1.5f
+                        + Vector3.right * Random.Range(-0.3f, 0.3f);
+                    if (evt.type == CombatEventType.Counter)
+                        DamagePopup.SpawnCounter(retPopupPos, evt.damage, evt.isCrit);
+                    else
+                        DamagePopup.SpawnReversal(retPopupPos, evt.damage, evt.isCrit);
+
+                    StartCoroutine(defender.Knockback(retPushDir, retKbDist, retKbDur * t));
+                    yield return StartCoroutine(defender.animationController.PlayHurt(retKbDur * t));
+
+                    yield return new WaitForSeconds(retSlashHalf);
+
+                    // Os estados Slashing/SlashingDagger/SlashingHeavy só têm UMA transição de
+                    // saída no Animator Controller: pro estado Jump Start (via bool JumpStart),
+                    // que por sua vez só sai pro Idle quando JumpStart volta a false. Isso nunca
+                    // foi um problema antes porque todo combo termina em TurnEnd, que passa por
+                    // PlayJumpStart + JumpTo (volta ao spawn) — e quem retalia num Counter/
+                    // Reversal nunca tem um TurnEnd próprio nesta troca. Um SetIdle(true) sozinho
+                    // não adianta nada aqui: a transição de saída do Slashing nem olha pro bool
+                    // Idle, só pro JumpStart. Solução: disparar o mesmo toggle de JumpStart que o
+                    // TurnEnd usa, mas sem chamar movement.JumpTo() — fica parado no lugar.
+                    float retJumpDur = attacker?.settings?.jumpStartDuration ?? 0.02f;
+                    if (attacker != null)
+                        yield return StartCoroutine(attacker.animationController.PlayJumpStart(retJumpDur * t));
+                }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
             case CombatEventType.HealthChanged:
                 ApplyHealthChanged(evt);
                 yield return null;
@@ -159,6 +237,8 @@ public class CombatPlayer : MonoBehaviour
                 {
                     // Dodge always follows a melee swing attempt (never a throw) — the attacker
                     // swings, and exactly when it would have landed, the defender leaps away.
+                    yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+
                     string trigger = attacker?.weaponHandler.currentType switch
                     {
                         WeaponType.Heavy  => "SlashingHeavy",
@@ -186,6 +266,8 @@ public class CombatPlayer : MonoBehaviour
                 if (defender != null)
                 {
                     // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
+                    yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+
                     string trigger = attacker?.weaponHandler.currentType switch
                     {
                         WeaponType.Heavy  => "SlashingHeavy",
@@ -228,24 +310,17 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.Disarm:
+                // PlayerCombat.DropWeapon já cobre popup + UnequipPermanent + a queda em
+                // pêndulo amortecido até o chão (ver Drop de Arma no CLAUDE.md) — antes este
+                // case só tirava a arma e mostrava o popup, sem nenhum visual de queda.
                 if (defender != null)
-                {
-                    Vector3 disarmPos = defender.transform.position + Vector3.up * 1.5f
-                        + Vector3.right * Random.Range(-0.3f, 0.3f);
-                    DamagePopup.SpawnDisarm(disarmPos);
-                    defender.weaponHandler.UnequipPermanent();
-                }
+                    StartCoroutine(PlayerCombat.DropWeapon(defender, isDisarm: true));
                 yield return null;
                 break;
 
             case CombatEventType.WeaponDrop:
                 if (attacker != null)
-                {
-                    Vector3 dropPos = attacker.transform.position + Vector3.up * 1.5f
-                        + Vector3.right * Random.Range(-0.3f, 0.3f);
-                    DamagePopup.SpawnDrop(dropPos);
-                    attacker.weaponHandler.UnequipPermanent();
-                }
+                    StartCoroutine(PlayerCombat.DropWeapon(attacker, isDisarm: false));
                 yield return null;
                 break;
 
@@ -336,6 +411,27 @@ public class CombatPlayer : MonoBehaviour
     // --- Helpers ---
 
     private PlayerCombat GetCombat(int index) => index == 0 ? p1Combat : p2Combat;
+
+    private static WeaponData FindWeaponByName(PlayerLoadout loadout, string name)
+    {
+        if (loadout == null || string.IsNullOrEmpty(name)) return null;
+        foreach (var w in loadout.Weapons)
+            if (w != null && w.weaponName == name) return w;
+        return null;
+    }
+
+    // Mirrors ComboStrikeRoutine's reposition step (legacy path) — só a 1ª ação do turno tinha
+    // RunToDefender; combo hits após uma esquiva ou knockback do hit anterior deixavam o
+    // defensor mais longe, e nada recolocava o atacante perto antes do próximo swing/dodge/block.
+    // No-op quando a distância já é pequena (ex: 1ª ação do turno, attacker já parado em posição).
+    private IEnumerator RepositionIfNeeded(PlayerCombat attacker, PlayerCombat defender, float t)
+    {
+        if (attacker == null || defender == null) yield break;
+        Vector2 attackPos = CalcAttackPosition(attacker, defender);
+        if (Vector2.Distance(attacker.transform.position, attackPos) > 0.3f)
+            yield return StartCoroutine(
+                attacker.animationController.PlayRun(attackPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
+    }
 
     private void ApplyHealthChanged(CombatEvent evt)
     {

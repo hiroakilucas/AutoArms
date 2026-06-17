@@ -65,7 +65,7 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("Lutas restantes (m�ximo por ciclo)")]
     public int battlesRemaining = 6;
 
-    private bool HasSkill(string skillName)
+    public bool HasSkill(string skillName)
     {
         if (skills == null) return false;
         foreach (var s in skills)
@@ -73,26 +73,67 @@ public class PlayerProfile : ScriptableObject
         return false;
     }
 
-    // Preview-only: mirrors the HP/str/agility/speed bonuses from
-    // CombatSimulator.ApplySkillStats / CombatSceneLoader.ApplySkillStats, for display purposes
-    // (e.g. MainMenuCharacterPreview) without needing a live PlayerCombat/PlayerState instance.
-    // Keep in sync with those two if a skill affecting these four stats changes.
-    public (int hp, int str, int agility, int speed) GetEffectiveStats()
+    // Preview-only: mirrors the HP/str/agility/speed/initiative/critChance/critDamageBonus/
+    // evasion/reversal bonuses from CombatSimulator.ApplySkillStats /
+    // CombatSceneLoader.ApplySkillStats, for display purposes (e.g. MainMenuCharacterPreview)
+    // without needing a live PlayerCombat/PlayerState instance. Keep in sync with those two if
+    // a skill affecting these stats changes.
+    public (int hp, int str, int agility, int speed, int initiative, float criticalChance, float critDamageBonus, float evasion, float reversal) GetEffectiveStats()
     {
-        int hp = maxHealth, s = str, a = agility, sp = speed;
+        int hp = maxHealth, s = str, a = agility, sp = speed, init = initiative;
+        float critChance = criticalChance, critDmgBonus = 0f, eva = evasion, rev = reversal;
 
-        if (HasSkill("Vitality")) hp += 50;
-        if (HasSkill("Herculean Strength")) { s += 15; a -= 4; }
-        if (HasSkill("Feline Agility")) a = Mathf.RoundToInt(a * 1.5f);
-        if (HasSkill("Bodybuilder")) s = Mathf.RoundToInt(s * 1.5f);
+        // Percentuais somados num percentual líquido por status, aplicados uma única vez —
+        // evita arredondamento em cascata quando múltiplas skills afetam o mesmo status
+        // (ex: Herculean Strength + Immortal no mesmo STR). Ver nota em "Skills que modificam
+        // stats" no CLAUDE.md. Iniciativa é flat puro, fora do percentual líquido. evasionPct
+        // é multiplicativo sobre eva, aplicado depois de todas as somas flat (Deity zera mesmo
+        // que outra skill já tenha somado evasion).
+        float hpPct = 0f, sPct = 0f, aPct = 0f, spPct = 0f, evaPct = 0f;
+
+        // +18 flat já está em profile.maxHealth (aplicado na escolha, CombatResultPanel.ApplyBonus).
+        if (HasSkill("Vitality")) hpPct += 0.5f;
+        // +3 flat já está em profile.str (aplicado na escolha, CombatResultPanel.ApplyBonus);
+        // aqui só o +50%, sem penalidade de agilidade.
+        if (HasSkill("Herculean Strength")) sPct += 0.5f;
+        if (HasSkill("Feline Agility")) aPct += 0.5f;
+        if (HasSkill("Lightning Bolt")) spPct += 0.5f;
+        // +5 flat já está em profile.speed (aplicado na escolha); -200 iniciativa e +50% dano
+        // crítico são flat puro.
+        if (HasSkill("Reconnaissance")) { spPct += 1.5f; init -= 200; critDmgBonus += 0.5f; }
+        if (HasSkill("Bodybuilder")) sPct += 0.5f;
+        if (HasSkill("First Strike")) init += 200;
+        if (HasSkill("Monk")) init -= 200;
         if (HasSkill("Immortal"))
         {
-            hp = Mathf.RoundToInt(hp * 3.5f);
-            s  = Mathf.RoundToInt(s * 0.75f);
-            a  = Mathf.RoundToInt(a * 0.75f);
-            sp = Mathf.RoundToInt(sp * 0.75f);
+            hpPct += 2.5f;
+            sPct  -= 0.25f;
+            aPct  -= 0.25f;
+            spPct -= 0.25f;
         }
+        if (HasSkill("Deity"))
+        {
+            // -90% SPD, não -100%: ver CombatSimulator/CombatSceneLoader, mesmo motivo.
+            hpPct  += 1.0f;
+            sPct   += 1.0f;
+            aPct   -= 1.0f;
+            spPct  -= 0.90f;
+            evaPct -= 1.0f;
+            rev    += 0.40f;
+            init   -= 200;
+        }
+        if (HasSkill("Untouchable")) eva += 0.25f;
+        if (HasSkill("Ballet Shoes")) eva += 0.10f;
 
-        return (hp, s, a, sp);
+        if (hpPct != 0f || sPct != 0f || aPct != 0f || spPct != 0f)
+        {
+            hp = Mathf.RoundToInt(hp * (1f + hpPct));
+            s  = Mathf.RoundToInt(s * (1f + sPct));
+            a  = Mathf.RoundToInt(a * (1f + aPct));
+            sp = Mathf.RoundToInt(sp * (1f + spPct));
+        }
+        if (evaPct != 0f) eva = Mathf.Max(0f, eva * (1f + evaPct));
+
+        return (hp, s, a, sp, init, critChance, critDmgBonus, eva, rev);
     }
 }

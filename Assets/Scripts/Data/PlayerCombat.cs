@@ -31,6 +31,7 @@ public class PlayerCombat : MonoBehaviour
     public float reversal = 0f;
     public float counter = 0f;
     public float criticalChance = 0f;
+    public float critDamageBonus = 0f;
     public float hitSpeed = 1f;
     public float runSpeedMultiplier = 1f;
     public float comboChanceBonus = 0f;
@@ -123,8 +124,12 @@ public class PlayerCombat : MonoBehaviour
         {
             yield return StrikeRoutine();
 
-            while (defender != null && !defender.IsDead && Random.value < ComboChance())
+            int comboCount = 0;
+            while (defender != null && !defender.IsDead && Random.value < ComboChance(comboCount))
+            {
                 yield return ComboStrikeRoutine();
+                comboCount++;
+            }
 
             yield return ReturnToSpawn();
         }
@@ -146,20 +151,23 @@ public class PlayerCombat : MonoBehaviour
         };
     }
 
-    private float ComboChance()
+    // comboCount = quantos hits extra de combo já aconteceram neste turno (0 = checagem do 1º hit extra).
+    // Decaimento ×0.5 por hit consecutivo, aplicado depois do clamp — ver CombatSimulator.ComboChance.
+    private float ComboChance(int comboCount = 0)
     {
-        float base_ = weaponHandler.CurrentWeapon == null ? 0.10f : weaponHandler.currentType switch
+        float base_ = weaponHandler.CurrentWeapon == null ? 0.05f : weaponHandler.currentType switch
         {
-            WeaponType.Fast   => 0.40f,
-            WeaponType.Dagger => 0.35f,
-            WeaponType.Sword  => 0.25f,
-            WeaponType.Heavy  => 0.10f,
-            _                 => 0.25f
+            WeaponType.Fast   => 0.18f,
+            WeaponType.Dagger => 0.15f,
+            WeaponType.Sword  => 0.12f,
+            WeaponType.Heavy  => 0.04f,
+            _                 => 0.12f
         };
-        float agiBonus    = Mathf.Max(0, agility - 3) * 0.015f;
+        float agiBonus    = Mathf.Max(0, agility - 3) * 0.008f;
         float weaponCombo = weaponHandler.CurrentWeaponData != null
             ? weaponHandler.CurrentWeaponData.comboBonus : UnarmedStats.ComboBonus;
-        return base_ + agiBonus + comboChanceBonus + weaponCombo;
+        float total = Mathf.Clamp(base_ + agiBonus + comboChanceBonus + weaponCombo, 0f, 0.35f);
+        return total * Mathf.Pow(0.5f, comboCount);
     }
 
     // criticalChance: base do profile + bônus de skills (ex: Fierce Brute +0.10f) + bônus da arma.
@@ -246,8 +254,12 @@ public class PlayerCombat : MonoBehaviour
         };
     }
 
-    private float CritDamageMultiplier() => weaponHandler.CurrentWeaponData != null
-        ? weaponHandler.CurrentWeaponData.critDamageMultiplier : UnarmedStats.CritDamageMultiplier;
+    private float CritDamageMultiplier()
+    {
+        float baseMult = weaponHandler.CurrentWeaponData != null
+            ? weaponHandler.CurrentWeaponData.critDamageMultiplier : UnarmedStats.CritDamageMultiplier;
+        return baseMult + critDamageBonus;
+    }
 
     // Fórmula multiplicativa do My Brute: weaponBaseDamage × (1 + str/10) × (critMultiplier se crítico).
     // Lead Skeleton e armadura são aplicados depois, em HitRoutine.
@@ -511,7 +523,10 @@ public class PlayerCombat : MonoBehaviour
             weaponHandler.EquipRandom();
     }
 
-    private IEnumerator DropWeapon(PlayerCombat target, bool isDisarm = true)
+    // Public/static so CombatPlayer (CombatSimulator replay) can reuse the same pendulum-fall
+    // visual for Disarm/WeaponDrop events — mirrors how FlyWeapon was made public for ThrowWeapon.
+    // Doesn't read any instance state, only target's, so it doesn't need a PlayerCombat instance to run on.
+    public static IEnumerator DropWeapon(PlayerCombat target, bool isDisarm = true)
     {
         var data = target.weaponHandler.CurrentWeaponData;
         if (data?.inHandSprite == null) yield break;
@@ -583,7 +598,7 @@ public class PlayerCombat : MonoBehaviour
     // Salta para trás ao esquivar: JumpStart animation + arco parabólico na direção oposta ao ataque.
     public IEnumerator DodgeLeap(Vector2 pushDirection, float distance)
     {
-        Vector2 to = (Vector2)transform.position + pushDirection * distance;
+        Vector2 to = ClampToArena((Vector2)transform.position + pushDirection * distance);
         float duration = settings.dodgeDuration;
         StartCoroutine(animationController.PlayJumpStart(duration));
         yield return movement.JumpTo(to, distance / duration, 0.4f);
@@ -595,7 +610,7 @@ public class PlayerCombat : MonoBehaviour
     public IEnumerator Knockback(Vector2 pushDirection, float distance, float duration)
     {
         Vector2 from = transform.position;
-        Vector2 to   = from + pushDirection * distance;
+        Vector2 to   = ClampToArena(from + pushDirection * distance);
         float elapsed = 0f;
         while (elapsed < duration)
         {
@@ -604,6 +619,16 @@ public class PlayerCombat : MonoBehaviour
             yield return null;
         }
         transform.position = to;
+    }
+
+    // Limite da janela jogável (mesmos valores de RandomSpawnPosition abaixo — área visível
+    // da câmera). Combos longos com vários hits/esquivas seguidas empurravam o personagem
+    // cada vez mais pra fora desse intervalo, eventualmente saindo da tela.
+    private static Vector2 ClampToArena(Vector2 pos)
+    {
+        pos.x = Mathf.Clamp(pos.x, -7.25f, 7.25f);
+        pos.y = Mathf.Clamp(pos.y, -3.90f, -0.81f);
+        return pos;
     }
 
     private IEnumerator ReturnToSpawn()

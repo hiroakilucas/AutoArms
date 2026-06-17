@@ -139,7 +139,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 12557e85129593a46a022fc8f245f128, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  loadout: {fileID: 11400000, guid: f0b1a3769f05ab14c97c17536e86a089, type: 2}
+  loadout: {fileID: 11400000, guid: 210d3d7a7d490f934cebc5566269e80d, type: 2}
   currentIndex: -1
 --- !u!114 &45243668
 MonoBehaviour:
@@ -159,7 +159,7 @@ MonoBehaviour:
   positionOffset: {x: 1, y: -1, z: 0}
   rotationOffset: {x: 0, y: 0, z: 0}
   zOffset: 0.5
-  sortingLayer: Weapon
+  sortingLayer: Weapons
   sortingOrder: 0
 --- !u!114 &45243675
 MonoBehaviour:

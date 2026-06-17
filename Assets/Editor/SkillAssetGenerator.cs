@@ -7,6 +7,11 @@ public static class SkillAssetGenerator
     private struct SkillDef
     {
         public string fileName;
+        // Nome do arquivo de ícone em Assets/Data/UI/Skills/, se diferente de fileName (ex:
+        // o asset é skill_immortal.asset mas o ícone re-adicionado pelo usuário se chama
+        // skill_immortality.png, seguindo o nome da skill na lista mestre original). Null/vazio
+        // usa fileName como antes.
+        public string iconFileName;
         public string skillName;
         public string description;
         public SkillCategory category;
@@ -38,11 +43,14 @@ public static class SkillAssetGenerator
         new SkillDef { fileName = "skill_ballet_shoes",       skillName = "Ballet Shoes",         description = "Pula para trás no início da luta",                          category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
 
         // StatBoost
+        new SkillDef { fileName = "skill_vitality",           skillName = "Vitality",             description = "+18 HP permanente, +50% HP",                                category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
         new SkillDef { fileName = "skill_bodybuilder",        skillName = "Bodybuilder",          description = "STR × 1.5",                                                 category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
-        new SkillDef { fileName = "skill_herculean_strength", skillName = "Herculean Strength",   description = "+STR alto, -agilidade",                                     category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
-        new SkillDef { fileName = "skill_feline_agility",     skillName = "Feline Agility",       description = "AGI × 1.5",                                                 category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
-        new SkillDef { fileName = "skill_lightning_bolt",     skillName = "Lightning Bolt",       description = "SPD × 1.5 (velocidade de movimento)",                       category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
-        new SkillDef { fileName = "skill_immortal",           skillName = "Immortal",             description = "+HP alto, -velocidade",                                     category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_herculean_strength", skillName = "Herculean Strength",   description = "+3 STR permanente, +50% STR",                               category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_feline_agility",     skillName = "Feline Agility",       description = "+3 AGI permanente, +50% AGI",                               category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_lightning_bolt",     skillName = "Lightning Bolt",       description = "+3 SPD permanente, +50% SPD",                               category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_reconnaissance",     skillName = "Reconnaissance",       description = "-200 iniciativa, +5 SPD permanente, +150% SPD, +50% dano crítico", category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_immortal",           iconFileName = "skill_immortality", skillName = "Immortal",             description = "+250% vida, -25% força/agilidade/velocidade",                                     category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_deity",              skillName = "Deity",                description = "+100% HP/STR, -100% AGI/evasão, -90% SPD, -200 iniciativa, +40% reversal", category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
         new SkillDef { fileName = "skill_determination",      skillName = "Determination",        description = "+STR conforme perde HP",                                    category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },
 
         // WeaponPassive
@@ -93,7 +101,8 @@ public static class SkillAssetGenerator
             skill.usesPerFight   = def.usesPerFight;
 
             // Ensure PNG is imported as Sprite then load it
-            string iconPath = $"Assets/Data/UI/Skills/{def.fileName}.png";
+            string iconFile = string.IsNullOrEmpty(def.iconFileName) ? def.fileName : def.iconFileName;
+            string iconPath = $"Assets/Data/UI/Skills/{iconFile}.png";
             var importer = AssetImporter.GetAtPath(iconPath) as TextureImporter;
             if (importer != null && importer.textureType != TextureImporterType.Sprite)
             {

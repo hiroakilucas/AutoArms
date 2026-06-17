@@ -13,7 +13,7 @@ public class CharacterPanel : MonoBehaviour
 
     // Stats tab
     private TMP_Text _charName, _levelText;
-    private TMP_Text _hpVal, _strVal, _agiVal, _spdVal;
+    private TMP_Text _hpVal, _strVal, _agiVal, _spdVal, _initVal, _critChanceVal, _critDmgVal, _evasionVal, _reversalVal;
     private TMP_Text      _battlesText, _winRateText;
 
     // Skills tab
@@ -227,6 +227,12 @@ public class CharacterPanel : MonoBehaviour
         vlg.spacing = 8f;
         vlg.childControlWidth = true; vlg.childControlHeight = false;
         vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
+        // Content rect tem altura 0 por padrão (ancorada só no topo) — sem isso o ScrollRect
+        // não sabe a altura real do conteúdo e o scroll não funciona quando passa da viewport
+        // (ficou mais provável de acontecer agora, com 7 linhas de stat em vez de 1 linha
+        // horizontal). Mesmo padrão já usado nas abas Skills/Armas.
+        var csf = content.gameObject.AddComponent<ContentSizeFitter>();
+        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         // Level + XP text (no bar)
         MakeRow(content, "levelRow", out _levelText);
@@ -234,17 +240,17 @@ public class CharacterPanel : MonoBehaviour
 
         MakeSep(content);
 
-        // Horizontal stats row — 4 columns: HP | STR | AGI | SPD
-        var statsRow = MakeTall(content, "StatsRow", 70f);
-        var hlg = statsRow.gameObject.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 4f;
-        hlg.childControlWidth = true; hlg.childControlHeight = true;
-        hlg.childForceExpandWidth = true; hlg.childForceExpandHeight = true;
-
-        _hpVal  = BuildStatColumn(statsRow.gameObject, "HP");
-        _strVal = BuildStatColumn(statsRow.gameObject, "STR");
-        _agiVal = BuildStatColumn(statsRow.gameObject, "AGI");
-        _spdVal = BuildStatColumn(statsRow.gameObject, "SPD");
+        // Stats verticais, um por linha (era uma linha horizontal de 5 colunas — ficou
+        // apertado demais depois de adicionar INIT e, agora, CRIT CHANCE/CRIT DMG).
+        _hpVal         = BuildStatRow(content.gameObject, "HP");
+        _strVal        = BuildStatRow(content.gameObject, "STR");
+        _agiVal        = BuildStatRow(content.gameObject, "AGI");
+        _spdVal        = BuildStatRow(content.gameObject, "SPD");
+        _initVal       = BuildStatRow(content.gameObject, "INIT");
+        _critChanceVal = BuildStatRow(content.gameObject, "CRIT CHANCE");
+        _critDmgVal    = BuildStatRow(content.gameObject, "CRIT DMG");
+        _evasionVal    = BuildStatRow(content.gameObject, "EVASION");
+        _reversalVal   = BuildStatRow(content.gameObject, "REVERSAL");
 
         MakeSep(content);
 
@@ -256,32 +262,34 @@ public class CharacterPanel : MonoBehaviour
         return root;
     }
 
-    private TMP_Text BuildStatColumn(GameObject parent, string label)
+    // Linha de stat: label dourado à esquerda, valor branco à direita, empilhada verticalmente
+    // pelo VerticalLayoutGroup do content (substituiu o antigo grid horizontal de colunas).
+    private TMP_Text BuildStatRow(GameObject parent, string label)
     {
-        var colGo = new GameObject(label + "Col");
-        colGo.transform.SetParent(parent.transform, false);
-        colGo.AddComponent<RectTransform>();  // RT before UIBehaviour
-        colGo.AddComponent<Image>().color = SectBg;
+        var rowGo = new GameObject(label + "Row");
+        rowGo.transform.SetParent(parent.transform, false);
+        rowGo.AddComponent<RectTransform>();  // RT before UIBehaviour
+        var le = rowGo.AddComponent<LayoutElement>();
+        le.preferredHeight = 30f; le.flexibleWidth = 1f;
+        rowGo.AddComponent<Image>().color = SectBg;
 
-        // Label: top 40% (golden, size 12)
         var lblGo = new GameObject("Lbl");
-        lblGo.transform.SetParent(colGo.transform, false);
+        lblGo.transform.SetParent(rowGo.transform, false);
         var lrt = lblGo.AddComponent<RectTransform>();
-        lrt.anchorMin = new Vector2(0f, 0.55f); lrt.anchorMax = Vector2.one;
-        lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+        lrt.anchorMin = new Vector2(0f, 0f); lrt.anchorMax = new Vector2(0.55f, 1f);
+        lrt.offsetMin = new Vector2(10f, 0f); lrt.offsetMax = Vector2.zero;
         var lbl = lblGo.AddComponent<TextMeshProUGUI>();
-        lbl.text = label; lbl.fontSize = 12; lbl.color = Gold;
-        lbl.alignment = TextAlignmentOptions.Center;
+        lbl.text = label; lbl.fontSize = 14; lbl.color = Gold;
+        lbl.alignment = TextAlignmentOptions.MidlineLeft;
 
-        // Value: bottom 55% (white, bold, size 20)
         var valGo = new GameObject("Val");
-        valGo.transform.SetParent(colGo.transform, false);
+        valGo.transform.SetParent(rowGo.transform, false);
         var vrt = valGo.AddComponent<RectTransform>();
-        vrt.anchorMin = Vector2.zero; vrt.anchorMax = new Vector2(1f, 0.55f);
-        vrt.offsetMin = vrt.offsetMax = Vector2.zero;
+        vrt.anchorMin = new Vector2(0.55f, 0f); vrt.anchorMax = Vector2.one;
+        vrt.offsetMin = Vector2.zero; vrt.offsetMax = new Vector2(-10f, 0f);
         var val = valGo.AddComponent<TextMeshProUGUI>();
-        val.fontSize = 20; val.fontStyle = FontStyles.Bold; val.color = Color.white;
-        val.alignment = TextAlignmentOptions.Center;
+        val.fontSize = 16; val.fontStyle = FontStyles.Bold; val.color = Color.white;
+        val.alignment = TextAlignmentOptions.MidlineRight;
         return val;
     }
 
@@ -356,16 +364,59 @@ public class CharacterPanel : MonoBehaviour
         int req = XpSystem.XpRequired(p.level);
         _levelText.text = $"Level {p.level}  •  XP: {p.xpCurrent} / {req}";
 
-        _hpVal.text  = $"{p.maxHealth}";
-        _strVal.text = $"{p.str}";
-        _agiVal.text = $"{p.agility}";
-        _spdVal.text = $"{p.speed}";
+        // Mostra os stats efetivos (com bônus de skill já aplicados — ex: Immortal soma HP
+        // e subtrai STR/AGI/SPD), mesma lógica de PlayerProfile.GetEffectiveStats() usada no
+        // preview do menu principal. Antes mostrava p.maxHealth/str/agility/speed crus, então
+        // escolher uma skill que afeta stats nunca aparecia aqui.
+        var (effHp, effStr, effAgi, effSpd, effInit, effCritChance, effCritDmg, effEvasion, effReversal) = p.GetEffectiveStats();
+        SetStatValue(_hpVal,   p.maxHealth,  effHp);
+        SetStatValue(_strVal,  p.str,        effStr);
+        SetStatValue(_agiVal,  p.agility,    effAgi);
+        SetStatValue(_spdVal,  p.speed,      effSpd);
+        SetStatValue(_initVal, p.initiative, effInit);
+        SetStatValuePercent(_critChanceVal, p.criticalChance, effCritChance);
+        SetStatValuePercent(_critDmgVal,    0f,                effCritDmg);
+        SetStatValuePercent(_evasionVal,    p.evasion,         effEvasion);
+        SetStatValuePercent(_reversalVal,   p.reversal,        effReversal);
 
         _battlesText.text = $"⚡  Batalhas hoje:  {p.battlesRemaining} / 6";
         _winRateText.text  = $"🏆  Win Rate:  {p.winRate:F1}%";
 
         RefreshSkills(p);
         RefreshArmas(p);
+    }
+
+    // Mirrors MainMenuCharacterPreview's "base→effective" highlight: mostra só o valor
+    // efetivo quando igual ao base, ou "base→efetivo" em verde quando uma skill o altera.
+    private static void SetStatValue(TMP_Text label, int baseValue, int effectiveValue)
+    {
+        if (effectiveValue == baseValue)
+        {
+            label.text = $"{effectiveValue}";
+            label.fontSize = 16;
+        }
+        else
+        {
+            label.text = $"{baseValue}→<color=#7CD27C>{effectiveValue}</color>";
+            label.fontSize = 13;
+        }
+    }
+
+    // Mesmo padrão "base→efetivo", pra stats percentuais (CRIT CHANCE, CRIT DMG). critDmgBonus
+    // não tem campo base no profile (é puramente derivado de skill, ex: Reconnaissance) — quem
+    // chama passa 0f como base nesse caso.
+    private static void SetStatValuePercent(TMP_Text label, float baseValue, float effectiveValue)
+    {
+        if (Mathf.Approximately(effectiveValue, baseValue))
+        {
+            label.text = $"{effectiveValue:P0}";
+            label.fontSize = 16;
+        }
+        else
+        {
+            label.text = $"{baseValue:P0}→<color=#7CD27C>{effectiveValue:P0}</color>";
+            label.fontSize = 13;
+        }
     }
 
     private void RefreshSkills(PlayerProfile p)

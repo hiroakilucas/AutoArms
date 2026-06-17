@@ -66,16 +66,16 @@ public class MainMenuCharacterPreview : MonoBehaviour
         nameTxt.alignment = TextAlignmentOptions.Center;
 
         // Stats efetivos (com bônus de skill já aplicados)
-        var (effHp, effStr, effAgi, effSpd) = p.GetEffectiveStats();
+        var (effHp, effStr, effAgi, effSpd, effInit, _, _, _, _) = p.GetEffectiveStats();
         var statsGo = new GameObject("Stats");
         statsGo.transform.SetParent(container.transform, false);
         var statsRt = statsGo.AddComponent<RectTransform>();
         statsRt.anchorMin = new Vector2(0f, 0.68f); statsRt.anchorMax = new Vector2(1f, 0.82f);
         statsRt.offsetMin = statsRt.offsetMax = Vector2.zero;
         var statsTxt = statsGo.AddComponent<TextMeshProUGUI>();
-        statsTxt.text = effHp != p.maxHealth || effStr != p.str || effAgi != p.agility || effSpd != p.speed
-            ? $"HP {p.maxHealth}→<color=#7CD27C>{effHp}</color>  STR {p.str}→<color=#7CD27C>{effStr}</color>  AGI {p.agility}→<color=#7CD27C>{effAgi}</color>  SPD {p.speed}→<color=#7CD27C>{effSpd}</color>"
-            : $"HP {effHp}  STR {effStr}  AGI {effAgi}  SPD {effSpd}";
+        statsTxt.text = effHp != p.maxHealth || effStr != p.str || effAgi != p.agility || effSpd != p.speed || effInit != p.initiative
+            ? $"HP {p.maxHealth}→<color=#7CD27C>{effHp}</color>  STR {p.str}→<color=#7CD27C>{effStr}</color>  AGI {p.agility}→<color=#7CD27C>{effAgi}</color>  SPD {p.speed}→<color=#7CD27C>{effSpd}</color>  INIT {p.initiative}→<color=#7CD27C>{effInit}</color>"
+            : $"HP {effHp}  STR {effStr}  AGI {effAgi}  SPD {effSpd}  INIT {effInit}";
         statsTxt.fontSize = 9;
         statsTxt.color = new Color(0.85f, 0.85f, 0.85f, 1f);
         statsTxt.alignment = TextAlignmentOptions.Center;

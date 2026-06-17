@@ -48,7 +48,9 @@ public class CombatSceneLoader : MonoBehaviour
         GameObject player1Obj = Instantiate(profile.characterPrefab);
         player1Obj.name = "Player1";
         player1Obj.transform.position   = profile.startPos;
-        player1Obj.transform.localScale = Vector3.one * 0.3f;
+        // Deity: +50% de tamanho. Aplicado aqui (antes do EntryFall) pra já valer na queda.
+        float p1ScaleMult = profile.HasSkill("Deity") ? 1.5f : 1f;
+        player1Obj.transform.localScale = Vector3.one * 0.3f * p1ScaleMult;
 
         var player1Combat = player1Obj.GetComponent<PlayerCombat>();
         var player1Anim   = player1Obj.GetComponent<AnimationController>();
@@ -96,6 +98,12 @@ public class CombatSceneLoader : MonoBehaviour
             player2Profile = LoadPlayer2ProfileFallback();
         int p2MaxHealth = (useSimulator && player2Profile != null) ? player2Profile.maxHealth : player2MaxHealth;
 
+        // Deity: +50% de tamanho, mesma lógica do Player1 acima — Player2 já vem pré-colocado
+        // na cena com sua própria escala configurada no editor, então aqui é multiplicador
+        // sobre o valor atual, não um valor fixo.
+        if (useSimulator && player2Profile != null && player2Profile.HasSkill("Deity"))
+            player2Object.transform.localScale *= 1.5f;
+
         var health2 = player2Object.GetComponent<HealthSystem>() ?? player2Object.AddComponent<HealthSystem>();
         health2.Initialize(p2MaxHealth);
 
@@ -110,10 +118,49 @@ public class CombatSceneLoader : MonoBehaviour
 
         var p2Loadout = player2Object.GetComponent<PlayerLoadout>();
         var p2Handler = player2Object.GetComponent<WeaponHandler>();
+
+        // Mirrors player1's loadout assignment above. Sem isso, Player2 fica com o valor
+        // hardcoded no PlayerLoadout da cena em vez do weaponLoadout do seu próprio
+        // PlayerProfile — não tinha efeito enquanto todos os profiles compartilhavam o
+        // mesmo asset, mas passa a divergir agora que cada profile tem seu próprio loadout.
+        if (p2Loadout != null && player2Profile != null)
+            p2Loadout.loadout = player2Profile.weaponLoadout;
+
         if (p2Loadout != null && p2Handler != null)
         {
             var p2WeaponHUD = gameObject.AddComponent<WeaponHUD>();
             p2WeaponHUD.Initialize(p2Loadout, p2Handler, false, combatHUD.CanvasTransform);
+        }
+
+        List<CombatEvent> events = null;
+
+        if (useSimulator && player2Profile != null)
+        {
+            // Pré-calcula a luta inteira ANTES do EntryFall (não depois, como antes) — só
+            // assim dá pra saber qual arma a Deity começa empunhando (Player1StartingWeapon/
+            // Player2StartingWeapon) a tempo de equipá-la visualmente antes da queda, em vez
+            // de depois. Não depende de nada que só existe após o EntryFall (transform/
+            // spawnPosition) — só lê os PlayerProfile.
+            attackSequencer.player1Profile = profile;
+
+            var simulator = new CombatSimulator();
+            events = simulator.Simulate(profile, player2Profile);
+
+            Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events));
+
+            // Deity: já cai em cena com uma arma na mão, sem disparar nenhuma animação de
+            // pickup (EquipSpecific é silencioso) — ver comentário em
+            // CombatSimulator.Player1StartingWeapon/Player2StartingWeapon.
+            if (handler != null && simulator.Player1StartingWeapon != null)
+                handler.EquipSpecific(simulator.Player1StartingWeapon);
+            if (p2Handler != null && simulator.Player2StartingWeapon != null)
+                p2Handler.EquipSpecific(simulator.Player2StartingWeapon);
+        }
+        else
+        {
+            // Original coroutine-based system.
+            attackSequencer.player1        = player1Combat;
+            attackSequencer.player1Profile = profile;
         }
 
         // Aguarda um frame para PlayerCombat.Start() rodar e definir spawnPosition
@@ -130,18 +177,10 @@ public class CombatSceneLoader : MonoBehaviour
         StartCoroutine(EntryFall(player2Object, p2Land, () => p2Done = true));
         yield return new WaitUntil(() => p1Done && p2Done);
 
-        if (useSimulator && player2Profile != null)
+        if (events != null)
         {
-            // Pre-calculate entire combat, then replay as animation via CombatPlayer.
-            // AttackSequencer stays idle (player1 never assigned → WaitUntil never resolves),
-            // but player1Profile must still be set so OnCombatEnd can award XP / show the result panel.
-            attackSequencer.player1Profile = profile;
-
-            var simulator = new CombatSimulator();
-            var events    = simulator.Simulate(profile, player2Profile);
-
-            Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events));
-
+            // AttackSequencer stays idle (player1 never assigned → WaitUntil never resolves);
+            // player1Profile já foi setado acima.
             var combatPlayer = gameObject.AddComponent<CombatPlayer>();
             combatPlayer.p1Combat  = player1Combat;
             combatPlayer.p2Combat  = player2Combat;
@@ -149,12 +188,6 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);
-        }
-        else
-        {
-            // Original coroutine-based system.
-            attackSequencer.player1        = player1Combat;
-            attackSequencer.player1Profile = profile;
         }
     }
 
@@ -179,43 +212,102 @@ public class CombatSceneLoader : MonoBehaviour
     {
         int hp = baseMaxHealth;
 
+        // Percentuais de HP/STR/AGI/SPD são somados num percentual líquido por status e
+        // aplicados uma única vez no final (ver nota em "Skills que modificam stats" no
+        // CLAUDE.md) — evita que múltiplas skills no mesmo status arredondem em cascata
+        // (ex: ×1.5 depois ×0.75 arredondando a cada passo dava resultado diferente de somar
+        // os percentuais primeiro: 9 str com Herculean+Immortal dava 10 em vez dos 11
+        // esperados de 9×(1+0.5-0.25)).
+        // evasionPct é multiplicativo sobre o evasion já somado por outras skills (Untouchable,
+        // Ballet Shoes) — aplicado depois delas, no fim da função.
+        float hpPct = 0f, strPct = 0f, agiPct = 0f, spdPct = 0f, evasionPct = 0f;
+
         if (combat.HasSkill("Vitality"))
         {
-            hp += 50;
-            combat.LogSkillCheck("Vitality", true, $"maxHealth {baseMaxHealth} → {hp}");
+            // +18 flat já aplicado permanentemente em profile.maxHealth na escolha
+            // (CombatResultPanel.ApplyBonus) — aqui só acumula o +50%.
+            hpPct += 0.5f;
+            combat.LogSkillCheck("Vitality", true, "hp% += 50%");
         }
 
         if (combat.HasSkill("Herculean Strength"))
         {
-            int ps = combat.str; int pa = combat.agility;
-            combat.str     += 15;
-            combat.agility -= 4;
-            combat.LogSkillCheck("Herculean Strength", true, $"str {ps}→{combat.str}, agi {pa}→{combat.agility}");
+            // +3 flat já foi aplicado permanentemente em profile.str no momento da escolha
+            // (CombatResultPanel.ApplyBonus) — aqui só acumula o +50%.
+            strPct += 0.5f;
+            combat.LogSkillCheck("Herculean Strength", true, "str% += 50%");
         }
 
         if (combat.HasSkill("Feline Agility"))
         {
-            int prev = combat.agility;
-            combat.agility = Mathf.RoundToInt(combat.agility * 1.5f);
-            combat.LogSkillCheck("Feline Agility", true, $"agility {prev} → {combat.agility}");
+            agiPct += 0.5f;
+            combat.LogSkillCheck("Feline Agility", true, "agility% += 50%");
         }
 
         if (combat.HasSkill("Lightning Bolt"))
         {
-            combat.runSpeedMultiplier *= 1.5f;
-            combat.LogSkillCheck("Lightning Bolt", true, $"runSpeedMultiplier × 1.5 = {combat.runSpeedMultiplier:F2}");
+            // +3 flat já aplicado permanentemente em profile.speed na escolha
+            // (CombatResultPanel.ApplyBonus) — aqui só acumula o +50%. Antes afetava
+            // runSpeedMultiplier (velocidade de animação de correr); agora afeta o atributo
+            // speed real (ações extra no Speed System), mesmo padrão de Herculean/Feline.
+            spdPct += 0.5f;
+            combat.LogSkillCheck("Lightning Bolt", true, "speed% += 50%");
+        }
+
+        if (combat.HasSkill("Reconnaissance"))
+        {
+            // +5 flat já aplicado permanentemente em profile.speed na escolha
+            // (CombatResultPanel.ApplyBonus) — aqui acumula o +150% de SPD, -200 iniciativa
+            // (não entra no percentual líquido — flat puro, igual First Strike/Monk) e +50%
+            // de dano crítico (critDamageBonus, somado ao critDamageMultiplier da arma).
+            spdPct += 1.5f;
+            combat.initiative -= 200;
+            combat.critDamageBonus += 0.5f;
+            combat.LogSkillCheck("Reconnaissance", true,
+                $"speed% += 150%, initiative → {combat.initiative}, critDamageBonus → {combat.critDamageBonus:P0}");
         }
 
         if (combat.HasSkill("Immortal"))
         {
-            int prevHp = hp;
-            int prevStr = combat.str, prevAgi = combat.agility, prevSpd = combat.speed;
-            hp = Mathf.RoundToInt(hp * 3.5f);
-            combat.str     = Mathf.RoundToInt(combat.str * 0.75f);
-            combat.agility = Mathf.RoundToInt(combat.agility * 0.75f);
-            combat.speed   = Mathf.RoundToInt(combat.speed * 0.75f);
-            combat.LogSkillCheck("Immortal", true,
-                $"maxHealth {prevHp}→{hp}, str {prevStr}→{combat.str}, agi {prevAgi}→{combat.agility}, speed {prevSpd}→{combat.speed}");
+            hpPct  += 2.5f;
+            strPct -= 0.25f;
+            agiPct -= 0.25f;
+            spdPct -= 0.25f;
+            combat.LogSkillCheck("Immortal", true, "hp% += 250%, str/agi/speed% -= 25%");
+        }
+
+        if (combat.HasSkill("Bodybuilder"))
+        {
+            strPct += 0.5f;
+            combat.LogSkillCheck("Bodybuilder", true, "str% += 50%");
+        }
+
+        if (combat.HasSkill("Deity"))
+        {
+            // +100% HP, +100% STR, -100% AGI, -90% SPD (não -100%: ver CombatSimulator, mesmo
+            // motivo — speed fixo em 0 travava o player sem chance de ação própria/pegar
+            // arma), -100% evasion ("Dexterity" — sem resistência a ser atingido), -200
+            // initiative, +40% reversal (cancela o hit do atacante antes de conectar).
+            hpPct      += 1.0f;
+            strPct     += 1.0f;
+            agiPct     -= 1.0f;
+            spdPct     -= 0.90f;
+            evasionPct -= 1.0f;
+            combat.reversal   += 0.40f;
+            combat.initiative -= 200;
+            combat.LogSkillCheck("Deity", true,
+                $"hp/str% += 100%, agi% -= 100%, spd% -= 90%, evasion% -= 100%, reversal → {combat.reversal:P0}, initiative → {combat.initiative}");
+        }
+
+        if (hpPct != 0f || strPct != 0f || agiPct != 0f || spdPct != 0f)
+        {
+            int prevHp = hp, prevStr = combat.str, prevAgi = combat.agility, prevSpd = combat.speed;
+            hp             = Mathf.RoundToInt(hp * (1f + hpPct));
+            combat.str     = Mathf.RoundToInt(combat.str * (1f + strPct));
+            combat.agility = Mathf.RoundToInt(combat.agility * (1f + agiPct));
+            combat.speed   = Mathf.RoundToInt(combat.speed * (1f + spdPct));
+            combat.LogSkillCheck("StatPercent", true,
+                $"hp {prevHp}→{hp}, str {prevStr}→{combat.str}, agi {prevAgi}→{combat.agility}, speed {prevSpd}→{combat.speed}");
         }
 
         if (combat.HasSkill("Armour"))
@@ -234,13 +326,6 @@ public class CombatSceneLoader : MonoBehaviour
         {
             combat.evasion += 0.25f;
             combat.LogSkillCheck("Untouchable", true, $"evasion → {combat.evasion:P0}");
-        }
-
-        if (combat.HasSkill("Bodybuilder"))
-        {
-            int prev = combat.str;
-            combat.str = Mathf.RoundToInt(combat.str * 1.5f);
-            combat.LogSkillCheck("Bodybuilder", true, $"str {prev} → {combat.str}");
         }
 
         if (combat.HasSkill("Relentless"))
@@ -280,6 +365,15 @@ public class CombatSceneLoader : MonoBehaviour
             combat.initiative -= 200;
             combat.hitSpeed    = 0f;
             combat.LogSkillCheck("Monk", true, $"counter +40%, initiative −200, hitSpeed = 0");
+        }
+
+        // Aplicado por último, depois de Untouchable/Ballet Shoes já terem somado evasion —
+        // garante que Deity zere o total mesmo que outra skill tenha adicionado evasion antes.
+        if (evasionPct != 0f)
+        {
+            float prevEvasion = combat.evasion;
+            combat.evasion = Mathf.Max(0f, combat.evasion * (1f + evasionPct));
+            combat.LogSkillCheck("EvasionPercent", true, $"evasion {prevEvasion:P0} → {combat.evasion:P0}");
         }
 
         return hp;

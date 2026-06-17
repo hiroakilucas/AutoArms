@@ -48,6 +48,23 @@ public static class CombatLogFormatter
                     break;
                 }
 
+                case CombatEventType.Counter:
+                case CombatEventType.Reversal:
+                {
+                    string label = e.type == CombatEventType.Counter ? "CONTRA-ATAQUE" : "REVERSAL";
+                    string tag = e.isCrit ? " [CRÍTICO]" : "";
+                    string hp  = "";
+                    if (i + 1 < events.Count
+                        && events[i + 1].type == CombatEventType.HealthChanged
+                        && events[i + 1].playerIndex == e.targetIndex)
+                    {
+                        hp = $" (HP: {events[i + 1].newHp}/{events[i + 1].maxHp})";
+                        i++;
+                    }
+                    sb.AppendLine($"  [{label}] {Name(e.playerIndex)} acerta {Name(e.targetIndex)}: {e.damage} dano{tag}{hp}");
+                    break;
+                }
+
                 case CombatEventType.Dodge:
                     sb.AppendLine($"  {Name(e.targetIndex)} esquiva do ataque de {Name(e.playerIndex)}");
                     break;

@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: skill_immortal
   m_EditorClassIdentifier: 
   skillName: Immortal
-  description: +250% vida, -25% força/agilidade/velocidade
-  icon: {fileID: 21300000, guid: 3bd7656beb61b5b4496a4ec9d4690a89, type: 3}
+  description: "+250% vida, -25% for\xE7a/agilidade/velocidade"
+  icon: {fileID: 21300000, guid: b523a96724a297d4da8f600cb223fb15, type: 3}
   category: 2
   activationType: 0
   usesPerFight: 1

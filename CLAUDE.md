@@ -15,6 +15,7 @@ This is a Unity project. All development happens inside the Unity Editor. There 
 - **Run the game**: Play button in the Unity Editor
 - **Build**: File → Build Settings → Build
 - **Scenes must be registered** in File → Build Settings for `SceneManager.LoadScene` to work
+- **Cache de Compilação**: Ao fazer mudanças significativas em scripts como CombatHUD ou CombatPlayer, se aparecerem bugs fantasmas (ex: OnClick vazio, listeners não registrados), deletar a pasta Library/ do projeto e reabrir no Unity Hub para forçar recompilação limpa. Cache de código antigo pode persistir e causar comportamentos inconsistentes mesmo com o código correto salvo.
 
 ## Scene Flow
 
@@ -37,22 +38,24 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 | `CharacterDatabase` | `Assets/ScriptableObjects/Databases/` | Only **Assassin Guy** and **Medieval Warrior** are unlocked (selectable); Medieval Warrior Girl is hardcoded as Player2 |
 | `SelectedProfileHolder` | `Assets/Resources/` | Cross-scene singleton — read by `CombatSceneLoader` and `MainMenuCharacterPreview` |
 | `AttackSettings` | `Assets/Data/Player1Settings.asset`, `Assets/Data/Player2Settings.asset` | Combat timing — see current values below |
-| `WeaponLoadout` | `Assets/Data/Weapons/` | e.g. `Loadout10Armas.asset` — array of `WeaponData` slots |
+| `WeaponLoadout` | `Assets/Data/Weapons/` | array of `WeaponData` slots. **Um asset por personagem** — `Loadout_AssasinGuy.asset`, `Loadout_MedievalWarrior.asset`, `Loadout_MedievalWarriorGirl.asset` (todos começam com as mesmas 4 armas: Satyr1, Golem3, Succubus, Zombie). Antes os 3 `PlayerProfile` apontavam para o mesmo `Loadout10Armas.asset` (ainda existe no projeto, sem uso) — qualquer arma ganha em level-up por um personagem vazava pra todos, já que `CombatResultPanel.ApplyBonus` muta `profile.weaponLoadout.weapons` diretamente. Separar os assets corrigiu isso. |
 | `WeaponData` | `Assets/Data/Weapons/<type>/` | Name, in-hand sprite, damage, `WeaponType`, scale |
 
 **AttackSettings — valores atuais (Player1 = Player2 exceto onde indicado):**
 | Campo | Valor |
 |---|---|
-| `idleDuration` | 0.3s |
+| `idleDuration` | 0.3s (não usado no caminho ativo — só em `PlayerCombat.AttackRoutine`, código morto enquanto `useSimulator=true`) |
 | `runSpeed` | 35 |
-| `slashingDuration` | 0.5s |
-| `slashingToJumpDelay` | 0.2s |
+| `slashingDuration` | 0.4s (era 0.5s — reduzido para deixar o swing menos arrastado; `CombatPlayer` divide em duas metades de 0.2s antes/depois do impacto) |
+| `slashingToJumpDelay` | 0.2s (não usado no caminho ativo — só em `ComboStrikeRoutine`, código morto enquanto `useSimulator=true`) |
 | `jumpStartDuration` | 0.02s |
 | `jumpHeight` | 2 |
-| `hurtDuration` | 0.15s |
-| `dodgeDuration` | 0.25s |
+| `hurtDuration` | 0.12s (era 0.15s) |
+| `dodgeDuration` | 0.2s (era 0.25s) |
 | `knockbackDistance` | 0.5 |
-| `comboDelay` | 0.15s |
+| `comboDelay` | 0.1s (era 0.15s — gap entre ações de um combo, usado por `CombatPlayer.ExecuteEvent`) |
+
+> `interTurnDelay` (campo do `AttackSequencer`, valor 0.2s na cena) também é código morto no caminho ativo — só usado em `AttackSequencer.CombatLoop`, que não roda enquanto `CombatSceneLoader.useSimulator=true` (default). O ritmo real entre turnos hoje vem só do tempo de animação (`TurnEnd` → jump-back) mais o `comboDelay` ao final de cada ação.
 
 ## Prefabs
 
@@ -80,12 +83,17 @@ PlayerCombat.AttackRoutine()
 ```
 
 - `AttackSequencer` — Runs the indefinite turn loop; waits for both `PlayerCombat` references before starting. On combat end calls `OnCombatEnd(winner)`: awards XP (+2 win / +1 loss) via `XpSystem.AddXP`, decrements `player1Profile.battlesRemaining`, then spawns `CombatResultPanel`. Field `player1Profile` set by `CombatSceneLoader`. Fields `skillDatabase` (`Assets/ScriptableObjects/Skills/SkillDatabase.asset`) and `allWeapons` (array of all `WeaponData` assets eligible as level-up rewards) are wired directly on the `AttackSequencer` GameObject in `04_CombatScenePVP` — required for the level-up choice screen to offer skill/weapon options instead of only attributes.
+  - `OnCombatEnd` determina vitória via `winner.isPlayer1` (não `winner == player1`) — o campo `AttackSequencer.player1` nunca é atribuído no caminho do simulador (`CombatSceneLoader` só seta `player1Profile`, de propósito, pra `StartWhenReady`/`CombatLoop` legado não rodarem em paralelo com o `CombatPlayer`). Comparar contra `player1` fazia `player1Won` ser sempre `false`, mostrando "DERROTA!" e dando XP de derrota mesmo quando P1 vencia. `isPlayer1` é setado por `CombatSceneLoader` (`player1Combat.isPlayer1 = true`; Player2 fica `false`) e funciona nos dois caminhos (simulador e legado).
 - `XpSystem` — Static utility. `XpRequired(level) = (level+1)*(level+2)` (matches table: 1→2=6, 2→3=12…). `AddXP(profile, amount)` accumulates XP, triggers level-up when threshold reached, applies **+2 maxHealth only** (`ApplyLevelBonus`) — STR/AGI/SPD never increase automatically, they only grow via the level-up choice screen (see below) — calls `EditorUtility.SetDirty` to persist ScriptableObject changes in editor.
 - `CombatResultPanel` — Screen-space overlay panel shown 0.8s after combat ends. Shows result title (gold/red), XP gained, animated blue XP bar, current XP / required, level, battles remaining, "Continuar" button (→ `01_MainMenu`). Level-up: bar animates to full, "LEVEL UP!" text pulses with sin-wave scale, bar resets to new level's progress, **then `ShowLevelUpChoice` always opens and blocks "Continuar" until a choice is made** (`continueBtn.interactable = !didLevelUp`). Ensures `EventSystem` exists; uses `GraphicRaycaster` on canvas (added to `CombatHUD.CreateCanvas`) for click detection. Overlay has `raycastTarget = false` so it doesn't block the button.
-  - `ShowLevelUpChoice` draws 2 unique `LevelUpOption`s via `DrawOption`: weighted 60% Attribute (+8 HP / +2 STR / +2 AGI / +2 SPD, picked uniformly among the 4), 30% Skill (random `SkillData` from `skillDatabase` not already in `profile.skills`), 10% Weapon (random `WeaponData` from `allWeapons` not already in `profile.weaponLoadout`) — weights for Skill/Weapon drop to 0 if their pool is empty. Logs `[LevelUp] Opção 1: X (tipo) | Opção 2: Y (tipo)`; logs `[LevelUp] ERRO: SkillDatabase não encontrado ou vazio` if `skillDatabase` is null/empty. Picking a card calls `ApplyBonus` (mutates `profile` directly) then unblocks "Continuar".
-- `CombatSceneLoader` — Agora usa coroutine (`Initialize()`): instancia Player1, aplica `profile.str`/`profile.agility` ao `PlayerCombat`, inicializa health/HUD, aguarda um frame (para `PlayerCombat.Start()` rodar), então executa entrada em cena (`EntryFall`) de ambos em paralelo. Só atribui `attackSequencer.player1` e `attackSequencer.player1Profile` após os dois pousarem.
+  - `ShowLevelUpChoice` draws 2 unique `LevelUpOption`s via `DrawOption`: weighted 60% Attribute (+8 HP / +2 STR / +2 AGI / +2 SPD, picked uniformly among the 4), 30% Skill (random `SkillData` from `skillDatabase` not already in `profile.skills`), 10% Weapon (random `WeaponData` from `allWeapons` not already in `profile.weaponLoadout`) — weights for Skill/Weapon drop to 0 if their pool is empty. Logs `[LevelUp] ERRO: SkillDatabase não encontrado ou vazio` if `skillDatabase` is null/empty. Picking a card calls `ApplyBonus` (mutates `profile` directly) then unblocks "Continuar".
+    - **Modo teste (`ShowAllOptionsForTesting = true`, const em `CombatResultPanel.cs`)**: em vez de sortear 2 opções, chama `ShowAllOptionsChoice` — grade rolável (`ScrollRect` + `GridLayoutGroup`) com as opções disponíveis: 4 atributos + skills da `SkillDatabase` que (a) ainda não foram escolhidas e (b) têm `icon != null`. Reverter para o comportamento de 2 cartas: trocar essa const para `false`.
+    - **Testando skills uma a uma**: todos os ícones foram removidos de `Assets/Data/UI/Skills/`; são re-adicionados um por vez conforme cada skill é testada (`skill_immortality.png` é a primeira). `ShowLevelUpChoice` filtra `availableSkills` por `s.icon != null` — só aparecem no level-up as skills cujo ícone já foi re-adicionado. **Armas estão temporariamente fora** da grade de teste (`foreach (var w in availableWeapons)` comentado em `ShowAllOptionsChoice`) — só atributos + skills disponíveis, por pedido do usuário enquanto o foco é testar skills. Reativar descomentando esse loop quando for testar armas de novo.
+    - **Importante**: `SkillData.icon` é vinculado por GUID na geração (`Tools → AutoArms → Generate Skill Assets`, `Assets/Editor/SkillAssetGenerator.cs`). Se você apagar/recriar um PNG do zero (não restaurar o arquivo original), ele recebe um GUID novo e o `icon` salvo no `.asset` antigo fica apontando pra um GUID inexistente (resolve como `null` mesmo com o arquivo presente). O gerador é idempotente e re-resolve `skill.icon = AssetDatabase.LoadAssetAtPath<Sprite>(iconPath)` pra **todas** as 32 skills a cada execução (null se o PNG não existir) — rodar a ferramenta de novo depois de adicionar/remover qualquer ícone mantém os links corretos, sem precisar editar os `.asset` manualmente.
+    - **`SkillDef.iconFileName`** (opcional, em `SkillAssetGenerator.cs`): nome do PNG em `Assets/Data/UI/Skills/`, se diferente de `fileName` (que também define o nome do `.asset` gerado — não pode ser trocado sem deixar um asset órfão). `Immortal` usa `fileName = "skill_immortal"` (asset existente) mas `iconFileName = "skill_immortality"`, porque o ícone re-adicionado pelo usuário segue o nome da skill na lista mestre original (`immortality`), não o nome abreviado do asset já implementado (`immortal`) — sem esse campo o gerador procurava `skill_immortal.png` (nunca existiu) e o ícone ficava sempre `null`, mesmo com `skill_immortality.png` presente na pasta e o gerador rodado.
+- `CombatSceneLoader` — Agora usa coroutine (`Initialize()`): instancia Player1, aplica `profile.str`/`profile.agility` ao `PlayerCombat`, inicializa health/HUD, aguarda um frame (para `PlayerCombat.Start()` rodar), então executa entrada em cena (`EntryFall`) de ambos em paralelo. Só atribui `attackSequencer.player1` e `attackSequencer.player1Profile` após os dois pousarem. Atribui `player1`'s `PlayerLoadout.loadout = profile.weaponLoadout` e, simetricamente, `player2`'s `PlayerLoadout.loadout = player2Profile.weaponLoadout` (esse segundo não existia antes — não tinha efeito enquanto os profiles compartilhavam o mesmo asset, mas passou a ser necessário depois de cada personagem ganhar seu próprio `WeaponLoadout`; sem isso o `WeaponHUD` do Player2 mostraria o valor hardcoded na cena em vez do loadout real do perfil dela).
 - `PlayerCombat` — Owns `AttackRoutine`. Manages sorting layer swaps so the attacker renders above the defender during a strike.
-- `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach. Fires `OnWeaponChanged(WeaponData)` from `EquipData` (new weapon) and `Unequip` (null).
+- `WeaponHandler` — Instantiates a weapon prefab onto `handBone`; `WeaponType` determines attack reach. Fires `OnWeaponChanged(WeaponData)` from `EquipData` (new weapon) and `Unequip` (null). `EquipSpecific(WeaponData)` equipa uma arma exata (usado por `CombatPlayer` para casar com o que o simulador sorteou); `EquipRandom()`/`EquipNext()` sorteiam/ciclam pelo loadout. Campo `sortingLayer` default `"Weapons"` (era `"Weapon"`, singular — não existe esse Sorting Layer no projeto; ver Sorting Layers abaixo — armas equipadas renderizavam num layer inexistente e ficavam atrás do corpo, parecendo invisíveis).
 - `PlayerLoadout` — Tracks `currentIndex` and advances round-robin through `WeaponLoadout.weapons[]`. Fires `OnWeaponsChanged` from `RemoveCurrentWeapon`. Exposes `IReadOnlyList<WeaponData> Weapons` (lazy-initializes `runtimeWeapons` on first access).
 - `DamagePopup` — World-space TextMeshPro floating text spawned at the defender's position. Variants: normal (yellow), crit (red "CRIT!\n{damage}"), dodge (blue "ESQUIVA!"), block (gold "BLOCK!"), miss (gray "MISS!"), disarm (orange "DISARM!"), drop (orange "DROP!").
 - `WeaponHUD` — Screen-space UI row of weapon icons (100×100px, rotated 45°, tip up) below each player's health bar. One instance per player on `CombatInitializer`. P1 icons left→right; P2 icons right→left (mirrored). Subscribes to `PlayerLoadout.OnWeaponsChanged` (rebuild all icons) and `WeaponHandler.OnWeaponChanged` (update gold highlight). Background: semi-transparent black (alpha 0.35); active weapon: gold (alpha 0.70). Thrown weapons never lose their icon (only `UnequipPermanent` triggers `OnWeaponsChanged`). Created and wired in `CombatSceneLoader.Initialize()` via `CombatHUD.CanvasTransform`.
@@ -116,7 +124,7 @@ Both `MainMenuCharacterPreview` and `CharacterSelectController` instantiate the 
 
 `MainMenuCharacterPreview.Start()` also calls `BuildSummaryHUD(profile)` — creates a standalone ScreenSpaceOverlay Canvas (sortingOrder=5) with a semi-transparent strip showing: character name + level, a stats row (HP/STR/AGI/SPD), animated XP bar, and the first 3 skill icons. Container anchors: `(0.30, 0.21)–(0.70, 0.40)` — positioned above the bottom buttons (button tops ≈ 0.188 of 1080p).
 
-The stats row comes from `PlayerProfile.GetEffectiveStats()` — a preview-only calculation (no live `PlayerCombat`/`PlayerState` needed, since those components are destroyed for this display) that mirrors the subset of `CombatSimulator.ApplySkillStats`/`CombatSceneLoader.ApplySkillStats` affecting HP/str/agility/speed (Vitality, Herculean Strength, Feline Agility, Bodybuilder, Immortal). Shows just the four flat numbers normally, or `base→effective` in green when a skill changes any of them. **Keep this method in sync** if a stat-affecting skill's formula changes in either of those two places — it's a third, independent copy of the same logic for display purposes.
+The stats row comes from `PlayerProfile.GetEffectiveStats()` — a preview-only calculation (no live `PlayerCombat`/`PlayerState` needed, since those components are destroyed for this display) that mirrors the subset of `CombatSimulator.ApplySkillStats`/`CombatSceneLoader.ApplySkillStats` affecting HP/str/agility/speed (Vitality, Herculean Strength, Feline Agility, Bodybuilder, Immortal). Shows just the four flat numbers normally, or `base→effective` in green when a skill changes any of them. **Keep this method in sync** if a stat-affecting skill's formula changes in either of those two places — it's a third, independent copy of the same logic for display purposes. `CharacterPanel.RefreshAll` (Stats tab, abaixo) also calls `GetEffectiveStats()` agora — antes mostrava `p.maxHealth`/`str`/`agility`/`speed` crus, então escolher uma skill que afeta stats (ex: Immortal) nunca refletia ali.
 
 ### CharacterPanel (3-tab slide-in)
 
@@ -127,6 +135,7 @@ The stats row comes from `PlayerProfile.GetEffectiveStats()` — a preview-only 
 - Panel RT: `anchorMin=(1, 0.22)`, `anchorMax=(1, 0.92)`, `pivot=(1, 0.5)`, `offsetMin=(-320, 0)`, `offsetMax=(0, 0)` → 320px fixed-width strip on the right edge, bottom at 237px (above the 203px button tops)
 - Slide animation: `anchoredPosition.x = 340` (off-screen right) → `0` (visible). EaseOut quad (0.3s open, 0.2s close)
 - Three tabs: **Stats** (HP/STR/AGI/SPD grid + XP bar + battle stats), **Skills** (3-column icon grid), **Armas** (weapon list with icon + name/type/damage)
+  - Stats agora são 9 linhas verticais (`BuildStatRow`, label dourado à esquerda + valor à direita, empilhadas pelo `VerticalLayoutGroup`) em vez do grid horizontal antigo de colunas: HP, STR, AGI, SPD, INIT, CRIT CHANCE, CRIT DMG, EVASION, REVERSAL. Usa `SetStatValue`/`SetStatValuePercent` (mesmo padrão "base→efetivo" do `MainMenuCharacterPreview` acima): mostra só o número quando igual ao base, ou `base→<color verde>efetivo</color>` (fonte menor, 13 em vez de 16) quando uma skill o altera. `CRIT DMG` não tem campo base no profile (puramente derivado de skill, ex: Reconnaissance) — chamado com base `0f` fixo. `RefreshAll()` roda a cada `Open()`, então reabrir o painel depois de escolher uma skill no level-up já mostra os valores atualizados. Content da aba Stats agora tem `ContentSizeFitter` (faltava, igual Skills/Armas já tinham) — necessário pro scroll funcionar com a lista mais alta de 9 linhas.
 - Overlay behind panel has `raycastTarget = false` so bottom buttons stay clickable
 
 ### UI Construction Rule — RectTransform First
@@ -244,8 +253,8 @@ Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a 
 | `critChanceBonus` | Soma-se em `CritChance()` |
 | `critDamageMultiplier` | Multiplicador de dano em crítico (substitui o antigo `×2` fixo) |
 | `evasionBonus` | Soma-se em `DodgeChance()` (bônus do **defensor**) |
-| `dexterityBonus` | Reservado (sem mecânica ainda, como `accuracy`/`reversal` em `PlayerProfile`) |
-| `reversalBonus` | Reservado |
+| `dexterityBonus` | Reservado (sem mecânica ainda, como `accuracy` em `PlayerProfile`) |
+| `reversalBonus` | Soma-se em `ReversalChance()` (bônus do **defensor**) — ver seção **Counter e Reversal** |
 | `blockBonus` | Soma-se em `BlockChance()` (bônus do **defensor**) |
 | `accuracyBonus` | Reservado |
 | `disarmBonus` | Soma-se em `DisarmChance()` (bônus do **atacante**) |
@@ -269,7 +278,7 @@ Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a 
 | `disarmBonus` | +0.05 | — | +0.15 | +0.10 |
 | `comboBonus` | 0 | +0.30 | 0 | -0.60 |
 
-Os 5 `WeaponData.asset` existentes (`Satyr1`=Dagger, `Golem3`=Heavy, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie`=Sword) já têm esses valores aplicados.
+Os 5 `WeaponData.asset` existentes (`Satyr1`=Dagger, `Golem3`=Heavy, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie`=Sword) já têm esses valores aplicados. `comboBonus` segue a referência oficial do My Brute (Dagger +30%, Sword 0%, Heavy -40% a -60%) — não é esse o campo que inflava o combo; ver seção **Combo** abaixo (decaimento + clamp) para a correção real.
 
 ### Critical Hit
 `CritChance()` no atacante = base por tipo de arma + `weaponData.critChanceBonus` (ou `UnarmedStats.CritChanceBonus`) + `criticalChance` (profile/skills):
@@ -293,10 +302,24 @@ On crit: `critMultiplier = weaponData.critDamageMultiplier` (ver tabela de propr
 | Heavy | 5% |
 | others | 10% |
 
-Each agility point above 3 adds +2% dodge, plus the defender's `weaponData.evasionBonus` (or `UnarmedStats.EvasionBonus = +10%` if unarmed) — teto máximo de esquiva total: 60%. Same AGI threshold adds +1.5% combo in `ComboChance()`.
+Each agility point above 3 adds +2% dodge, plus the defender's `weaponData.evasionBonus` (or `UnarmedStats.EvasionBonus = +10%` if unarmed) — teto máximo de esquiva total: 60%. Same AGI threshold adds +0.8% combo in `ComboChance()` (era +1.5%).
 
 When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4) over `settings.dodgeDuration` (separate field from `hurtDuration` — was tied to it before, making the leap snap almost instantly). Popup shows "ESQUIVA!" in blue. Combo continues normally.
 > Future skill **Sixth Sense**: +10% dodge permanente.
+
+### Combo
+`ComboChance(comboCount)` no atacante — `comboCount` = quantos hits extra de combo já aconteceram neste turno (0 no 1º hit extra):
+| WeaponType | Chance base |
+|---|---|
+| Fast | 18% |
+| Dagger | 15% |
+| Sword | 12% |
+| Heavy | 4% |
+| outros / desarmado | 5% |
+
+Soma-se `weaponData.comboBonus` (ver tabela de Propriedades das Armas — Dagger +30%, Sword 0%, Heavy -60%) + `0.8%` por ponto de AGI acima de 3 + `comboChanceBonus` (skills, ex: Relentless +15%). Esse total é limitado por `Mathf.Clamp(total, 0f, 0.35f)` — teto de 35% — e **só depois** multiplicado pelo decaimento `Mathf.Pow(0.5f, comboCount)`: 1º hit extra usa o valor pleno (até 35%), 2º hit extra usa metade (até 17.5%), 3º um quarto (até 8.75%), e assim por diante. Mirror oficial do My Brute, onde a chance de combo cai a cada hit consecutivo do mesmo turno.
+
+Valores antigos (base Fast 40%/Dagger 35%/Sword 25%/Heavy 10%/desarmado 10%, AGI +1.5%/ponto, sem clamp, sem decaimento) deixavam personagens com Dagger e AGI alta combando quase sempre e por muitos hits seguidos (ex: Assassin Guy com Satyr1 chegava a ~71-86% por golpe, repetido indefinidamente). `CombatSimulator.SimulateTurn` loga `[ComboChance] {nome} (P{1|2}, arma=...) hit extra #{n} chance={valor}` a cada checagem do loop de combo, antes do `Roll()` — usar isso para confirmar visualmente o decaimento e validar se algum combo de stats/skills ainda está inflando o valor base (pré-decaimento).
 
 ### Block
 `BlockChance()` no atacante, lendo o tipo de arma do **defensor**:
@@ -310,14 +333,44 @@ When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays 
 | Sem arma (`CurrentWeapon == null`) | 0% |
 | outros | 0% |
 
-Soma-se ainda o `weaponData.blockBonus` do defensor (ou `UnarmedStats.BlockBonus = -25%` se desarmado) + `defender.counter`.
+Soma-se ainda o `weaponData.blockBonus` do defensor (ou `UnarmedStats.BlockBonus = -25%` se desarmado). **`defender.counter` não entra mais aqui** — ver seção **Counter e Reversal** abaixo (rewired pra uma mecânica própria, em vez de ser só um bônus de block).
 
-Ordem de verificação no `HitRoutine`: **Esquiva → Block → Dano normal → Desarmar**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
+Ordem de verificação em `CombatSimulator.SimulateHit` (caminho ativo): **Esquiva → Block (+ Reversal) → Counter → Dano normal → Reversal → Desarmar**. Quando block trigga: sem dano, sem Hurt, mas aplica **knockback de 50%** (`knockbackDistance * 0.5f`) em paralelo. Defensor executa animação `Block` via `SetTrigger("Blocking")`. Popup "BLOCK!" em dourado.
 
 **Drop de arma ao bloquear** — verificados independentemente após o popup de block:
 - **15%** de chance do **atacante** soltar a arma (impacto no escudo)
 - **10%** de chance do **defensor** soltar a arma/escudo (impacto forte demais)
 - Usa `DropWeapon(target, isDisarm: false)` → popup "DROP!" laranja + arma cai com pêndulo, fica no chão até fim da luta.
+
+### Counter e Reversal
+
+Duas mecânicas distintas, ambas usando o defensor tomando a iniciativa de volta do atacante — implementadas só no caminho ativo (`CombatSimulator.cs`); **`PlayerCombat.cs`/`AttackSequencer.cs` (legado, código morto enquanto `useSimulator=true`) não têm nenhuma das duas, nem o ajuste de speed 0 abaixo** — seu `BlockChance()` ainda soma `defender.counter` (comportamento antigo), não existe `SimulateRetaliation` equivalente, e `CombatLoop` ainda força mínimo 1 ação mesmo com `speed = 0`. Só importa se `useSimulator` for desligado algum dia.
+
+**Counter** — `CounterChance(defender) = defender.counter`. Checado em `SimulateHit` **depois do Block falhar, antes do dano normal**: o atacante já correu e iria acertar, mas o defensor bate primeiro — cancela completamente o hit do atacante (e o resto do combo dele, já que esse hit nunca aconteceu de fato). `defender.counter` é o mesmo campo que antes só alimentava o `BlockChance()` do atacante (via skill **Counter Attack**, `counter += 0.40`, e **Monk**, idem) — agora vira o que o nome já sugeria: as duas skills passam a dar +40% de chance de cancelar o hit do oponente em vez de +40% de chance de bloquear.
+
+**Reversal** — `ReversalChance(defender) = defender.reversal + weaponData.reversalBonus` (ou `UnarmedStats.ReversalBonus = 0` se desarmado; os 5 `WeaponData.asset` já tinham `reversalBonus` preenchido — Sword +0.10, Heavy -0.30 — mas nenhum código lia o campo até agora). Ao contrário do Counter, Reversal **só age depois de algo já ter acontecido** — checado em **dois pontos** de `SimulateHit`:
+1. **Depois de bloquear** (dentro do bloco de `Block`, depois dos checks de drop de arma): defensor já bloqueou, sem tomar dano, e ainda assim contra-ataca de bandeja.
+2. **Depois do dano normal já aplicado** (hit aconteceu, HP já foi reduzido): defensor contra-ataca em seguida.
+
+Diferente do Counter, Reversal **não cancela o resto do combo do atacante** — o combo continua normalmente depois, e cada hit extra do combo checa Reversal de novo, independente do(s) anterior(es) (pode triggar em mais de um hit do mesmo combo). O que já aconteceu (bloqueio ou dano) não é desfeito de qualquer forma. Reversal nunca age ANTES de um resultado (esse é o papel do Counter) — só depois de Block ou de Hit.
+
+Ambas chamam `SimulateRetaliation(retaliator, target, eventType)` — o contra-ataque passa por esquiva/bloqueio/crítico normalmente contra o lado oposto (pode ser esquivado ou bloqueado pelo atacante original), mas **não verifica Counter/Reversal de novo** (evita recursão infinita entre as duas mecânicas — uma retaliação é sempre só uma retaliação, não pode ser contra-contra-atacada).
+
+`SimulateHit` retorna `bool interrupted` (era `void`) — `true` **só quando Counter trigga** (o único caso que de fato cancela o resto do combo, já que o hit nunca aconteceu); `false` em qualquer outro desfecho, **incluindo Dodge/Block/Reversal**. `Disarm` (depois do hit normal) agora também checa `attacker.isAlive` — Reversal pode matar o atacante na própria retaliação, e sem essa checagem um atacante já morto ainda desarmava o defensor que tinha acabado de contra-atacar. `SimulateTurn`'s loop de combo é `while (!interrupted && attacker.isAlive && defender.isAlive)` — a checagem de `attacker.isAlive` é necessária porque o atacante pode morrer de um Counter/Reversal no meio do próprio turno.
+
+Eventos novos: `CombatEventType.Counter`/`Reversal` (`playerIndex` = quem retalia e causa dano, `targetIndex` = atacante original que recebe) — visual em `CombatPlayer.cs` é parecido com o `Hit` (swing + knockback + hurt), com duas diferenças: **sem `RepositionIfNeeded`** (quem retalia nunca saiu do lugar — é o atacante original que correu até ele; Counter/Reversal disparam antes de qualquer dano nesta troca, então não há knockback prévio que tenha deslocado o retaliador) e **`PlayJumpStart` em vez de `JumpTo`** depois do swing (ver nota abaixo sobre o bug de animação). Popup: `DamagePopup.SpawnCounter`/`SpawnReversal`, texto "CONTRA-ATAQUE!"/"REVERSAL!" em roxo. `CombatLogFormatter` imprime `[CONTRA-ATAQUE]`/`[REVERSAL]` antes da linha de dano.
+
+**Bug de animação travada depois de Counter/Reversal (e a causa real)**: nos `.controller` dos 3 personagens (verificado no da Assassin Guy, mesmo padrão nos outros), os estados `Slashing`/`Slashing Dagger`/`Slashing Heavy` têm **uma única transição de saída**: pro estado `Jump Start`, condicionada ao bool `JumpStart == true`. `Jump Start` só sai pro `Idle` quando `JumpStart` volta a `false` (e `Idle == true`). Não existe transição direta Slashing→Idle no Animator. Isso nunca foi um problema antes porque todo combo termina em `TurnEnd`, que sempre chama `PlayJumpStart` (toggle do bool) **+** `movement.JumpTo` (pulo de volta ao spawn) em sequência — mas quem retalia num Counter/Reversal nunca passa por um `TurnEnd` próprio nesta troca, então ficava **permanentemente travado no estado de Slashing** depois de atacar (um primeiro fix tentando `SetIdle(true)` não resolvia nada, porque a transição de saída do Slashing nem olha pro bool `Idle`, só pro `JumpStart`). Fix: `CombatPlayer.cs` chama `attacker.animationController.PlayJumpStart(jumpStartDuration * t)` pro retaliador depois do swing — mesmo toggle de bool que o `TurnEnd` usa, **sem** chamar `movement.JumpTo()`, então o personagem só faz o pequeno "hop" do Jump Start no lugar (sem se deslocar) e volta pro Idle corretamente.
+
+**Evasion zerada de verdade (Deity)**: zerar só o campo `defender.evasion` (via `evasionPct`) não bloqueava esquiva de verdade — `DodgeChance()` ainda soma chance base por tipo de arma do defensor, bônus de AGI e o `evasionBonus` da própria arma do defensor, todos independentes do campo `evasion`. Novo campo `PlayerState.noEvasion` (`bool`, setado por Deity) faz `DodgeChance()` retornar `0f` direto no início, ignorando todos esses outros termos — só assim "-100% evasion" garante 0% de esquiva de fato, e não só zerar o termo de skill dentro de uma soma que ainda dava chance.
+
+**Chance de já cair em cena armado (genérico, não é skill)**
+
+`CombatSimulator.EquipStartingWeaponIfNeeded(s)`, chamado em `Simulate()` logo depois de `BuildState`/antes de `ApplySkillStats` — **40% de chance**, independente de skill, de qualquer um dos dois jogadores já começar a luta com uma arma aleatória do loadout equipada, em vez de desarmado (o pickup normal de 40% no início de cada turno, ver **Pegar Arma** acima, continua valendo igual pra todo mundo, incluindo Deity — sem tratamento especial). `CombatSimulator.Player1StartingWeapon`/`Player2StartingWeapon` (propriedades públicas, capturadas logo após o sorteio) deixam `CombatSceneLoader` saber qual arma foi escolhida, se alguma.
+
+**Visual sincronizado com o EntryFall**: por causa do ponto acima, `CombatSceneLoader.Initialize()` teve que **inverter a ordem**: `CombatSimulator.Simulate()` agora roda ANTES do EntryFall (não depois, como antes) — só assim dá tempo de chamar `handler.EquipSpecific(simulator.Player1StartingWeapon)` (e o equivalente pro Player2) ANTES da queda do céu, fazendo o personagem já aparecer empunhando a arma durante a animação de entrada em vez de só equipá-la depois. `Simulate()` não depende de nada que só existe pós-EntryFall (transform/`spawnPosition`) — só lê os `PlayerProfile`, então a inversão é segura. `events` (a lista pré-calculada) é guardada numa variável e só consumida por `CombatPlayer.PlayCombat()` depois que ambos pousam, como antes.
+
+**Deity: +50% de tamanho** — `player1Obj.transform.localScale = Vector3.one * 0.3f * (profile.HasSkill("Deity") ? 1.5f : 1f)` em `CombatSceneLoader.Initialize()`, aplicado antes do EntryFall (já vale na queda). Pro Player2 (pré-colocado na cena, escala configurada no editor): `player2Object.transform.localScale *= 1.5f` se `player2Profile.HasSkill("Deity")` — multiplicador sobre o valor atual, não um valor fixo, já que Player2 não tem um valor base hardcoded em código como o Player1.
 
 > Future skill **Shield**: +45% block permanente.
 
@@ -355,9 +408,11 @@ Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, s
 `EquipRandom()` chama `loadout.GetRandomWeapon()` — seleciona aleatoriamente entre as armas disponíveis no runtime loadout (não ciclicamente). Se o loadout estiver vazio, `GetRandomWeapon()` retorna null e `EquipRandom()`/`EquipNext()` chamam `Unequip()` (limpando `currentType`/`CurrentWeaponData` e disparando `OnWeaponChanged(null)`) em vez de destruir a arma visual sem atualizar esse estado — bug antigo deixava o ícone da `WeaponHUD` destacado em amarelo enquanto o personagem batia desarmado.
 `PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
+`CombatPlayer.ExecuteEvent`'s case `TurnStart` espera `0.1s * t` (era `yield return null`, só 1 frame) antes de processar o resto do turno (incluindo `PickupWeapon`/`CatchWeapon`). A transição "Idle → Catch Weapon" no Animator Controller só existe a partir do estado Idle especificamente (não AnyState — ver Animator Controller Architecture abaixo). Em ações extras por velocidade, o `TurnEnd` do turno anterior chama `SetIdle(true)` e o próximo `TurnStart` do mesmo personagem rodava só 1 frame depois — sem tempo do Animator concluir de fato a transição pro estado Idle antes do trigger `CatchWeapon` ser setado, deixando o trigger pendente até o Animator entrar em Idle (que podia acontecer só depois do run/ataque já ter começado, parecendo a animação de pegar arma tocando no fim do turno). Hipótese de causa, não confirmada visualmente — se persistir, verificar a duração de blend da transição `* → Idle` no `.controller` do personagem.
+
 ### Unarmed Combat
 When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch) with `weaponBaseDamage = UnarmedStats.Damage = 5`, fed into the multiplicative damage formula (see above). Slash animation speed = `hitSpeed × UnarmedStats.HitSpeed (1.0)`, reset to `1f` afterward (all exit paths including dodge/block).
-`ComboChance()` returns 10% base while unarmed, plus AGI bonus and `UnarmedStats.ComboBonus` (0).
+`ComboChance()` returns 5% base while unarmed, plus AGI bonus and `UnarmedStats.ComboBonus` (0), com o mesmo clamp (35%) e decaimento (×0.5 por hit extra consecutivo). Ver seção **Combo** acima.
 
 ### STR Attribute
 `PlayerCombat.str` (default 10) feeds directly into the multiplicative damage formula: `(1 + str/10)`. There is no longer a "baseline 10 = no bonus" offset — STR scales damage linearly from 0 (no bonus) upward (STR 10 → ×2.0, STR 4 → ×1.4). See **Fórmula de Dano** above for the full formula (`weaponBaseDamage × (1 + str/10) × critMultiplier × (1 - defenderArmor)`).
@@ -390,7 +445,7 @@ Soma-se ainda o `weaponData.disarmBonus` do atacante (ou `UnarmedStats.DisarmBon
 
 Só trigga no **primeiro hit do turno** (`isCombo = false`). `HitRoutine(isCombo)` recebe o flag; `ComboStrikeRoutine` passa `isCombo: true`. Ordem: depois do dano normal — o defensor ainda toma Hurt + knockback + dano normalmente antes de perder a arma.
 
-**`DropWeapon(target)`** (coroutine no atacante):
+**`DropWeapon(target, isDisarm)`** — `public static` em `PlayerCombat` (não lê estado de instância, só o de `target`) para poder ser chamado tanto pelo caminho legado quanto por `CombatPlayer.ExecuteEvent` nos casos `Disarm`/`WeaponDrop` (mesmo padrão do `FlyWeapon`, feito `public` para o `ThrowWeapon`). Antes, `CombatPlayer` só mostrava o popup e chamava `UnequipPermanent()` direto nesses dois casos — sem nenhum visual de queda; agora chama `StartCoroutine(PlayerCombat.DropWeapon(...))` (fire-and-forget, roda em paralelo, igual ao caminho legado original):
 1. Captura `CurrentWeaponData` (sprite, scale) e posição do `CurrentWeapon` antes de chamar `UnequipPermanent()`.
 2. Chama `target.weaponHandler.UnequipPermanent()` — arma removida permanentemente do loadout.
 3. Spawna popup "DISARM!" em laranja acima do defensor.
@@ -420,6 +475,8 @@ Ao carregar `04_CombatScenePVP`, ambos os personagens aparecem 12 unidades acima
 ### Knockback
 Every hit (including combo) pushes the defender by `settings.knockbackDistance` in the direction away from the attacker, over `settings.hurtDuration`. Fired via `StartCoroutine` on the defender so it runs in parallel with `PlayHurt`.
 
+**Limite da janela jogável**: `PlayerCombat.ClampToArena(pos)` (privado, estático) clampa `X` em `[-7.25, 7.25]` e `Y` em `[-3.90, -0.81]` — mesmos valores de `RandomSpawnPosition` (área visível da câmera). Aplicado no destino calculado por `Knockback()` e `DodgeLeap()` antes de mover o personagem. Sem isso, combos longos com vários hits/esquivas seguidas empurravam o personagem cada vez mais na mesma direção a cada evento, eventualmente saindo da área visível da câmera (sem limitador algum antes).
+
 ### Speed System
 Speed determina quantas vezes um personagem age por round via acúmulo de debt. Implementado em `AttackSequencer.CombatLoop`.
 
@@ -427,13 +484,19 @@ Speed determina quantas vezes um personagem age por round via acúmulo de debt. 
 1. `p1SpeedDebt += player1.speed` | `p2SpeedDebt += player2.speed`
 2. Enquanto `p1SpeedDebt >= player2.speed`: p1 age mais 1x, `p1SpeedDebt -= player2.speed`
 3. Enquanto `p2SpeedDebt >= player1.speed`: p2 age mais 1x, `p2SpeedDebt -= player1.speed`
-4. Mínimo garantido: 1 ação por player por round
+4. Mínimo garantido: 1 ação por player por round — **exceto se `speed <= 0`** (ex: Deity, -90% speed — ainda chega a 0 quando o speed base é baixo o suficiente pra arredondar pra zero): nesse caso 0 ações garantidas, o personagem nunca corre/ataca/pega arma por conta própria no round, só reage via Counter/Reversal nos turnos do oponente (`CombatSimulator.SimulateRound`, era `Mathf.Max(1, pXAct)` incondicional — forçava o personagem a atacar normalmente todo round mesmo com speed efetivo 0).
 
 **Exemplos:**
 - Speed 6 vs 2 → Round 1: P1 age 3x (6/2=3), P2 age 1x (2<6)
 - Speed 4 vs 3 → Maioria dos rounds 1x cada; a cada ~4 rounds P1 age 2x
 
 **Visual:** popup "RAPIDO!" amarelo aparece no início de cada ação extra (2ª em diante).
+
+`CombatSimulator.SimulateRound` agora segue o mesmo modelo de **bloco** que `AttackSequencer.CombatLoop` ("primeiro jogador executa TODAS as suas ações do round, só então o segundo jogador age") em vez de intercalar ação-a-ação (1ª de cada, depois 2ª de cada...). O modelo intercalado tinha dois problemas:
+1. Emitia o evento `SpeedBonus` em bloco (`extraActions = pXAct - 1`) antes de qualquer ação do round, fazendo o popup aparecer junto da 1ª ação normal.
+2. Mesmo depois de corrigir (1) para emitir por ação, quando o jogador mais rápido também tinha iniciativa pra agir primeiro no round seguinte, sua última ação extra de um round ficava "colada" (sem nada no meio) à 1ª ação normal do round seguinte — visualmente parecia uma 2ª ação extra sem nenhum aviso, já que o intercalado só garante popup quando o índice da ação é > 0 *dentro do mesmo round*.
+
+Com o modelo de bloco, o segundo jogador sempre age por último em cada round, então o primeiro jogador nunca emenda duas ações suas atravessando um round sem alguém no meio — `EmitSpeedBonus` continua sendo chamado só quando `i > 0`, mas agora isso cobre exatamente os casos certos.
 
 Initiative ainda determina quem age PRIMEIRO no round (maior initiative = `first`). Speed determina quantas vezes cada um age.
 
@@ -464,7 +527,7 @@ Internally:
 ### CombatPlayer
 Coroutine-based replay of the event list. On each event, drives existing components:
 - `animationController.PlayRun/PlayCatchWeapon/PlayBlock/PlayHurt/PlayJumpStart`
-- `weaponHandler.EquipRandom/Unequip/UnequipPermanent`
+- `weaponHandler.EquipSpecific/EquipRandom/Unequip/UnequipPermanent` — `PickupWeapon`/`WeaponEquipped` usam `EquipSpecific` com a `WeaponData` resolvida por `evt.weaponName` (helper `FindWeaponByName`, busca em `weaponHandler.loadout.Weapons`), não mais `EquipRandom()`. Esse sorteava de novo, podendo equipar visualmente uma arma diferente da que o `CombatSimulator` já tinha sorteado e usado no cálculo de dano daquele evento — a arma na mão não correspondia ao tipo/dano real do hit.
 - `healthSystem.TakeDamage(delta)` — delta computed from event `newHp` vs current HP
 - `DamagePopup.Spawn/SpawnDodge/SpawnBlock/SpawnDisarm/SpawnDrop/SpawnMiss/SpawnRapido`
 - `sequencer.OnCombatEnd(winner)` — triggers XP/result panel
@@ -489,12 +552,14 @@ At the impact moment (after the first `slashHalf` wait), `HealthSystem.TakeDamag
 
 `CombatEvent.isThrow` (set on the `Hit` emitted by `CombatSimulator.SimulateThrow`) tells `CombatPlayer` to skip the melee swing trigger and the `slashHalf` waits for that hit — the attacker already has no weapon in hand (just unequipped it in the `ThrowWeapon` event) and already did the "windup" during the projectile's flight, so the impact (damage/popup/hurt) applies immediately when the `Hit` event starts, synced with the moment the thrown weapon visually reaches the defender. `Miss` (only ever emitted after a throw) was already immediate and needed no change.
 
-**`comboDelay` (0.15s):** added after every `Hit`/`Dodge`/`Block`/`Miss` event in `CombatPlayer.ExecuteEvent`, scaled by the speed-toggle's `t`. A combo turn (e.g. hit→dodge→hit→dodge→hit, all part of one attacker's combo loop in `CombatSimulator.SimulateTurn`) had zero gap between consecutive actions before this — each action's own animation timing ran back-to-back with nothing in between, so a 6-action combo blurred together and felt like only 2-3 distinguishable actions happened, even though every event individually played out and dealt/avoided damage correctly. `interTurnDelay` only applies *between* different turns/attackers, not between actions within the same attacker's combo.
+**`RepositionIfNeeded(attacker, defender, t)`:** chamado no início dos casos `Hit` (quando `!evt.isThrow`), `Dodge` e `Block`, antes do swing trigger — mirrors `ComboStrikeRoutine.AttackPosition()`/reposicionamento do caminho legado (ver Combo Architecture acima), que nunca tinha sido portado pro `CombatPlayer`. Recalcula `CalcAttackPosition(attacker, defender)` e roda `PlayRun` se a distância atual for > 0.3 unidades; no-op na 1ª ação do turno (atacante já está no lugar certo por causa do `RunToDefender`). Sem isso, um combo hit/dodge/block depois de uma esquiva ou knockback anterior (que empurrou o defensor mais longe) acontecia com o atacante parado fora de alcance — o defensor levava um knockback/dodge sem nenhum swing visível por perto, parecendo um pulo "do nada" sem ação alguma.
+
+`comboDelay` (0.15s):** added after every `Hit`/`Dodge`/`Block`/`Miss` event in `CombatPlayer.ExecuteEvent`, scaled by the speed-toggle's `t`. A combo turn (e.g. hit→dodge→hit→dodge→hit, all part of one attacker's combo loop in `CombatSimulator.SimulateTurn`) had zero gap between consecutive actions before this — each action's own animation timing ran back-to-back with nothing in between, so a 6-action combo blurred together and felt like only 2-3 distinguishable actions happened, even though every event individually played out and dealt/avoided damage correctly. `interTurnDelay` only applies *between* different turns/attackers, not between actions within the same attacker's combo.
 
 `CombatSimulator.Simulate()` logs `[CombatSimulator] Iniciando simulação...` on entry and `[CombatSimulator] {n} eventos gerados` on exit — exceptions to the no-stray-logs rule (see Logging Policy), kept as permanent confirmation that the simulator actually ran.
 
 ### CombatEventType values
-`TurnStart, RunToDefender, ThrowWeapon, PickupWeapon, WeaponEquipped, Hit, Dodge, Block, Miss, Disarm, WeaponDrop, HealthChanged, SpeedBonus, TurnEnd, CombatEnd`
+`TurnStart, RunToDefender, ThrowWeapon, PickupWeapon, WeaponEquipped, Hit, Counter, Reversal, Dodge, Block, Miss, Disarm, WeaponDrop, HealthChanged, SpeedBonus, TurnEnd, CombatEnd`
 
 ### Key fields in CombatEvent
 | Field | Used by |
@@ -544,6 +609,9 @@ O projeto não usa `Debug.Log`/`Debug.LogWarning` soltos pelo código — só `D
 Exceções (todas no caminho do `CombatSimulator`, quando `useSimulator=true`):
 - `CombatSceneLoader.Initialize()` imprime **um** `Debug.Log(CombatLogFormatter.Format(...))` com o resumo completo da luta inteira, gerado depois de `CombatSimulator.Simulate()` e antes de `CombatPlayer.PlayCombat()` começar a tocar as animações — ver `CombatLogFormatter` abaixo.
 - `CombatSimulator.Simulate()` loga `[CombatSimulator] Iniciando simulação...` na entrada e `[CombatSimulator] {n} eventos gerados` na saída — confirmação rápida de que o simulador rodou, sem precisar ler o log completo.
+- `CombatSimulator.SimulateTurn` loga `[ComboChance] {nome} (P1|P2, arma=...) hit extra #{n} chance={valor}` a cada checagem do loop de combo (antes do `Roll()`) — instrumentação temporária para validar a fórmula de `ComboChance()` (base + AGI + comboBonus da arma + skills, teto 35%, decaimento ×0.5 por hit extra consecutivo). Remover quando o balanceamento estiver confirmado.
+- `CombatSimulator.EmitSpeedBonus` loga `[SpeedBonus] round={n} {nome} (P1|P2) ação extra, index={i}` sempre que o popup "RAPIDO!" é emitido — instrumentação temporária para confirmar que `index` nunca é 0 (ou seja, nunca dispara na 1ª ação do round, só na 2ª em diante). Remover quando confirmado.
+- `CombatSimulator.CalcDamage` loga `[CalcDamage] {nome} arma=... weaponBaseDamage=... str=... strMult=... critMult=... isCrit=... resultado=...` em **todo** hit normal/combo — instrumentação temporária pra investigar relato de dano muito acima do teto teórico da fórmula (ex: Dagger com STR 4-5 deveria ter teto ~18 normal/~22.5 crítico). `CombatSimulator.CalcThrowDamage` loga `[CalcThrowDamage] arma=... resultado=... (sem STR)` em todo arremesso, pra confirmar que o throw não aplica o multiplicador de STR. Remover os dois quando a causa for confirmada.
 
 ### CombatLogFormatter
 `Assets/Scripts/Combat/CombatLogFormatter.cs` — `Format(p1Name, p2Name, List<CombatEvent>)` é puro C# (sem MonoBehaviour) e devolve uma string multi-linha legível: um cabeçalho com os dois nomes, uma linha `--- Turno de {nome} ---` por `TurnStart`, e uma linha por ação relevante (pickup/equip/throw/hit com dano+crit/combo+HP resultante/dodge/block/miss/disarm/drop/speed bonus), terminando em `========== VENCEDOR: {nome} ==========`. `Hit` consome o `HealthChanged` emparelhado (mesmo `targetIndex`, evento seguinte) para anexar o HP resultante na mesma linha. `RunToDefender` e `TurnEnd` não geram linha própria.
@@ -586,12 +654,14 @@ Sem limitador por atributo — toda a sorte pode cair em um único stat.
 
 Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Editor/CharacterCreationEditor.cs`). Só afeta profiles com `level == 1`.
 
+**Tools → AutoArms → Reset All Profiles to Level 1** — além de `level`/`xpCurrent`/`xpRequired`/`battlesRemaining`, agora também: re-sorteia HP/STR/AGI/SPD via `CharacterCreation.GenerateLevel1Stats()` (mesma lógica do botão acima), limpa `profile.skills`, e reseta `profile.weaponLoadout.weapons` para as 4 armas iniciais (Satyr1, Golem3, Succubus, Zombie — guids hardcoded em `DefaultWeaponGuids`). Como cada profile tem seu próprio `WeaponLoadout` (ver tabela de ScriptableObject Assets acima), isso não afeta os outros personagens.
+
 ### Campos e defaults
 
 | Campo | Tipo | Default | Onde é usado |
 |---|---|---|---|
 | `str` | int | 10 | Fórmula multiplicativa de dano: `weaponBaseDamage × (1 + str/10) × critMultiplier × (1 − defenderArmor)` (ver Combat Systems → Fórmula de Dano) |
-| `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +1.5%/ponto acima de 3 |
+| `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +0.8%/ponto acima de 3, teto total 35% |
 | `speed` | int | 10 | `AttackSequencer.CombatLoop`: acumula debt a cada round; debt >= speed do oponente = ação extra (ver Speed System) |
 | `armor` | float | 0 | Fator `(1 − armor)` na fórmula multiplicativa de dano |
 | `evasion` | float | 0 | `DodgeChance()`: adicionado à chance base |
@@ -613,25 +683,37 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 
 ### Skills que modificam stats (aplicadas em `CombatSceneLoader.ApplySkillStats`)
 
+Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`maxHealth` salvo, **exceto Vitality, Herculean Strength, Feline Agility, Lightning Bolt e Reconnaissance** — essas têm um componente permanente (`+18`/`+3`/`+3`/`+3`/`+5` somado direto em `profile.maxHealth`/`str`/`agility`/`speed`/`speed` no momento da escolha, em `CombatResultPanel.ApplyBonus`, igual a um pick de Atributo) além do componente runtime (`+50%`/`+150%`, igual às outras). Se replicar esse padrão (flat permanente + percentual runtime) para outra skill no futuro, replicar a checagem por `skillName` em `ApplyBonus` também.
+
+**Iniciativa, crit chance, crit damage, evasion e reversal** agora também aparecem na tela de Stats (`CharacterPanel`) — `PlayerProfile.GetEffectiveStats()` retorna uma 9-tupla (`hp, str, agility, speed, initiative, criticalChance, critDamageBonus, evasion, reversal`). `MainMenuCharacterPreview` só usa os primeiros 5 (descarta os 4 últimos com `_, _, _, _`). Iniciativa é sempre flat puro (nunca entra no percentual líquido): `First Strike +200`, `Monk -200`, `Reconnaissance -200`, `Deity -200`. `criticalChance` é o campo bruto do profile (nenhuma skill o modifica ainda — `Fierce Brute` no roadmap ainda não implementada). `critDamageBonus` não existe como campo no profile, é 100% derivado de skill (`Reconnaissance +0.5`). `evasion`/`reversal` são campos reais do profile (`Untouchable +0.25`/`Ballet Shoes +0.10` somam em evasion; `Deity` soma `+0.40` em reversal e `-100%` multiplicativo em evasion, aplicado depois das somas — ver linha da Deity abaixo).
+
+**Quem age primeiro**: `CombatSimulator.SimulateRound` e `AttackSequencer.StartWhenReady` comparam iniciativa primeiro; **em empate** (default 0 pra todo personagem sem skill que a altere), quem tem mais `speed` age primeiro — antes não existia esse tie-break por speed, P1 sempre ganhava o empate de iniciativa independente de speed.
+
+**Dano crítico com bônus de skill**: novo campo `critDamageBonus` (`PlayerState`/`PlayerCombat`, default 0) somado ao `critDamageMultiplier` da arma (ou `UnarmedStats.CritDamageMultiplier` se desarmado) em `CritDamageMultiplier()`/`CombatSimulator.CritDamageMultiplier()` — `+50%` de dano crítico (Reconnaissance) soma `+0.5` ali, igual ao padrão de `criticalChance` (bônus de chance) já existente.
+
+**Stacking de percentuais**: quando mais de uma skill afeta o mesmo status (HP/STR/AGI/SPD), os percentuais são **somados num percentual líquido e aplicados uma única vez no final** (`hpPct`/`strPct`/`agiPct`/`spdPct` acumulados, depois `RoundToInt(valor × (1 + pct))`) — não multiplicação sequencial com arredondamento a cada skill. Isso evita resultados não-intuitivos por arredondamento em cascata: STR 9 com Herculean Strength (+50%) + Immortal (-25%) dá `9 × (1 + 0.5 - 0.25) = 9 × 1.25 = 11.25 → 11`. A versão antiga (×1.5 depois ×0.75, cada um arredondando o resultado da anterior) dava `9→14→10` (`RoundToInt` usa round-half-to-even: 13.5→14, depois 10.5→10) — surpreendia o jogador, que esperava somar os dois percentuais direto. Implementado em `PlayerProfile.GetEffectiveStats()`, `CombatSceneLoader.ApplySkillStats()` e `CombatSimulator.ApplySkillStats(PlayerState)` — as três cópias mantidas em sincronia.
+
 | Skill | Modificações |
 |---|---|
-| Vitality | `maxHealth += 50` |
-| Herculean Strength | `str += 15`, `agility -= 4` |
-| Feline Agility | `agility = RoundToInt(agility × 1.5)` |
-| Lightning Bolt | `runSpeedMultiplier × 1.5` |
-| Immortal | `maxHealth = RoundToInt(maxHealth × 3.5)` (i.e. +250%), `str/agility/speed = RoundToInt(× 0.75)` (i.e. -25% each) |
+| Vitality | `profile.maxHealth += 18` **permanente**, aplicado uma única vez na escolha (`CombatResultPanel.ApplyBonus`, igual a um pick de Atributo) + `hpPct += 0.5` em runtime sobre esse valor já somado (mesmo padrão de Herculean/Feline/Lightning, só que em HP). |
+| Herculean Strength | `profile.str += 3` **permanente**, aplicado uma única vez na escolha (`CombatResultPanel.ApplyBonus`, igual a um pick de Atributo) + `strPct += 0.5` (entra no percentual líquido de STR, sem penalidade de agilidade). Ex: STR 5 → escolhe a skill → `profile.str` vira 8 (permanente) → efetivo `8 × 1.5 = 12`. Se depois pegar +2 STR de atributo: `profile.str` vira 10 → efetivo `10 × 1.5 = 15`. |
+| Feline Agility | `profile.agility += 3` **permanente**, aplicado uma única vez na escolha (`CombatResultPanel.ApplyBonus`, igual a um pick de Atributo) + `agiPct += 0.5` em runtime sobre esse valor já somado (mesmo padrão da Herculean Strength, só que em AGI). |
+| Lightning Bolt | `profile.speed += 3` **permanente**, aplicado uma única vez na escolha (`CombatResultPanel.ApplyBonus`, igual a um pick de Atributo) + `spdPct += 0.5` em runtime sobre esse valor já somado (mesmo padrão de Herculean/Feline, só que em SPD — agora afeta o atributo `speed` real, ações extra no Speed System; antes afetava só `runSpeedMultiplier`, a velocidade da animação de correr, sem relação com ações extra). |
+| Reconnaissance | `profile.speed += 5` **permanente** na escolha + `spdPct += 1.5` (+150%) em runtime sobre esse valor já somado + `initiative -= 200` (flat puro) + `critDamageBonus += 0.5` (+50% dano crítico, somado ao `critDamageMultiplier` da arma). |
+| Immortal | `hpPct += 2.5` (+250%), `strPct -= 0.25`, `agiPct -= 0.25`, `spdPct -= 0.25` |
+| Deity | `hpPct += 1.0` (+100%), `strPct += 1.0` (+100%), `agiPct -= 1.0` (-100%), `spdPct -= 0.90` (**-90%, não -100%** — speed fixo em 0 travava o player sem chance de ação própria nem de pegar arma; com -90% ainda existe chance de arredondar > 0 dependendo do speed base), `evasionPct -= 1.0` + `noEvasion = true` (-100% de verdade, "Dexterity" da descrição original — não significa nunca ser desarmado, significa sem resistência a ser atingido; mapeado pro campo `evasion` existente, não um campo "dexterity" novo — ver nota de `noEvasion` na seção **Counter e Reversal**), `reversal += 0.40`, `initiative -= 200`. Sem componente permanente (só percentuais + flat de iniciativa/reversal). Ver seção **Counter e Reversal** acima pro que `reversal` realmente faz agora. |
 | Armour | `armor += 0.30` |
 | Extra Thick Skin | `armor += 0.50` |
 | Untouchable | `evasion += 0.25` |
-| Bodybuilder | `str = RoundToInt(str × 1.5)` |
+| Bodybuilder | `strPct += 0.5` |
 | Relentless | `comboChanceBonus += 0.15` |
 | Lead Skeleton | `leadSkeleton = true` |
 | Ballet Shoes | `evasion += 0.10`, `firstHitAvoided = true` |
 | First Strike | `initiative += 200` |
-| Counter Attack | `counter += 0.40` |
+| Counter Attack | `counter += 0.40` (ver **Counter e Reversal** acima — agora é chance de cancelar o hit do oponente, não bônus de block) |
 | Monk | `counter += 0.40`, `initiative -= 200`, `hitSpeed = 0` |
 
-> `accuracy` e `reversal` ainda não têm mecânica implementada — campos reservados para futuras skills.
+> `accuracy` ainda não tem mecânica implementada — campo reservado para futuras skills. `reversal` agora tem mecânica real, ver **Counter e Reversal** acima.
 > `hitSpeed = 0` (Monk): `HitRoutine` sai cedo — personagem guarda em vez de atacar.
 
 ## Third-Party Plugins
@@ -701,9 +783,10 @@ Lista completa das 53 skills com stats e odds: ver imagem salva em `C:\Users\use
 Skills implementadas: ver Roadmap de Skills (Fase 2.5) abaixo.
 
 ### Assets de Skills
-- Ícones mapeados: 38 em `Assets/Data/UI/Skills/` com prefixo numérico (01_ a 38_)
+- Ícones mapeados (estado original, antes da pasta ser esvaziada): 38 em `Assets/Data/UI/Skills/` com prefixo numérico (01_ a 38_)
 - Padrão de nome: `skill_<nome>.png`
-- Skills sem ícone: vitality, immortality, reconnaissance, deity, martial_arts, shock, resistant, toughened_skin, sabotage, lead_skeleton, determination, bandage, strong_arm, master_of_arms, saboteur, spy, hideaway, backup, piledriver, chef, monk, vampirism, treat, chaining, haste, mimic, fast_metabolism, repulse, sticky_hands
+- Skills sem ícone (lista original, pré-esvaziamento): vitality, immortality, reconnaissance, deity, martial_arts, shock, resistant, toughened_skin, sabotage, lead_skeleton, determination, bandage, strong_arm, master_of_arms, saboteur, spy, hideaway, backup, piledriver, chef, monk, vampirism, treat, chaining, haste, mimic, fast_metabolism, repulse, sticky_hands
+- **Estado atual** (ver "Testando skills uma a uma" em Combat Systems → Pegar Arma... não, ver seção **Stats System → Skills que modificam stats** acima): a pasta foi esvaziada e está sendo repovoada uma skill por vez, sem o prefixo numérico — `vitality`, `immortality` e `reconnaissance` (listadas acima como "sem ícone" no estado original) já têm ícone de volta (`skill_vitality.png`, `skill_immortality.png`, `skill_reconnaissance.png`), assim como `herculean_strength` e `feline_agility` (que já tinham ícone no set original).
 
 ### Roadmap de implementação das Skills (Fase 2.5)
 
@@ -711,9 +794,9 @@ Skills implementadas: ver Roadmap de Skills (Fase 2.5) abaixo.
 
 #### Passivas de Combate
 - [x] Relentless — +15% combo chance (comboChanceBonus += 0.15)
-- [x] Counter Attack — +40% block chance (counter += 0.40)
+- [x] Counter Attack — +40% counter rate (counter += 0.40) — cancela o hit do oponente antes de conectar, não mais bônus de block (ver Counter e Reversal)
 - [ ] Impact — +15% disarm (ajustar DisarmChance())
-- [ ] Pugnacious — chance de contra-atacar após levar dano
+- [ ] Pugnacious — chance de contra-atacar após levar dano (mecânica já existe via `reversal`/Reversal — ver Counter e Reversal acima; só falta criar o SkillData "Pugnacious" que soma nesse campo, mesmo padrão da Deity)
 - [ ] Sixth Sense — +10% esquiva (ajustar DodgeChance())
 - [ ] Iron Head — desarma o adversário com a cabeça ao levar hit
 - [ ] Sabotage — remove permanentemente uma arma do adversário ao acertar
@@ -731,11 +814,14 @@ Skills implementadas: ver Roadmap de Skills (Fase 2.5) abaixo.
 - [x] Ballet Shoes — evasion +10%, primeiro golpe automaticamente esquivado
 
 #### Passivas de Stats
+- [x] Vitality — +18 HP permanente, +50% HP
 - [x] Bodybuilder — str × 1.5
-- [x] Herculean Strength — str += 15, agility -= 4
-- [x] Feline Agility — agility × 1.5
-- [x] Lightning Bolt — runSpeedMultiplier × 1.5
+- [x] Herculean Strength — +3 STR permanente, +50% STR
+- [x] Feline Agility — +3 AGI permanente, +50% AGI
+- [x] Lightning Bolt — +3 SPD permanente, +50% SPD (atributo speed real, ações extra no Speed System — era runSpeedMultiplier × 1.5, velocidade de animação de correr)
 - [x] Immortal — maxHealth × 3.5 (+250%), str/agility/speed × 0.75 (-25% cada)
+- [x] Reconnaissance — +5 SPD permanente, +150% SPD, -200 initiative, +50% dano crítico (mecânica definida pelo usuário, não fazia parte do roadmap original)
+- [x] Deity — +100% HP/STR, -100% AGI/evasion, -90% SPD, -200 initiative, +40% reversal (mecânica definida pelo usuário; introduziu a mecânica real de Counter/Reversal, ver seção própria em Combat Systems)
 - [ ] Determination — +STR conforme perde HP
 
 #### Passivas de Armas
@@ -809,6 +895,8 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Sistema de energia com limite diário de batalhas
 - [ ] Compra de energia e personagens com diamante
 - [ ] Precificação dos pacotes
+- [ ] **Reset de Level Up**: ao subir de nível, o jogador vê as 2 opções de escolha normalmente (`ShowLevelUpChoice`). Um botão "Resetar opções" permite rerolar as opções por um custo em diamantes. Cada reset dobra o custo do próximo: 1º reset = X diamantes, 2º = 2X, 3º = 4X, e assim por diante. O custo base X ainda precisa ser definido com base no balanceamento da economia. O reset regenera novas opções aleatórias seguindo as mesmas regras de peso (60% atributo, 30% skill, 10% arma). O contador de resets zera ao fechar o painel de level up.
+- [ ] **Reset de Build**: o jogador pode pagar diamantes para resetar todos os atributos e skills ganhos por level up, voltando aos stats base do nível atual e redistribuindo os pontos manualmente. Custo fixo alto ou progressivo por nível. Permite experimentar builds diferentes sem criar um novo personagem.
 
 ### Fase 5 — Endgame & Social
 - [ ] Mapa PVE
@@ -896,5 +984,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
 
 ### Progresso
-- Total: 85 tarefas | Concluídas: 35
+- Total: 87 tarefas | Concluídas: 35
 - Última atualização: 2026-06-17 (Botão de velocidade agora alterna 1x↔1.5x (era 2x) e a cena de combate ganhou um EventSystem em runtime, sem o qual nenhum botão do CombatHUD recebia clique; fix de animação de combo retriggerando o Slashing mid-clip; hurtDuration 0.07→0.15s e novo campo dodgeDuration=0.25s separado dele; novo campo comboDelay=0.15s entre cada ação de um combo (hit/esquiva/bloqueio/erro), evitando que combos de 6 ações parecessem só 2-3 por falta de espaçamento; fix de health2 sendo inicializado com player2MaxHealth (50) dessincronizado de player2Profile.maxHealth (70), causando dano aplicado incorretamente; fix de WeaponHandler.EquipRandom/EquipNext destruindo a arma visual sem chamar Unequip quando o loadout esgota, deixando o ícone da WeaponHUD preso em amarelo; ThrowWeapon no CombatPlayer agora cria um FlyingWeapon visível voando até o defensor via PlayerCombat.FlyWeapon (tornado public) e usa UnequipPermanent para armas não-Thrown, removendo o ícone da WeaponHUD; dano/popup/hurt do evento Hit agora aplicam tudo no mesmo instante do impacto, em vez do dano só refletir na barra de vida quando o HealthChanged separado era processado depois; novo campo CombatEvent.isThrow sincroniza o hit de arma arremessada com a chegada do projétil (sem swing/espera de melee redundante); Dodge e Block agora também disparam o swing do atacante sincronizado com a reação do defensor, que antes não tinha nenhuma animação de ataque associada; fix de player1Combat.skills nunca sendo preenchido a partir de profile.skills — fazia a vida visual do Player1 ignorar bônus de skill (ex: Immortal) que o CombatSimulator aplicava corretamente, causando a barra zerar e travar bem antes do Player1 "morrer" de fato no simulador; skill Immortal rebalanceada de +100 HP/×0.5 runSpeed para ×3.5 HP (+250%) e ×0.75 (-25%) em str/agility/speed, aplicada em CombatSimulator e CombatSceneLoader; novo PlayerProfile.GetEffectiveStats() mostra esses stats com bônus de skill já calculados no preview do Menu Principal)
