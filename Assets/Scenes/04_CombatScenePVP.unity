@@ -396,7 +396,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 19ea5491d0fb4ee41b2857c3f55495cd, type: 2}
   - {fileID: 11400000, guid: 5b6ce6b9f1ad8d941aaa6628bb79451b, type: 2}
   - {fileID: 11400000, guid: 455a2591cb26eb94ab312d7b69629227, type: 2}
-  interTurnDelay: 0.8
+  interTurnDelay: 0.2
 --- !u!4 &904002942
 Transform:
   m_ObjectHideFlags: 0

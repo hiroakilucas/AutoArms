@@ -337,6 +337,11 @@ public class PlayerCombat : MonoBehaviour
             yield break;
         }
 
+        float weaponHitSpeed = weaponHandler.CurrentWeaponData != null
+            ? weaponHandler.CurrentWeaponData.hitSpeed : UnarmedStats.HitSpeed;
+        float slashSpeed = hitSpeed * weaponHitSpeed;
+        if (slashSpeed != 1f) animationController.SetSpeed(slashSpeed);
+
         animator.SetTrigger(slashTrigger);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
 
@@ -349,6 +354,7 @@ public class PlayerCombat : MonoBehaviour
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.SpawnDodge(dodgePos);
+            if (slashSpeed != 1f) animationController.SetSpeed(1f);
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }
@@ -369,6 +375,7 @@ public class PlayerCombat : MonoBehaviour
             if (defender.weaponHandler.CurrentWeapon != null && Random.value < 0.10f)
                 StartCoroutine(DropWeapon(defender, isDisarm: false));
 
+            if (slashSpeed != 1f) animationController.SetSpeed(1f);
             yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
             yield break;
         }
@@ -413,6 +420,7 @@ public class PlayerCombat : MonoBehaviour
             StartCoroutine(DropWeapon(defender));
         }
 
+        if (slashSpeed != 1f) animationController.SetSpeed(1f);
         yield return new WaitForSeconds(settings.slashingDuration * 0.5f);
     }
 

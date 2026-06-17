@@ -43,16 +43,14 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 **AttackSettings — valores atuais (Player1 = Player2 exceto onde indicado):**
 | Campo | Valor |
 |---|---|
-| `idleDuration` | 0.5s |
+| `idleDuration` | 0.3s |
 | `runSpeed` | 35 |
-| `slashingDuration` | 0.6s |
-| `slashingToJumpDelay` | 0.4s |
-| `jumpStartDuration` | 0.4s |
+| `slashingDuration` | 0.5s |
+| `slashingToJumpDelay` | 0.2s |
+| `jumpStartDuration` | 0.02s |
 | `jumpHeight` | 2 |
-| `hurtDuration` | 0.3s |
+| `hurtDuration` | 0.07s |
 | `knockbackDistance` | 0.5 |
-
-> Ritmo ajustado em 2026-06-16 para ficar mais parecido com My Brute (valores anteriores: `idleDuration` 0.3s, `slashingDuration` 0.5s, `slashingToJumpDelay` 0.2s, `jumpStartDuration` 0.02s, `hurtDuration` 0.07s).
 
 ## Prefabs
 
@@ -99,7 +97,7 @@ PlayerCombat.AttackRoutine()
 | `TurnManager` | **Dead object** — has a missing (deleted) script, can be removed from the scene |
 | `Colosseum arena` | Background/visual |
 | `CombatInitializer` | Hosts `CombatSceneLoader` — spawns Player1 and wires both combatants at runtime |
-| `AttackSequencer` | Hosts `AttackSequencer` script — Player2 (Medieval Warrior Girl) pre-assigned, `interTurnDelay = 0.8`; Player1 starts as `None` and is filled at runtime by `CombatSceneLoader` |
+| `AttackSequencer` | Hosts `AttackSequencer` script — Player2 (Medieval Warrior Girl) pre-assigned, `interTurnDelay = 0.2`; Player1 starts as `None` and is filled at runtime by `CombatSceneLoader` |
 
 `CombatSceneLoader.Initialize()` wiring sequence (coroutine iniciada em `Start()`):
 1. Reads `SelectedProfileHolder.currentProfile`
@@ -236,7 +234,7 @@ Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a 
 
 | Campo | Efeito |
 |---|---|
-| `hitSpeed` | **Reservado, não aplicado à animação** (ver nota abaixo) |
+| `hitSpeed` | Multiplicador de velocidade da animação de slash: `slashSpeed = PlayerCombat.hitSpeed × weaponData.hitSpeed` |
 | `drawChance` | % chance de pegar esta arma ao pick up (campo reservado — sem mecânica de peso ainda) |
 | `reach` | Soma-se à distância base por tipo em `AttackPosition()` |
 | `critChanceBonus` | Soma-se em `CritChance()` |
@@ -268,8 +266,6 @@ Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a 
 | `comboBonus` | 0 | +0.30 | 0 | -0.60 |
 
 Os 5 `WeaponData.asset` existentes (`Satyr1`=Dagger, `Golem3`=Heavy, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie`=Sword) já têm esses valores aplicados.
-
-> **`hitSpeed` não escala `Animator.speed` (revertido em 2026-06-16):** a tentativa original (`slashSpeed = PlayerCombat.hitSpeed × weaponData.hitSpeed`, chamando `animationController.SetSpeed(slashSpeed)` no início do golpe e `SetSpeed(1f)` no fim) quebrava a animação — o `Animator` tocava 2× mais rápido (Adaga) enquanto os `WaitForSeconds(settings.slashingDuration * 0.5f)` em `HitRoutine` continuavam no tempo real normal, desincronizando a pose visual do timing de dano/dodge/block. `HitRoutine` em `PlayerCombat.cs` não chama mais `SetSpeed` em nenhum golpe — soco e Adaga tocam a animação no `Animator.speed` padrão (1). O campo `hitSpeed` continua existindo em `WeaponData`/`UnarmedStats` só como dado reservado; reimplementar essa mecânica exigiria escalar os `WaitForSeconds` de `HitRoutine` na mesma proporção do `Animator.speed`, não só a chamada de `SetSpeed`.
 
 ### Critical Hit
 `CritChance()` no atacante = base por tipo de arma + `weaponData.critChanceBonus` (ou `UnarmedStats.CritChanceBonus`) + `criticalChance` (profile/skills):
@@ -439,7 +435,7 @@ Initiative ainda determina quem age PRIMEIRO no round (maior initiative = `first
 
 ## CombatSimulator Architecture
 
-Pre-calculation system that computes the full fight outcome before any animation plays. Enables instant replay, skip-to-end, and future web/mobile server-side validation. (Playback-speed multiplier was removed — see note under Integration in CombatSceneLoader.)
+Pre-calculation system that computes the full fight outcome before any animation plays. Enables instant replay, 2x speed, and future web/mobile server-side validation.
 
 ### Files
 | File | Type | Purpose |
@@ -474,9 +470,7 @@ Two Inspector fields on `CombatSceneLoader`:
 - `player2Profile` (PlayerProfile) — Medieval Warrior Girl's profile, enables the simulator. Wired directly on the `CombatSceneLoader` component in `04_CombatScenePVP` (`guid: fcb3d4326a2a4f14b9f5de165814a1c6`). If left unassigned, `LoadPlayer2ProfileFallback()` loads it by path (`Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset`) via `AssetDatabase` — **editor-only**, logs `Debug.LogError` and stays null in a build, so the shipped scene must have `player2Profile` assigned in the Inspector.
 - `useSimulator` (bool, **default true**) — set to false to fall back to the original `AttackSequencer` coroutine loop.
 
-When both are set, after EntryFall: `attackSequencer.player1Profile = profile` is assigned (so `OnCombatEnd` can still award XP / show `CombatResultPanel` even though `attackSequencer.player1` is never set), then the simulator runs instead of the coroutine loop. The `AttackSequencer` stays idle (its `WaitUntil` never resolves) — `TriggerCombatEnd` in `CombatPlayer` calls `sequencer.OnCombatEnd(winner)` directly once `CombatEnd` is reached. `CombatHUD.AddSpeedControls(player)` creates a **Skip** button in the bottom-center of the screen.
-
-> **2x removido (2026-06-16):** `CombatPlayer.SetSpeed`/`_playbackSpeed` foram removidos — o multiplicador era aplicado errado (`t = 1/_playbackSpeed` multiplicava valores de **velocidade** de movimento, não só durações, então 2x na prática deixava `PlayRun`/`JumpTo` mais lentos) e não havia botão para voltar a 1x depois de clicar. Botão "2x" removido do HUD; só "Skip" permanece. Reimplementar como feature nova quando necessário, escalando apenas durações (`WaitForSeconds`, `hurtDuration`, etc.), nunca valores de `speed` passados a `PlayRun`/`JumpTo`.
+When both are set, after EntryFall: `attackSequencer.player1Profile = profile` is assigned (so `OnCombatEnd` can still award XP / show `CombatResultPanel` even though `attackSequencer.player1` is never set), then the simulator runs instead of the coroutine loop. The `AttackSequencer` stays idle (its `WaitUntil` never resolves) — `TriggerCombatEnd` in `CombatPlayer` calls `sequencer.OnCombatEnd(winner)` directly once `CombatEnd` is reached. `CombatHUD.AddSpeedControls(player)` creates **2x** and **Skip** buttons in the bottom-center of the screen.
 
 `CombatSimulator.Simulate()` logs `[CombatSimulator] Iniciando simulação...` on entry and `[CombatSimulator] {n} eventos gerados` on exit — exceptions to the no-stray-logs rule (see Logging Policy), kept as permanent confirmation that the simulator actually ran.
 
@@ -585,7 +579,7 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 | `reversal` | float | 0 | future: chance de reverter a iniciativa |
 | `counter` | float | 0 | `BlockChance()`: adicionado à chance base do defensor |
 | `criticalChance` | float | 0 | `CritChance()`: adicionado à chance base do atacante |
-| `hitSpeed` | float | 1 | `HitRoutine`: só usado como guarda (`hitSpeed <= 0` → Monk guarda em vez de atacar). Não escala mais a animação — ver nota em Propriedades das Armas |
+| `hitSpeed` | float | 1 | `HitRoutine`: velocidade da animação de slash (`slashSpeed = hitSpeed × weaponData.hitSpeed`, ver tabela de Propriedades das Armas) |
 | `comboChanceBonus` | float | 0 | `ComboChance()`: adicionado à chance base |
 | `runSpeedMultiplier` | float | 1 | `RuntimeRunSpeed = settings.runSpeed × runSpeedMultiplier` |
 
@@ -781,7 +775,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Curva de XP não linear: (level+1)×(level+2) — nível 1→2=6, 2→3=12, 3→4=20...
 - [x] Tela de fim de combate com resultado e XP ganho
 - [x] CombatSimulator: pré-cálculo determinístico de todo o combate (CombatEvent, PlayerState, CombatSimulator, CombatPlayer)
-- [x] Botão Skip no CombatHUD (controla CombatPlayer) — botão 2x removido (bug de pacing), a reimplementar
+- [x] Botões 2x e Skip no CombatHUD (controlam CombatPlayer)
 - [x] Ao subir de nível: escolher atributo, skill ou arma
 
 ### Fase 3 — Armas & Pets
@@ -882,4 +876,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 85 tarefas | Concluídas: 35
-- Última atualização: 2026-06-16 (Ritmo de combate ajustado pra ficar mais parecido com My Brute: idleDuration 0.3→0.5, slashingDuration 0.5→0.6, slashingToJumpDelay 0.2→0.4, hurtDuration 0.07→0.3, jumpStartDuration 0.02→0.4 em Player1Settings.asset/Player2Settings.asset; interTurnDelay 0.2→0.8 no AttackSequencer da cena e no default do script)
+- Última atualização: 2026-06-16 (Fix: log pré-combate não aparecia porque useSimulator/player2Profile nunca eram atribuídos na cena 04_CombatScenePVP — wireados diretamente no CombatSceneLoader da cena; useSimulator default agora true no código + fallback de player2Profile via AssetDatabase no editor; attackSequencer.player1Profile agora também é atribuído no caminho do simulador para não quebrar XP/CombatResultPanel; CombatSimulator.Simulate loga início e contagem de eventos)

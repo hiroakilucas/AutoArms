@@ -12,7 +12,7 @@ public class CombatHUD : MonoBehaviour
 
     public Transform CanvasTransform => _canvasObject != null ? _canvasObject.transform : null;
 
-    // Creates the Skip button wired to the given CombatPlayer.
+    // Creates 2x and Skip buttons wired to the given CombatPlayer.
     public void AddSpeedControls(CombatPlayer player)
     {
         if (_canvasObject == null || player == null) return;
@@ -20,8 +20,8 @@ public class CombatHUD : MonoBehaviour
         var row = new GameObject("SpeedControls");
         row.transform.SetParent(_canvasObject.transform, false);
         var rowRt = row.AddComponent<RectTransform>();
-        rowRt.anchorMin = new Vector2(0.44f, 0.01f);
-        rowRt.anchorMax = new Vector2(0.56f, 0.07f);
+        rowRt.anchorMin = new Vector2(0.38f, 0.01f);
+        rowRt.anchorMax = new Vector2(0.62f, 0.07f);
         rowRt.offsetMin = Vector2.zero;
         rowRt.offsetMax = Vector2.zero;
 
@@ -30,6 +30,7 @@ public class CombatHUD : MonoBehaviour
         hlg.childControlWidth  = true;
         hlg.childControlHeight = true;
 
+        MakeSpeedButton(row, "2x", () => player.SetSpeed(2f));
         MakeSpeedButton(row, "Skip", () => player.RequestSkip());
     }
 
