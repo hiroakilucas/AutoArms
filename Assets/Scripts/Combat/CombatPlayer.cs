@@ -12,6 +12,7 @@ public class CombatPlayer : MonoBehaviour
 
     private List<CombatEvent> _events;
     private float             _playbackSpeed = 1f;
+    private bool              _is2x = false;
     private bool              _skipRequested;
     private HealthSystem      _h1, _h2;
 
@@ -24,7 +25,21 @@ public class CombatPlayer : MonoBehaviour
         StartCoroutine(PlayEvents());
     }
 
-    public void SetSpeed(float speed) => _playbackSpeed = Mathf.Max(0.1f, speed);
+    // Toggles between 1x and 2x playback. Returns the new state (true = now at 2x).
+    public bool ToggleSpeed()
+    {
+        if (!_is2x)
+        {
+            _playbackSpeed = 2f;
+            _is2x = true;
+        }
+        else
+        {
+            _playbackSpeed = 1f;
+            _is2x = false;
+        }
+        return _is2x;
+    }
 
     public void RequestSkip()
     {

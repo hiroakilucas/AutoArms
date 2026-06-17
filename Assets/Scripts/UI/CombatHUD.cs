@@ -30,8 +30,46 @@ public class CombatHUD : MonoBehaviour
         hlg.childControlWidth  = true;
         hlg.childControlHeight = true;
 
-        MakeSpeedButton(row, "2x", () => player.SetSpeed(2f));
+        MakeSpeedToggleButton(row, player);
         MakeSpeedButton(row, "Skip", () => player.RequestSkip());
+    }
+
+    private static readonly Color SpeedNormalBg   = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+    private static readonly Color SpeedActiveBg   = new Color(1f, 0.84f, 0f, 1f);
+
+    // Toggle button: "2x" on dark gray when at 1x, "1x" on gold when accelerated to 2x.
+    private static void MakeSpeedToggleButton(GameObject parent, CombatPlayer player)
+    {
+        var go = new GameObject("SpeedToggleBtn");
+        go.transform.SetParent(parent.transform, false);
+        go.AddComponent<RectTransform>();
+        var img = go.AddComponent<Image>();
+        img.color = SpeedNormalBg;
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+
+        var lblGo = new GameObject("Label");
+        lblGo.transform.SetParent(go.transform, false);
+        var lblRt = lblGo.AddComponent<RectTransform>();
+        lblRt.anchorMin = Vector2.zero;
+        lblRt.anchorMax = Vector2.one;
+        lblRt.offsetMin = Vector2.zero;
+        lblRt.offsetMax = Vector2.zero;
+        var txt = lblGo.AddComponent<TextMeshProUGUI>();
+        txt.text      = "2x";
+        txt.fontSize  = 20;
+        txt.color     = Color.white;
+        txt.fontStyle = FontStyles.Bold;
+        txt.alignment = TextAlignmentOptions.Center;
+
+        btn.onClick.AddListener(() =>
+        {
+            bool is2x = player.ToggleSpeed();
+            img.color = is2x ? SpeedActiveBg : SpeedNormalBg;
+            txt.color = is2x ? Color.black : Color.white;
+            txt.text  = is2x ? "1x" : "2x";
+        });
     }
 
     private static void MakeSpeedButton(GameObject parent, string label, System.Action onClick)

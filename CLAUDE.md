@@ -470,7 +470,9 @@ Two Inspector fields on `CombatSceneLoader`:
 - `player2Profile` (PlayerProfile) — Medieval Warrior Girl's profile, enables the simulator. Wired directly on the `CombatSceneLoader` component in `04_CombatScenePVP` (`guid: fcb3d4326a2a4f14b9f5de165814a1c6`). If left unassigned, `LoadPlayer2ProfileFallback()` loads it by path (`Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset`) via `AssetDatabase` — **editor-only**, logs `Debug.LogError` and stays null in a build, so the shipped scene must have `player2Profile` assigned in the Inspector.
 - `useSimulator` (bool, **default true**) — set to false to fall back to the original `AttackSequencer` coroutine loop.
 
-When both are set, after EntryFall: `attackSequencer.player1Profile = profile` is assigned (so `OnCombatEnd` can still award XP / show `CombatResultPanel` even though `attackSequencer.player1` is never set), then the simulator runs instead of the coroutine loop. The `AttackSequencer` stays idle (its `WaitUntil` never resolves) — `TriggerCombatEnd` in `CombatPlayer` calls `sequencer.OnCombatEnd(winner)` directly once `CombatEnd` is reached. `CombatHUD.AddSpeedControls(player)` creates **2x** and **Skip** buttons in the bottom-center of the screen.
+When both are set, after EntryFall: `attackSequencer.player1Profile = profile` is assigned (so `OnCombatEnd` can still award XP / show `CombatResultPanel` even though `attackSequencer.player1` is never set), then the simulator runs instead of the coroutine loop. The `AttackSequencer` stays idle (its `WaitUntil` never resolves) — `TriggerCombatEnd` in `CombatPlayer` calls `sequencer.OnCombatEnd(winner)` directly once `CombatEnd` is reached. `CombatHUD.AddSpeedControls(player)` creates a speed-toggle button and a **Skip** button in the bottom-center of the screen.
+
+**Speed toggle button:** `CombatPlayer.ToggleSpeed()` flips between `_playbackSpeed = 1f`/`2f` (tracked by `_is2x`) and returns the new state. `CombatHUD.MakeSpeedToggleButton` reacts to that return value: label "2x" / dark gray background / white text at 1x → label "1x" / gold background / black text at 2x (and back). No separate "set to 1x" button — clicking it again toggles back.
 
 `CombatSimulator.Simulate()` logs `[CombatSimulator] Iniciando simulação...` on entry and `[CombatSimulator] {n} eventos gerados` on exit — exceptions to the no-stray-logs rule (see Logging Policy), kept as permanent confirmation that the simulator actually ran.
 
@@ -775,7 +777,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Curva de XP não linear: (level+1)×(level+2) — nível 1→2=6, 2→3=12, 3→4=20...
 - [x] Tela de fim de combate com resultado e XP ganho
 - [x] CombatSimulator: pré-cálculo determinístico de todo o combate (CombatEvent, PlayerState, CombatSimulator, CombatPlayer)
-- [x] Botões 2x e Skip no CombatHUD (controlam CombatPlayer)
+- [x] Botão de velocidade toggle (2x ↔ 1x, com cor indicando estado) e Skip no CombatHUD (controlam CombatPlayer)
 - [x] Ao subir de nível: escolher atributo, skill ou arma
 
 ### Fase 3 — Armas & Pets
@@ -876,4 +878,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 85 tarefas | Concluídas: 35
-- Última atualização: 2026-06-16 (Fix: log pré-combate não aparecia porque useSimulator/player2Profile nunca eram atribuídos na cena 04_CombatScenePVP — wireados diretamente no CombatSceneLoader da cena; useSimulator default agora true no código + fallback de player2Profile via AssetDatabase no editor; attackSequencer.player1Profile agora também é atribuído no caminho do simulador para não quebrar XP/CombatResultPanel; CombatSimulator.Simulate loga início e contagem de eventos)
+- Última atualização: 2026-06-16 (Botão 2x do CombatHUD virou toggle: CombatPlayer.ToggleSpeed() alterna _playbackSpeed entre 1f/2f e retorna o novo estado; o botão troca label "2x"↔"1x" e cor (cinza escuro/branco em 1x, dourado/preto em 2x) de acordo)
