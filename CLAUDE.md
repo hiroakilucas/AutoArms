@@ -43,14 +43,16 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 **AttackSettings — valores atuais (Player1 = Player2 exceto onde indicado):**
 | Campo | Valor |
 |---|---|
-| `idleDuration` | 0.3s |
+| `idleDuration` | 0.5s |
 | `runSpeed` | 35 |
-| `slashingDuration` | 0.5s |
-| `slashingToJumpDelay` | 0.2s |
-| `jumpStartDuration` | 0.02s |
+| `slashingDuration` | 0.6s |
+| `slashingToJumpDelay` | 0.4s |
+| `jumpStartDuration` | 0.4s |
 | `jumpHeight` | 2 |
-| `hurtDuration` | 0.07s |
+| `hurtDuration` | 0.3s |
 | `knockbackDistance` | 0.5 |
+
+> Ritmo ajustado em 2026-06-16 para ficar mais parecido com My Brute (valores anteriores: `idleDuration` 0.3s, `slashingDuration` 0.5s, `slashingToJumpDelay` 0.2s, `jumpStartDuration` 0.02s, `hurtDuration` 0.07s).
 
 ## Prefabs
 
@@ -97,7 +99,7 @@ PlayerCombat.AttackRoutine()
 | `TurnManager` | **Dead object** — has a missing (deleted) script, can be removed from the scene |
 | `Colosseum arena` | Background/visual |
 | `CombatInitializer` | Hosts `CombatSceneLoader` — spawns Player1 and wires both combatants at runtime |
-| `AttackSequencer` | Hosts `AttackSequencer` script — Player2 (Medieval Warrior Girl) pre-assigned, `interTurnDelay = 0.2`; Player1 starts as `None` and is filled at runtime by `CombatSceneLoader` |
+| `AttackSequencer` | Hosts `AttackSequencer` script — Player2 (Medieval Warrior Girl) pre-assigned, `interTurnDelay = 0.8`; Player1 starts as `None` and is filled at runtime by `CombatSceneLoader` |
 
 `CombatSceneLoader.Initialize()` wiring sequence (coroutine iniciada em `Start()`):
 1. Reads `SelectedProfileHolder.currentProfile`
@@ -880,4 +882,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 85 tarefas | Concluídas: 35
-- Última atualização: 2026-06-16 (Removido botão 2x do CombatHUD e SetSpeed/_playbackSpeed do CombatPlayer — o multiplicador escalava valores de velocidade ao invés de só durações, deixando o combate mais lento e sem forma de voltar a 1x depois de clicar; só o botão Skip permanece. Em seguida, removido também o SetSpeed(slashSpeed)/SetSpeed(1f) de PlayerCombat.HitRoutine — escalar Animator.speed na Adaga (hitSpeed=2.0) sem escalar os WaitForSeconds correspondentes quebrava a animação; soco e Adaga agora tocam sempre em Animator.speed=1)
+- Última atualização: 2026-06-16 (Ritmo de combate ajustado pra ficar mais parecido com My Brute: idleDuration 0.3→0.5, slashingDuration 0.5→0.6, slashingToJumpDelay 0.2→0.4, hurtDuration 0.07→0.3, jumpStartDuration 0.02→0.4 em Player1Settings.asset/Player2Settings.asset; interTurnDelay 0.2→0.8 no AttackSequencer da cena e no default do script)

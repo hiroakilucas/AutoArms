@@ -15,7 +15,7 @@ public class AttackSequencer : MonoBehaviour
     public WeaponData[]  allWeapons;
 
     [Header("Turn Settings")]
-    public float interTurnDelay = 0.2f;
+    public float interTurnDelay = 0.8f;
 
     int _p1SpeedDebt;
     int _p2SpeedDebt;

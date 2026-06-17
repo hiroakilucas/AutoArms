@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7bd67f3872a7da8469fa8c465d4f04ba, type: 3}
   m_Name: Player2Settings
   m_EditorClassIdentifier: 
-  idleDuration: 0.3
+  idleDuration: 0.5
   runSpeed: 35
-  slashingDuration: 0.5
-  slashingToJumpDelay: 0.2
-  jumpStartDuration: 0.02
+  slashingDuration: 0.6
+  slashingToJumpDelay: 0.4
+  jumpStartDuration: 0.4
   jumpHeight: 2
-  hurtDuration: 0.07
+  hurtDuration: 0.3
   knockbackDistance: 0.5
   startPos: {x: 6.3, y: -2.407897}
   targetPos: {x: 0, y: 0}
