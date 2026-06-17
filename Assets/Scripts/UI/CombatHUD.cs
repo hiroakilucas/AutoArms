@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 
 public class CombatHUD : MonoBehaviour
@@ -104,6 +105,7 @@ public class CombatHUD : MonoBehaviour
 
     public void Initialize(HealthSystem health1, HealthSystem health2)
     {
+        EnsureEventSystem();
         _canvasObject = CreateCanvas();
         (p1FillRect, p1Label) = CreateBar(_canvasObject, isLeft: true);
         (p2FillRect, p2Label) = CreateBar(_canvasObject, isLeft: false);
@@ -126,6 +128,16 @@ public class CombatHUD : MonoBehaviour
             rt.anchorMax = new Vector2(pct, rt.anchorMax.y);
         else
             rt.anchorMin = new Vector2(1f - pct, rt.anchorMin.y);
+    }
+
+    // Without an EventSystem in the scene, UI buttons never receive clicks — the
+    // combat scene has none of its own (only 01_MainMenu/02_SelectCharacter do).
+    private static void EnsureEventSystem()
+    {
+        if (Object.FindObjectOfType<EventSystem>() != null) return;
+        var go = new GameObject("EventSystem");
+        go.AddComponent<EventSystem>();
+        go.AddComponent<StandaloneInputModule>();
     }
 
     private static GameObject CreateCanvas()
