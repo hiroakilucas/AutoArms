@@ -49,8 +49,10 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 | `slashingToJumpDelay` | 0.2s |
 | `jumpStartDuration` | 0.02s |
 | `jumpHeight` | 2 |
-| `hurtDuration` | 0.07s |
+| `hurtDuration` | 0.15s |
+| `dodgeDuration` | 0.25s |
 | `knockbackDistance` | 0.5 |
+| `comboDelay` | 0.15s |
 
 ## Prefabs
 
@@ -112,7 +114,9 @@ PlayerCombat.AttackRoutine()
 
 Both `MainMenuCharacterPreview` and `CharacterSelectController` instantiate the character prefab for display, then immediately `DestroyImmediate` `PlayerCombat`, `WeaponHandler`, `MovementController`, and `AnimationController` — leaving only the `Animator` in idle state.
 
-`MainMenuCharacterPreview.Start()` also calls `BuildSummaryHUD(profile)` — creates a standalone ScreenSpaceOverlay Canvas (sortingOrder=5) with a semi-transparent strip showing: character name + level, animated XP bar, and the first 3 skill icons. Container anchors: `(0.30, 0.21)–(0.70, 0.40)` — positioned above the bottom buttons (button tops ≈ 0.188 of 1080p).
+`MainMenuCharacterPreview.Start()` also calls `BuildSummaryHUD(profile)` — creates a standalone ScreenSpaceOverlay Canvas (sortingOrder=5) with a semi-transparent strip showing: character name + level, a stats row (HP/STR/AGI/SPD), animated XP bar, and the first 3 skill icons. Container anchors: `(0.30, 0.21)–(0.70, 0.40)` — positioned above the bottom buttons (button tops ≈ 0.188 of 1080p).
+
+The stats row comes from `PlayerProfile.GetEffectiveStats()` — a preview-only calculation (no live `PlayerCombat`/`PlayerState` needed, since those components are destroyed for this display) that mirrors the subset of `CombatSimulator.ApplySkillStats`/`CombatSceneLoader.ApplySkillStats` affecting HP/str/agility/speed (Vitality, Herculean Strength, Feline Agility, Bodybuilder, Immortal). Shows just the four flat numbers normally, or `base→effective` in green when a skill changes any of them. **Keep this method in sync** if a stat-affecting skill's formula changes in either of those two places — it's a third, independent copy of the same logic for display purposes.
 
 ### CharacterPanel (3-tab slide-in)
 
@@ -291,7 +295,7 @@ On crit: `critMultiplier = weaponData.critDamageMultiplier` (ver tabela de propr
 
 Each agility point above 3 adds +2% dodge, plus the defender's `weaponData.evasionBonus` (or `UnarmedStats.EvasionBonus = +10%` if unarmed) — teto máximo de esquiva total: 60%. Same AGI threshold adds +1.5% combo in `ComboChance()`.
 
-When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4). Popup shows "ESQUIVA!" in blue. Combo continues normally.
+When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4) over `settings.dodgeDuration` (separate field from `hurtDuration` — was tied to it before, making the leap snap almost instantly). Popup shows "ESQUIVA!" in blue. Combo continues normally.
 > Future skill **Sixth Sense**: +10% dodge permanente.
 
 ### Block
@@ -348,7 +352,7 @@ Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, s
 - **40%** de chance de executar `EquipRandom()` (pega uma arma aleatória do loadout) + animação `CatchWeapon` (0.6s) → ataca com a arma.
 - **60%** não pega → ataca desarmado (soco).
 
-`EquipRandom()` chama `loadout.GetRandomWeapon()` — seleciona aleatoriamente entre as armas disponíveis no runtime loadout (não ciclicamente). Se o loadout estiver vazio, o personagem permanece desarmado.
+`EquipRandom()` chama `loadout.GetRandomWeapon()` — seleciona aleatoriamente entre as armas disponíveis no runtime loadout (não ciclicamente). Se o loadout estiver vazio, `GetRandomWeapon()` retorna null e `EquipRandom()`/`EquipNext()` chamam `Unequip()` (limpando `currentType`/`CurrentWeaponData` e disparando `OnWeaponChanged(null)`) em vez de destruir a arma visual sem atualizar esse estado — bug antigo deixava o ícone da `WeaponHUD` destacado em amarelo enquanto o personagem batia desarmado.
 `PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
 ### Unarmed Combat
@@ -469,10 +473,23 @@ Coroutine-based replay of the event list. On each event, drives existing compone
 Two Inspector fields on `CombatSceneLoader`:
 - `player2Profile` (PlayerProfile) — Medieval Warrior Girl's profile, enables the simulator. Wired directly on the `CombatSceneLoader` component in `04_CombatScenePVP` (`guid: fcb3d4326a2a4f14b9f5de165814a1c6`). If left unassigned, `LoadPlayer2ProfileFallback()` loads it by path (`Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset`) via `AssetDatabase` — **editor-only**, logs `Debug.LogError` and stays null in a build, so the shipped scene must have `player2Profile` assigned in the Inspector.
 - `useSimulator` (bool, **default true**) — set to false to fall back to the original `AttackSequencer` coroutine loop.
+- `player2MaxHealth` (int) — only used as a fallback when `useSimulator` is false or `player2Profile` is unassigned. When the simulator path is active, `health2` is initialized from `player2Profile.maxHealth` directly (resolved — including the editor fallback — *before* `health2.Initialize(...)` runs), since `CombatSimulator.BuildState` computes Player2's entire HP off that same number. These two values previously could drift apart (e.g. profile at 70, `player2MaxHealth` field at 50), which desynced `HealthSystem.CurrentHealth` from the simulator's internal HP and made `ApplyHealthChanged`'s delta calculation produce wrong damage from the first hit onward.
+
+`player1Combat.skills` is now also assigned from `profile.skills` (copied into a new `List<SkillData>`) right alongside the other stat fields (`str`, `agility`, etc.) — it was the one field missing from that block. Without it, `CombatSceneLoader.ApplySkillStats(player1Combat, profile.maxHealth)` (which drives the visual `health1`) silently ignored every one of Player1's skills, since `combat.HasSkill(...)` checks the live component's own (always-empty) `skills` list — while `CombatSimulator.BuildState`/`ApplySkillStats(PlayerState)` correctly reads `profile.skills` for the simulation. A profile with a maxHealth-affecting skill (e.g. Immortal, +100) would simulate with the bonus (combat log shows the inflated max) while `health1` displayed and accumulated damage against the un-bonused number — once cumulative damage passed the smaller real max, the bar clamped to 0 and `HealthSystem.TakeDamage`'s `if (IsDead) return;` froze it there for the rest of the fight, even though the simulator (and the attacker performing the killing blow) never considered that player dead.
 
 When both are set, after EntryFall: `attackSequencer.player1Profile = profile` is assigned (so `OnCombatEnd` can still award XP / show `CombatResultPanel` even though `attackSequencer.player1` is never set), then the simulator runs instead of the coroutine loop. The `AttackSequencer` stays idle (its `WaitUntil` never resolves) — `TriggerCombatEnd` in `CombatPlayer` calls `sequencer.OnCombatEnd(winner)` directly once `CombatEnd` is reached. `CombatHUD.AddSpeedControls(player)` creates a speed-toggle button and a **Skip** button in the bottom-center of the screen.
 
-**Speed toggle button:** `CombatPlayer.ToggleSpeed()` flips between `_playbackSpeed = 1f`/`2f` (tracked by `_is2x`) and returns the new state. `CombatHUD.MakeSpeedToggleButton` reacts to that return value: label "2x" / dark gray background / white text at 1x → label "1x" / gold background / black text at 2x (and back). No separate "set to 1x" button — clicking it again toggles back.
+**Speed toggle button:** `CombatPlayer.ToggleSpeed()` flips between `_playbackSpeed = 1f`/`1.5f` (tracked by `_is2x`) and returns the new state. `CombatHUD.MakeSpeedToggleButton` reacts to that return value: label "1x" / dark gray background / white text normally → label "1.5x" / gold background / black text when accelerated (and back). No separate "set to 1x" button — clicking it again toggles back. The combat scene has no `EventSystem` of its own (only `01_MainMenu`/`02_SelectCharacter` do), so `CombatHUD.Initialize` calls `EnsureEventSystem()` to create one at runtime — without it, none of the HUD buttons receive clicks.
+
+**Hit event animation timing (`CombatPlayer.ExecuteEvent`, `CombatEventType.Hit`):** waits `slashHalf` (half of `slashingDuration`) before applying knockback/hurt/damage popup, then waits `slashHalf` again afterward so the attacker's slash clip always finishes before anything can re-trigger it. Without that second wait, combo hits (consecutive `Hit` events with no `TurnEnd` between them) retriggered the `Slashing`/`SlashingHeavy`/`SlashingDagger` Animator trigger mid-clip, snapping/restarting the animation instead of playing it through.
+
+At the impact moment (after the first `slashHalf` wait), `HealthSystem.TakeDamage(evt.damage)` is called directly off the `Hit` event, in the same breath as the damage popup and the knockback/hurt animations — not waiting for the separate `HealthChanged` event later in the list. The standalone `HealthChanged` case (`ApplyHealthChanged`) still runs when reached, but is now a no-op for normal playback since the delta against `CurrentHealth` is already 0; it still matters for the `Skip` fast-forward path, which never goes through `Hit` at all and applies every remaining `HealthChanged` directly.
+
+`Dodge` and `Block` now also trigger the attacker's `Slashing`/`SlashingHeavy`/`SlashingDagger` swing and wait `slashHalf` before the defender's reaction (mirroring `Hit`) — previously these two events only animated the defender, with no attacker swing at all, so a dodge/block looked like the defender randomly leaping/blocking nothing. Both also wait the trailing `slashHalf` afterward, same as `Hit`, to protect against combo retrigger.
+
+`CombatEvent.isThrow` (set on the `Hit` emitted by `CombatSimulator.SimulateThrow`) tells `CombatPlayer` to skip the melee swing trigger and the `slashHalf` waits for that hit — the attacker already has no weapon in hand (just unequipped it in the `ThrowWeapon` event) and already did the "windup" during the projectile's flight, so the impact (damage/popup/hurt) applies immediately when the `Hit` event starts, synced with the moment the thrown weapon visually reaches the defender. `Miss` (only ever emitted after a throw) was already immediate and needed no change.
+
+**`comboDelay` (0.15s):** added after every `Hit`/`Dodge`/`Block`/`Miss` event in `CombatPlayer.ExecuteEvent`, scaled by the speed-toggle's `t`. A combo turn (e.g. hit→dodge→hit→dodge→hit, all part of one attacker's combo loop in `CombatSimulator.SimulateTurn`) had zero gap between consecutive actions before this — each action's own animation timing ran back-to-back with nothing in between, so a 6-action combo blurred together and felt like only 2-3 distinguishable actions happened, even though every event individually played out and dealt/avoided damage correctly. `interTurnDelay` only applies *between* different turns/attackers, not between actions within the same attacker's combo.
 
 `CombatSimulator.Simulate()` logs `[CombatSimulator] Iniciando simulação...` on entry and `[CombatSimulator] {n} eventos gerados` on exit — exceptions to the no-stray-logs rule (see Logging Policy), kept as permanent confirmation that the simulator actually ran.
 
@@ -488,6 +505,8 @@ When both are set, after EntryFall: `attackSequencer.player1Profile = profile` i
 | `newHp`, `maxHp` | HealthChanged event |
 | `weaponName` | ThrowWeapon, PickupWeapon, WeaponEquipped, Disarm, WeaponDrop |
 | `extraActions` | SpeedBonus (for RAPIDO! count) |
+
+**ThrowWeapon visual:** `CombatPlayer.ExecuteEvent` spawns a `FlyingWeapon` GameObject (SpriteRenderer using `attacker.weaponHandler.CurrentWeaponData.inHandSprite`, captured before unequip destroys the in-hand object) and flies it from the hand bone to the defender's position via `PlayerCombat.FlyWeapon` (now `public`, shared with the legacy `ThrowRoutine`). Originally this case only called `Unequip()` + a `WaitForSeconds(0.45s)` with no projectile at all — the weapon just vanished with nothing visibly thrown. It also mirrors `CombatSimulator.SimulateThrow`'s loadout handling: non-`Thrown`-type weapons call `UnequipPermanent()` (so the icon disappears from `WeaponHUD` too, matching the simulator removing it from `weaponLoadout`), while `Thrown`-type weapons just `Unequip()` since they can be re-equipped later (the simulator's 40% re-equip-after-throw roll keeps them in the pool).
 
 ## Skill System
 
@@ -600,7 +619,7 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 | Herculean Strength | `str += 15`, `agility -= 4` |
 | Feline Agility | `agility = RoundToInt(agility × 1.5)` |
 | Lightning Bolt | `runSpeedMultiplier × 1.5` |
-| Immortal | `maxHealth += 100`, `runSpeedMultiplier × 0.5` |
+| Immortal | `maxHealth = RoundToInt(maxHealth × 3.5)` (i.e. +250%), `str/agility/speed = RoundToInt(× 0.75)` (i.e. -25% each) |
 | Armour | `armor += 0.30` |
 | Extra Thick Skin | `armor += 0.50` |
 | Untouchable | `evasion += 0.25` |
@@ -716,7 +735,7 @@ Skills implementadas: ver Roadmap de Skills (Fase 2.5) abaixo.
 - [x] Herculean Strength — str += 15, agility -= 4
 - [x] Feline Agility — agility × 1.5
 - [x] Lightning Bolt — runSpeedMultiplier × 1.5
-- [x] Immortal — maxHealth += 100, runSpeedMultiplier × 0.5
+- [x] Immortal — maxHealth × 3.5 (+250%), str/agility/speed × 0.75 (-25% cada)
 - [ ] Determination — +STR conforme perde HP
 
 #### Passivas de Armas
@@ -878,4 +897,4 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 85 tarefas | Concluídas: 35
-- Última atualização: 2026-06-16 (Botão 2x do CombatHUD virou toggle: CombatPlayer.ToggleSpeed() alterna _playbackSpeed entre 1f/2f e retorna o novo estado; o botão troca label "2x"↔"1x" e cor (cinza escuro/branco em 1x, dourado/preto em 2x) de acordo)
+- Última atualização: 2026-06-17 (Botão de velocidade agora alterna 1x↔1.5x (era 2x) e a cena de combate ganhou um EventSystem em runtime, sem o qual nenhum botão do CombatHUD recebia clique; fix de animação de combo retriggerando o Slashing mid-clip; hurtDuration 0.07→0.15s e novo campo dodgeDuration=0.25s separado dele; novo campo comboDelay=0.15s entre cada ação de um combo (hit/esquiva/bloqueio/erro), evitando que combos de 6 ações parecessem só 2-3 por falta de espaçamento; fix de health2 sendo inicializado com player2MaxHealth (50) dessincronizado de player2Profile.maxHealth (70), causando dano aplicado incorretamente; fix de WeaponHandler.EquipRandom/EquipNext destruindo a arma visual sem chamar Unequip quando o loadout esgota, deixando o ícone da WeaponHUD preso em amarelo; ThrowWeapon no CombatPlayer agora cria um FlyingWeapon visível voando até o defensor via PlayerCombat.FlyWeapon (tornado public) e usa UnequipPermanent para armas não-Thrown, removendo o ícone da WeaponHUD; dano/popup/hurt do evento Hit agora aplicam tudo no mesmo instante do impacto, em vez do dano só refletir na barra de vida quando o HealthChanged separado era processado depois; novo campo CombatEvent.isThrow sincroniza o hit de arma arremessada com a chegada do projétil (sem swing/espera de melee redundante); Dodge e Block agora também disparam o swing do atacante sincronizado com a reação do defensor, que antes não tinha nenhuma animação de ataque associada; fix de player1Combat.skills nunca sendo preenchido a partir de profile.skills — fazia a vida visual do Player1 ignorar bônus de skill (ex: Immortal) que o CombatSimulator aplicava corretamente, causando a barra zerar e travar bem antes do Player1 "morrer" de fato no simulador; skill Immortal rebalanceada de +100 HP/×0.5 runSpeed para ×3.5 HP (+250%) e ×0.75 (-25%) em str/agility/speed, aplicada em CombatSimulator e CombatSceneLoader; novo PlayerProfile.GetEffectiveStats() mostra esses stats com bônus de skill já calculados no preview do Menu Principal)

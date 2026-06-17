@@ -26,21 +26,27 @@ public class WeaponHandler : MonoBehaviour
 
     public void EquipNext()
     {
-        if (current) Destroy(current);
-
         var data = loadout.GetNextWeapon();
-        if (data?.inHandSprite == null) return;
+        if (data?.inHandSprite == null)
+        {
+            Unequip();
+            return;
+        }
 
+        if (current) Destroy(current);
         EquipData(data);
     }
 
     public void EquipRandom()
     {
-        if (current) Destroy(current);
-
         var data = loadout.GetRandomWeapon();
-        if (data?.inHandSprite == null) return;
+        if (data?.inHandSprite == null)
+        {
+            Unequip();
+            return;
+        }
 
+        if (current) Destroy(current);
         EquipData(data);
     }
 

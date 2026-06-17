@@ -38,7 +38,7 @@ public class CombatHUD : MonoBehaviour
     private static readonly Color SpeedNormalBg   = new Color(0.1f, 0.1f, 0.1f, 0.85f);
     private static readonly Color SpeedActiveBg   = new Color(1f, 0.84f, 0f, 1f);
 
-    // Toggle button: "2x" on dark gray when at 1x, "1x" on gold when accelerated to 2x.
+    // Toggle button: "1x" on dark gray normally, "1.5x" on gold when accelerated.
     private static void MakeSpeedToggleButton(GameObject parent, CombatPlayer player)
     {
         var go = new GameObject("SpeedToggleBtn");
@@ -58,7 +58,7 @@ public class CombatHUD : MonoBehaviour
         lblRt.offsetMin = Vector2.zero;
         lblRt.offsetMax = Vector2.zero;
         var txt = lblGo.AddComponent<TextMeshProUGUI>();
-        txt.text      = "2x";
+        txt.text      = "1x";
         txt.fontSize  = 20;
         txt.color     = Color.white;
         txt.fontStyle = FontStyles.Bold;
@@ -69,7 +69,7 @@ public class CombatHUD : MonoBehaviour
             bool is2x = player.ToggleSpeed();
             img.color = is2x ? SpeedActiveBg : SpeedNormalBg;
             txt.color = is2x ? Color.black : Color.white;
-            txt.text  = is2x ? "1x" : "2x";
+            txt.text  = is2x ? "1.5x" : "1x";
         });
     }
 

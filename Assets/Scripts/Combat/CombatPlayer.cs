@@ -25,12 +25,12 @@ public class CombatPlayer : MonoBehaviour
         StartCoroutine(PlayEvents());
     }
 
-    // Toggles between 1x and 2x playback. Returns the new state (true = now at 2x).
+    // Toggles between 1x and 1.5x playback. Returns the new state (true = now at 1.5x).
     public bool ToggleSpeed()
     {
         if (!_is2x)
         {
-            _playbackSpeed = 2f;
+            _playbackSpeed = 1.5f;
             _is2x = true;
         }
         else
@@ -105,7 +105,60 @@ public class CombatPlayer : MonoBehaviour
             case CombatEventType.Hit:
                 if (defender != null)
                 {
-                    // Play slash animation on attacker, hurt on defender
+                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
+
+                    // Thrown-weapon hits already had their "windup" during ThrowWeapon's flight —
+                    // the attacker has no weapon in hand anymore, so don't re-trigger a melee
+                    // swing or wait out slashHalf again; apply the impact immediately instead.
+                    if (!evt.isThrow)
+                    {
+                        string trigger = attacker?.weaponHandler.currentType switch
+                        {
+                            WeaponType.Heavy  => "SlashingHeavy",
+                            WeaponType.Dagger => "SlashingDagger",
+                            _                 => "Slashing"
+                        };
+                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        yield return new WaitForSeconds(slashHalf);
+                    }
+
+                    // Impact moment: damage, hurt animation, knockback, and popup all fire
+                    // together here instead of being staggered — health used to only update
+                    // once the separate HealthChanged event was reached afterward, and the
+                    // popup only appeared once PlayHurt finished, both visibly lagging the hit.
+                    Vector2 pushDir = ComputePushDir(attacker, defender);
+                    float   kbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
+                    float   kbDur   = attacker?.settings?.hurtDuration ?? 0.07f;
+
+                    var hs = evt.targetIndex == 0 ? _h1 : _h2;
+                    hs?.TakeDamage(evt.damage);
+
+                    Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f
+                        + Vector3.right * Random.Range(-0.3f, 0.3f);
+                    DamagePopup.Spawn(popupPos, evt.damage, evt.isCrit);
+
+                    StartCoroutine(defender.Knockback(pushDir, kbDist, kbDur * t));
+                    yield return StartCoroutine(defender.animationController.PlayHurt(kbDur * t));
+
+                    // Let the slash clip finish its second half before anything else can
+                    // re-trigger it — without this, combo hits retrigger mid-clip and the
+                    // animation snaps/restarts instead of playing through.
+                    if (!evt.isThrow)
+                        yield return new WaitForSeconds(slashHalf);
+                }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
+            case CombatEventType.HealthChanged:
+                ApplyHealthChanged(evt);
+                yield return null;
+                break;
+
+            case CombatEventType.Dodge:
+                if (defender != null)
+                {
+                    // Dodge always follows a melee swing attempt (never a throw) — the attacker
+                    // swings, and exactly when it would have landed, the defender leaps away.
                     string trigger = attacker?.weaponHandler.currentType switch
                     {
                         WeaponType.Heavy  => "SlashingHeavy",
@@ -117,46 +170,33 @@ public class CombatPlayer : MonoBehaviour
                     float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
                     yield return new WaitForSeconds(slashHalf);
 
-                    // Knockback in parallel with hurt
-                    Vector2 pushDir = ComputePushDir(attacker, defender);
-                    float   kbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
-                    float   kbDur   = attacker?.settings?.hurtDuration ?? 0.07f;
-                    if (defender != null)
-                    {
-                        StartCoroutine(defender.Knockback(pushDir, kbDist, kbDur * t));
-                        yield return StartCoroutine(defender.animationController.PlayHurt(kbDur * t));
-                    }
-
-                    // Damage popup
-                    if (defender != null)
-                    {
-                        Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f
-                            + Vector3.right * Random.Range(-0.3f, 0.3f);
-                        DamagePopup.Spawn(popupPos, evt.damage, evt.isCrit);
-                    }
-                }
-                break;
-
-            case CombatEventType.HealthChanged:
-                ApplyHealthChanged(evt);
-                yield return null;
-                break;
-
-            case CombatEventType.Dodge:
-                if (defender != null)
-                {
                     Vector3 dodgePopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
                     DamagePopup.SpawnDodge(dodgePopupPos);
                     Vector2 dodgeDir = ComputePushDir(attacker, defender);
                     float   dodgeDist = attacker?.settings?.knockbackDistance ?? 0.5f;
                     yield return StartCoroutine(defender.DodgeLeap(dodgeDir, dodgeDist));
+
+                    yield return new WaitForSeconds(slashHalf);
                 }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
             case CombatEventType.Block:
                 if (defender != null)
                 {
+                    // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
+                    string trigger = attacker?.weaponHandler.currentType switch
+                    {
+                        WeaponType.Heavy  => "SlashingHeavy",
+                        WeaponType.Dagger => "SlashingDagger",
+                        _                 => "Slashing"
+                    };
+                    attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+
+                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
+                    yield return new WaitForSeconds(slashHalf);
+
                     Vector3 blockPopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
                     DamagePopup.SpawnBlock(blockPopupPos);
@@ -168,7 +208,10 @@ public class CombatPlayer : MonoBehaviour
                     // Block animation and knockback in parallel
                     StartCoroutine(defender.Knockback(blockDir, kbDist, kbDur));
                     yield return StartCoroutine(defender.animationController.PlayBlock(0.36666667f * t));
+
+                    yield return new WaitForSeconds(slashHalf);
                 }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
             case CombatEventType.Miss:
@@ -181,6 +224,7 @@ public class CombatPlayer : MonoBehaviour
                     float missDist = attacker?.settings?.knockbackDistance ?? 0.5f;
                     yield return StartCoroutine(defender.DodgeLeap(missDir, missDist));
                 }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
             case CombatEventType.Disarm:
@@ -206,13 +250,56 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.ThrowWeapon:
-                // Simplified: unequip and wait for flight duration
                 if (attacker != null)
                 {
-                    attacker.weaponHandler.Unequip();
+                    // Capture sprite/position/scale before Unequip destroys the in-hand weapon object.
+                    var weaponData   = attacker.weaponHandler.CurrentWeaponData;
+                    var inHandWeapon = attacker.weaponHandler.CurrentWeapon;
+                    Vector3 launchPos = attacker.weaponHandler.handBone != null
+                        ? attacker.weaponHandler.handBone.position
+                        : (inHandWeapon != null ? inHandWeapon.transform.position : attacker.transform.position + Vector3.up * 0.5f);
+                    Vector3 projectileScale = inHandWeapon != null
+                        ? inHandWeapon.transform.lossyScale
+                        : (attacker.weaponHandler.handBone != null ? attacker.weaponHandler.handBone.lossyScale : Vector3.one) * (weaponData?.scale ?? 1f);
+
+                    // Mirrors CombatSimulator.SimulateThrow: non-Thrown weapons are removed from
+                    // the loadout permanently (so the icon also disappears from WeaponHUD); a
+                    // Thrown weapon just unequips, since it can be picked up/re-equipped later.
+                    if (weaponData != null && weaponData.type != WeaponType.Thrown)
+                        attacker.weaponHandler.UnequipPermanent();
+                    else
+                        attacker.weaponHandler.Unequip();
                     attacker.GetComponent<Animator>()?.SetTrigger("Throwing");
+
+                    if (weaponData?.inHandSprite != null)
+                    {
+                        Vector3 targetPos = defender != null
+                            ? defender.transform.position
+                            : attacker.transform.position + (attacker.isPlayer1 ? Vector3.right : Vector3.left) * 5f;
+
+                        Vector3 flightDir   = (targetPos - launchPos).normalized;
+                        float   flightAngle = Mathf.Atan2(flightDir.y, flightDir.x) * Mathf.Rad2Deg;
+
+                        var flyingWeapon = new GameObject("FlyingWeapon");
+                        flyingWeapon.transform.position   = launchPos;
+                        flyingWeapon.transform.localScale = new Vector3(
+                            Mathf.Abs(projectileScale.x), Mathf.Abs(projectileScale.y), Mathf.Abs(projectileScale.z));
+                        flyingWeapon.transform.rotation = Quaternion.Euler(0, 0, flightAngle);
+                        var sr = flyingWeapon.AddComponent<SpriteRenderer>();
+                        sr.sprite           = weaponData.inHandSprite;
+                        sr.sortingLayerName = "Weapons";
+                        sr.sortingOrder     = 10;
+
+                        bool  rotate = weaponData.type == WeaponType.Thrown;
+                        float arc    = rotate ? 0.5f : 0f;
+                        yield return StartCoroutine(attacker.FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f * t, rotate, arc));
+                        Destroy(flyingWeapon);
+                    }
+                    else
+                    {
+                        yield return new WaitForSeconds(0.45f * t);
+                    }
                 }
-                yield return new WaitForSeconds(0.45f * t);
                 break;
 
             case CombatEventType.SpeedBonus:

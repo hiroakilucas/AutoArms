@@ -560,7 +560,9 @@ public class PlayerCombat : MonoBehaviour
         fallenWeapons.Add(fallen);
     }
 
-    private IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, bool rotate, float arc = 0f)
+    // Public so CombatPlayer (CombatSimulator replay) can reuse the same projectile arc
+    // for ThrowWeapon events instead of just unequipping with no flight visual.
+    public IEnumerator FlyWeapon(Transform obj, Vector3 from, Vector3 to, float duration, bool rotate, float arc = 0f)
     {
         float elapsed = 0f;
         while (elapsed < duration)
@@ -582,7 +584,7 @@ public class PlayerCombat : MonoBehaviour
     public IEnumerator DodgeLeap(Vector2 pushDirection, float distance)
     {
         Vector2 to = (Vector2)transform.position + pushDirection * distance;
-        float duration = settings.hurtDuration;
+        float duration = settings.dodgeDuration;
         StartCoroutine(animationController.PlayJumpStart(duration));
         yield return movement.JumpTo(to, distance / duration, 0.4f);
         animationController.SetIdle(true);

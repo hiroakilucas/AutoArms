@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class CombatSceneLoader : MonoBehaviour
@@ -76,6 +77,7 @@ public class CombatSceneLoader : MonoBehaviour
         player1Combat.counter        = profile.counter;
         player1Combat.criticalChance = profile.criticalChance;
         player1Combat.hitSpeed       = profile.hitSpeed;
+        player1Combat.skills         = profile.skills != null ? new List<SkillData>(profile.skills) : new List<SkillData>();
         player1Combat.defender       = player2Combat;
         player1Combat.defenderAnimationController = player2Anim;
 
@@ -86,8 +88,16 @@ public class CombatSceneLoader : MonoBehaviour
         var health1 = player1Obj.AddComponent<HealthSystem>();
         health1.Initialize(p1MaxHealth);
 
+        // useSimulator path computes all of Player2's HP off player2Profile.maxHealth (see
+        // CombatSimulator.BuildState) — health2 must start from the same number, or every
+        // HealthChanged event's delta is computed against the wrong baseline and damage
+        // appears to not apply correctly.
+        if (useSimulator && player2Profile == null)
+            player2Profile = LoadPlayer2ProfileFallback();
+        int p2MaxHealth = (useSimulator && player2Profile != null) ? player2Profile.maxHealth : player2MaxHealth;
+
         var health2 = player2Object.GetComponent<HealthSystem>() ?? player2Object.AddComponent<HealthSystem>();
-        health2.Initialize(player2MaxHealth);
+        health2.Initialize(p2MaxHealth);
 
         var combatHUD = gameObject.AddComponent<CombatHUD>();
         combatHUD.Initialize(health1, health2);
@@ -119,9 +129,6 @@ public class CombatSceneLoader : MonoBehaviour
         StartCoroutine(EntryFall(player1Obj,    p1Land, () => p1Done = true));
         StartCoroutine(EntryFall(player2Object, p2Land, () => p2Done = true));
         yield return new WaitUntil(() => p1Done && p2Done);
-
-        if (useSimulator && player2Profile == null)
-            player2Profile = LoadPlayer2ProfileFallback();
 
         if (useSimulator && player2Profile != null)
         {
@@ -201,10 +208,14 @@ public class CombatSceneLoader : MonoBehaviour
 
         if (combat.HasSkill("Immortal"))
         {
-            int prev = hp;
-            hp += 100;
-            combat.runSpeedMultiplier *= 0.5f;
-            combat.LogSkillCheck("Immortal", true, $"maxHealth {prev}→{hp}, speed ×0.5");
+            int prevHp = hp;
+            int prevStr = combat.str, prevAgi = combat.agility, prevSpd = combat.speed;
+            hp = Mathf.RoundToInt(hp * 3.5f);
+            combat.str     = Mathf.RoundToInt(combat.str * 0.75f);
+            combat.agility = Mathf.RoundToInt(combat.agility * 0.75f);
+            combat.speed   = Mathf.RoundToInt(combat.speed * 0.75f);
+            combat.LogSkillCheck("Immortal", true,
+                $"maxHealth {prevHp}→{hp}, str {prevStr}→{combat.str}, agi {prevAgi}→{combat.agility}, speed {prevSpd}→{combat.speed}");
         }
 
         if (combat.HasSkill("Armour"))

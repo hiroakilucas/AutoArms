@@ -56,7 +56,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         nameGo.transform.SetParent(container.transform, false);
         // RT first so AddComponent<TMP> doesn't stomp it
         var nrt = nameGo.AddComponent<RectTransform>();
-        nrt.anchorMin = new Vector2(0f, 0.68f); nrt.anchorMax = new Vector2(1f, 1f);
+        nrt.anchorMin = new Vector2(0f, 0.82f); nrt.anchorMax = new Vector2(1f, 1f);
         nrt.offsetMin = nrt.offsetMax = Vector2.zero;
         var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
         nameTxt.text = $"{p.profileName}  <size=13><color=#C8A044>Level {p.level}</color></size>";
@@ -64,6 +64,21 @@ public class MainMenuCharacterPreview : MonoBehaviour
         nameTxt.color = new Color(0.90f, 0.78f, 0.35f, 1f);
         nameTxt.fontStyle = FontStyles.Bold;
         nameTxt.alignment = TextAlignmentOptions.Center;
+
+        // Stats efetivos (com bônus de skill já aplicados)
+        var (effHp, effStr, effAgi, effSpd) = p.GetEffectiveStats();
+        var statsGo = new GameObject("Stats");
+        statsGo.transform.SetParent(container.transform, false);
+        var statsRt = statsGo.AddComponent<RectTransform>();
+        statsRt.anchorMin = new Vector2(0f, 0.68f); statsRt.anchorMax = new Vector2(1f, 0.82f);
+        statsRt.offsetMin = statsRt.offsetMax = Vector2.zero;
+        var statsTxt = statsGo.AddComponent<TextMeshProUGUI>();
+        statsTxt.text = effHp != p.maxHealth || effStr != p.str || effAgi != p.agility || effSpd != p.speed
+            ? $"HP {p.maxHealth}→<color=#7CD27C>{effHp}</color>  STR {p.str}→<color=#7CD27C>{effStr}</color>  AGI {p.agility}→<color=#7CD27C>{effAgi}</color>  SPD {p.speed}→<color=#7CD27C>{effSpd}</color>"
+            : $"HP {effHp}  STR {effStr}  AGI {effAgi}  SPD {effSpd}";
+        statsTxt.fontSize = 9;
+        statsTxt.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+        statsTxt.alignment = TextAlignmentOptions.Center;
 
         // XP bar background
         var xpBgGo = new GameObject("XpBg");

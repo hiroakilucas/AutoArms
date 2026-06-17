@@ -64,4 +64,35 @@ public class PlayerProfile : ScriptableObject
 
     [Tooltip("Lutas restantes (m�ximo por ciclo)")]
     public int battlesRemaining = 6;
+
+    private bool HasSkill(string skillName)
+    {
+        if (skills == null) return false;
+        foreach (var s in skills)
+            if (s != null && s.skillName == skillName) return true;
+        return false;
+    }
+
+    // Preview-only: mirrors the HP/str/agility/speed bonuses from
+    // CombatSimulator.ApplySkillStats / CombatSceneLoader.ApplySkillStats, for display purposes
+    // (e.g. MainMenuCharacterPreview) without needing a live PlayerCombat/PlayerState instance.
+    // Keep in sync with those two if a skill affecting these four stats changes.
+    public (int hp, int str, int agility, int speed) GetEffectiveStats()
+    {
+        int hp = maxHealth, s = str, a = agility, sp = speed;
+
+        if (HasSkill("Vitality")) hp += 50;
+        if (HasSkill("Herculean Strength")) { s += 15; a -= 4; }
+        if (HasSkill("Feline Agility")) a = Mathf.RoundToInt(a * 1.5f);
+        if (HasSkill("Bodybuilder")) s = Mathf.RoundToInt(s * 1.5f);
+        if (HasSkill("Immortal"))
+        {
+            hp = Mathf.RoundToInt(hp * 3.5f);
+            s  = Mathf.RoundToInt(s * 0.75f);
+            a  = Mathf.RoundToInt(a * 0.75f);
+            sp = Mathf.RoundToInt(sp * 0.75f);
+        }
+
+        return (hp, s, a, sp);
+    }
 }

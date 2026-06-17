@@ -78,7 +78,14 @@ public class CombatSimulator
         if (s.HasSkill("Herculean Strength"))  { s.str += 15; s.agility -= 4; }
         if (s.HasSkill("Feline Agility"))      { s.agility = Mathf.RoundToInt(s.agility * 1.5f); }
         if (s.HasSkill("Lightning Bolt"))      { s.runSpeedMultiplier *= 1.5f; }
-        if (s.HasSkill("Immortal"))            { s.maxHp += 100; s.hp += 100; s.runSpeedMultiplier *= 0.5f; }
+        if (s.HasSkill("Immortal"))
+        {
+            s.maxHp = Mathf.RoundToInt(s.maxHp * 3.5f);
+            s.hp    = s.maxHp;
+            s.str      = Mathf.RoundToInt(s.str * 0.75f);
+            s.agility  = Mathf.RoundToInt(s.agility * 0.75f);
+            s.speed    = Mathf.RoundToInt(s.speed * 0.75f);
+        }
         if (s.HasSkill("Armour"))              { s.armor += 0.30f; }
         if (s.HasSkill("Extra Thick Skin"))    { s.armor += 0.50f; }
         if (s.HasSkill("Untouchable"))         { s.evasion += 0.25f; }
@@ -252,7 +259,7 @@ public class CombatSimulator
             if (defender.armor > 0f)
                 dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
 
-            Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg });
+            Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true });
             defender.hp = Mathf.Max(0, defender.hp - dmg);
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
         }

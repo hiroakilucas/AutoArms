@@ -5,7 +5,7 @@ public enum CombatEventType
     ThrowWeapon,     // playerIndex = attacker, targetIndex = defender, weaponName
     PickupWeapon,    // playerIndex = picker, weaponName
     WeaponEquipped,  // playerIndex = who equipped, weaponName (after throw: 40% re-equip)
-    Hit,             // playerIndex = attacker, targetIndex = defender, damage, isCrit, isCombo
+    Hit,             // playerIndex = attacker, targetIndex = defender, damage, isCrit, isCombo, isThrow
     Dodge,           // playerIndex = attacker, targetIndex = dodger
     Block,           // playerIndex = attacker, targetIndex = blocker (50% knockback, no damage)
     Miss,            // playerIndex = attacker, targetIndex = missed (defender DodgeLeaps)
@@ -25,6 +25,7 @@ public class CombatEvent
     public int   damage;
     public bool  isCrit;
     public bool  isCombo;
+    public bool  isThrow;
     public int   newHp;
     public int   maxHp;
     public int   extraActions;
