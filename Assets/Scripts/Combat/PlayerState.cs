@@ -19,6 +19,8 @@ public class PlayerState
     public float accuracy;
     public float counter;
     public float reversal;
+    public float blockBonus;
+    public float reversalAfterBlock;
     public float criticalChance;
     public float critDamageBonus;
     public float comboChanceBonus;

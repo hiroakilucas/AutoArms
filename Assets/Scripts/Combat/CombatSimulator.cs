@@ -128,6 +128,14 @@ public class CombatSimulator
         }
         if (s.HasSkill("Bodybuilder"))          strPct += 0.5f;
 
+        // +25% armor (flat, fora do percentual líquido — armor não é um dos quatro status
+        // que stackeiam em percentual) e -15% SPD (entra no percentual líquido normalmente).
+        if (s.HasSkill("Armour"))
+        {
+            s.armor += 0.25f;
+            spdPct  -= 0.15f;
+        }
+
         // +100% HP, +100% STR, -100% AGI, -90% SPD (não -100%: speed fixo em 0 travava o
         // player pra nunca ter ação própria nem chance de pegar arma — com -90% ainda existe
         // chance de arredondar > 0 dependendo do speed base), -100% evasion ("Dexterity" — sem
@@ -154,14 +162,17 @@ public class CombatSimulator
             s.speed   = Mathf.RoundToInt(s.speed * (1f + spdPct));
         }
 
-        if (s.HasSkill("Armour"))              { s.armor += 0.30f; }
         if (s.HasSkill("Extra Thick Skin"))    { s.armor += 0.50f; }
-        if (s.HasSkill("Untouchable"))         { s.evasion += 0.25f; }
-        if (s.HasSkill("Relentless"))          { s.comboChanceBonus += 0.15f; }
+        if (s.HasSkill("Toughened Skin"))      { s.armor += 0.10f; }
+        if (s.HasSkill("Untouchable"))         { s.evasion += 0.30f; }
+        if (s.HasSkill("Relentless"))          { s.accuracy += 0.30f; }
+        if (s.HasSkill("Fists of Fury"))       { s.comboChanceBonus += 0.20f; }
         if (s.HasSkill("Lead Skeleton"))       { s.leadSkeleton = true; }
         if (s.HasSkill("Ballet Shoes"))        { s.evasion += 0.10f; s.firstHitAvoided = true; }
         if (s.HasSkill("First Strike"))        { s.initiative += 200; }
-        if (s.HasSkill("Counter Attack"))      { s.counter += 0.40f; }
+        if (s.HasSkill("Counter Attack"))      { s.blockBonus += 0.10f; s.reversalAfterBlock += 0.90f; }
+        if (s.HasSkill("Sixth Sense"))         { s.counter += 0.10f; }
+        if (s.HasSkill("Hostility"))            { s.reversal += 0.30f; }
         if (s.HasSkill("Monk"))                { s.counter += 0.40f; s.initiative -= 200; s.hitSpeed = 0f; }
 
         // Aplicado por último, depois de Untouchable/Ballet Shoes já terem somado evasion —
@@ -288,13 +299,6 @@ public class CombatSimulator
         // Monk: guards instead of attacking
         if (attacker.hitSpeed <= 0f) return false;
 
-        // Dodge check
-        if (Roll(DodgeChance(attacker, defender)))
-        {
-            Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index });
-            return false;
-        }
-
         // Block check
         if (Roll(BlockChance(attacker, defender)))
         {
@@ -319,9 +323,18 @@ public class CombatSimulator
 
             // Reversal: depois de bloquear, defensor pode contra-atacar imediatamente — não
             // cancela o combo do atacante (continua normalmente; cada hit extra do combo
-            // checa Reversal de novo, igual ao primeiro).
-            if (Roll(ReversalChance(defender)))
+            // checa Reversal de novo, igual ao primeiro). reversalAfterBlock (Counter Attack
+            // +90%) só soma AQUI, no caminho de pós-block — não entra no check de pós-hit
+            // abaixo, que usa só ReversalChance() puro.
+            if (Roll(ReversalChance(defender) + defender.reversalAfterBlock))
                 SimulateRetaliation(defender, attacker, CombatEventType.Reversal);
+            return false;
+        }
+
+        // Dodge check
+        if (Roll(DodgeChance(attacker, defender)))
+        {
+            Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index });
             return false;
         }
 
@@ -378,14 +391,17 @@ public class CombatSimulator
     // recursão entre as duas mecânicas — uma retaliação é sempre só uma retaliação).
     private void SimulateRetaliation(PlayerState retaliator, PlayerState target, CombatEventType eventType)
     {
-        if (Roll(DodgeChance(retaliator, target)))
-        {
-            Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = retaliator.index, targetIndex = target.index });
-            return;
-        }
+        // Ordem invertida em relação ao SimulateHit principal (Esquiva → Block): aqui o Block é
+        // verificado primeiro — o alvo da retaliação prioriza se defender com a arma/escudo
+        // antes de tentar esquivar.
         if (Roll(BlockChance(retaliator, target)))
         {
             Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = retaliator.index, targetIndex = target.index });
+            return;
+        }
+        if (Roll(DodgeChance(retaliator, target)))
+        {
+            Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = retaliator.index, targetIndex = target.index });
             return;
         }
 
@@ -465,7 +481,10 @@ public class CombatSimulator
         float agiBonus      = Mathf.Max(0, defender.agility - 3) * 0.02f;
         float weaponEvasion = defender.currentWeaponData != null
             ? defender.currentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
-        return Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion + weaponEvasion);
+        // accuracy do atacante (Relentless +0.30) é o oposto de evasion — reduz a chance de
+        // esquiva do defensor em vez de aumentar a do próprio atacante.
+        float total = baseChance + agiBonus + defender.evasion + weaponEvasion - attacker.accuracy;
+        return Mathf.Clamp(total, 0f, 0.60f);
     }
 
     private float BlockChance(PlayerState attacker, PlayerState defender)
@@ -482,7 +501,7 @@ public class CombatSimulator
             };
         float weaponBlockBonus = defender.currentWeaponData != null
             ? defender.currentWeaponData.blockBonus : UnarmedStats.BlockBonus;
-        return weaponBonus + weaponBlockBonus;
+        return weaponBonus + weaponBlockBonus + defender.blockBonus;
     }
 
     // Counter: atacante corre, ataca, e o defensor bate antes do hit conectar — cancela o
@@ -533,7 +552,7 @@ public class CombatSimulator
         float agiBonus    = Mathf.Max(0, attacker.agility - 3) * 0.008f;
         float weaponCombo = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.comboBonus : UnarmedStats.ComboBonus;
-        float total = Mathf.Clamp(baseChance + agiBonus + attacker.comboChanceBonus + weaponCombo, 0f, 0.35f);
+        float total = Mathf.Clamp(baseChance + agiBonus + attacker.comboChanceBonus + weaponCombo, 0f, 0.60f);
         return total * Mathf.Pow(0.5f, comboCount);
     }
 

@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: skill_relentless
   m_EditorClassIdentifier: 
   skillName: Relentless
-  description: +chance de combo
-  icon: {fileID: 0}
+  description: "+30% accuracy (reduz a esquiva do advers\xE1rio)"
+  icon: {fileID: 21300000, guid: c8904db8e3646df48a5f6dde230868c6, type: 3}
   category: 0
   activationType: 0
   usesPerFight: 1

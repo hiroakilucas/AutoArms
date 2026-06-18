@@ -13,7 +13,7 @@ public class CharacterPanel : MonoBehaviour
 
     // Stats tab
     private TMP_Text _charName, _levelText;
-    private TMP_Text _hpVal, _strVal, _agiVal, _spdVal, _initVal, _critChanceVal, _critDmgVal, _evasionVal, _reversalVal;
+    private TMP_Text _hpVal, _strVal, _agiVal, _spdVal, _initVal, _critChanceVal, _critDmgVal, _evasionVal, _reversalVal, _counterVal, _comboVal, _armorVal, _accuracyVal, _blockVal, _reversalAfterBlockVal;
     private TMP_Text      _battlesText, _winRateText;
 
     // Skills tab
@@ -249,8 +249,14 @@ public class CharacterPanel : MonoBehaviour
         _initVal       = BuildStatRow(content.gameObject, "INIT");
         _critChanceVal = BuildStatRow(content.gameObject, "CRIT CHANCE");
         _critDmgVal    = BuildStatRow(content.gameObject, "CRIT DMG");
+        _accuracyVal   = BuildStatRow(content.gameObject, "ACCURACY");
         _evasionVal    = BuildStatRow(content.gameObject, "EVASION");
         _reversalVal   = BuildStatRow(content.gameObject, "REVERSAL");
+        _counterVal    = BuildStatRow(content.gameObject, "COUNTER");
+        _comboVal      = BuildStatRow(content.gameObject, "COMBO");
+        _armorVal      = BuildStatRow(content.gameObject, "ARMOR");
+        _blockVal      = BuildStatRow(content.gameObject, "BLOCK");
+        _reversalAfterBlockVal = BuildStatRow(content.gameObject, "REVERSAL AFTER BLOCK");
 
         MakeSep(content);
 
@@ -368,7 +374,7 @@ public class CharacterPanel : MonoBehaviour
         // e subtrai STR/AGI/SPD), mesma lógica de PlayerProfile.GetEffectiveStats() usada no
         // preview do menu principal. Antes mostrava p.maxHealth/str/agility/speed crus, então
         // escolher uma skill que afeta stats nunca aparecia aqui.
-        var (effHp, effStr, effAgi, effSpd, effInit, effCritChance, effCritDmg, effEvasion, effReversal) = p.GetEffectiveStats();
+        var (effHp, effStr, effAgi, effSpd, effInit, effCritChance, effCritDmg, effEvasion, effReversal, effCounter, effCombo, effArmor, effAccuracy, effBlock, effReversalAfterBlock) = p.GetEffectiveStats();
         SetStatValue(_hpVal,   p.maxHealth,  effHp);
         SetStatValue(_strVal,  p.str,        effStr);
         SetStatValue(_agiVal,  p.agility,    effAgi);
@@ -376,8 +382,14 @@ public class CharacterPanel : MonoBehaviour
         SetStatValue(_initVal, p.initiative, effInit);
         SetStatValuePercent(_critChanceVal, p.criticalChance, effCritChance);
         SetStatValuePercent(_critDmgVal,    0f,                effCritDmg);
+        SetStatValuePercent(_accuracyVal,   p.accuracy,        effAccuracy);
         SetStatValuePercent(_evasionVal,    p.evasion,         effEvasion);
         SetStatValuePercent(_reversalVal,   p.reversal,        effReversal);
+        SetStatValuePercent(_counterVal,    p.counter,         effCounter);
+        SetStatValuePercent(_armorVal,      p.armor,           effArmor);
+        SetStatValuePercent(_comboVal,      0f,                effCombo);
+        SetStatValuePercent(_blockVal,              p.blockBonus,          effBlock);
+        SetStatValuePercent(_reversalAfterBlockVal, p.reversalAfterBlock,  effReversalAfterBlock);
 
         _battlesText.text = $"⚡  Batalhas hoje:  {p.battlesRemaining} / 6";
         _winRateText.text  = $"🏆  Win Rate:  {p.winRate:F1}%";

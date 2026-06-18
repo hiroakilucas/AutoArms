@@ -30,6 +30,8 @@ public class PlayerCombat : MonoBehaviour
     public int initiative = 0;
     public float reversal = 0f;
     public float counter = 0f;
+    public float blockBonus = 0f;
+    public float reversalAfterBlock = 0f;
     public float criticalChance = 0f;
     public float critDamageBonus = 0f;
     public float hitSpeed = 1f;

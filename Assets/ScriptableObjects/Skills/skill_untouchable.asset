@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: skill_untouchable
   m_EditorClassIdentifier: 
   skillName: Untouchable
-  description: "+25% chance de esquiva (vers\xE3o mais forte do Sixth Sense)"
-  icon: {fileID: 0}
+  description: +30% chance de esquiva
+  icon: {fileID: 21300000, guid: 0200fa647b7b8b242a070b695ab8f8fc, type: 3}
   category: 0
   activationType: 0
   usesPerFight: 1

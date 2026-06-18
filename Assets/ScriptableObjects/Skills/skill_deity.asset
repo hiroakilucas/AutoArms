@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_deity
   m_EditorClassIdentifier: 
   skillName: Deity
-  description: "+100% HP/STR, -100% AGI/SPD/evas\xE3o, -200 iniciativa, +40% reversal"
+  description: "+100% HP/STR, -100% AGI/evas\xE3o, -90% SPD, -200 iniciativa, +40%
+    reversal"
   icon: {fileID: 21300000, guid: 6276ecc355e457641838f94f496705b7, type: 3}
   category: 2
   activationType: 0

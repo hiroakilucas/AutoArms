@@ -20,15 +20,17 @@ MonoBehaviour:
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
   maxHealth: 60
-  str: 6
-  agility: 4
-  speed: 4
+  str: 5
+  agility: 7
+  speed: 2
   armor: 0
   evasion: 0
   accuracy: 0
   initiative: 0
   reversal: 0
   counter: 0
+  blockBonus: 0
+  reversalAfterBlock: 0
   criticalChance: 0
   hitSpeed: 1
   skills: []

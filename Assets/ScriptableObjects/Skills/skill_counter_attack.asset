@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: skill_counter_attack
   m_EditorClassIdentifier: 
   skillName: Counter Attack
-  description: "Ataca ap\xF3s levar hit"
-  icon: {fileID: 0}
+  description: "+10% block, +90% reversal ap\xF3s bloquear"
+  icon: {fileID: 21300000, guid: 85877bdaf6c40bf4a90d796de89575a2, type: 3}
   category: 0
   activationType: 0
   usesPerFight: 1

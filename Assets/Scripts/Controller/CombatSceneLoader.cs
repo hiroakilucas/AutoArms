@@ -282,6 +282,14 @@ public class CombatSceneLoader : MonoBehaviour
             combat.LogSkillCheck("Bodybuilder", true, "str% += 50%");
         }
 
+        if (combat.HasSkill("Armour"))
+        {
+            // +25% armor (flat, fora do percentual líquido) e -15% SPD (entra normalmente).
+            combat.armor += 0.25f;
+            spdPct       -= 0.15f;
+            combat.LogSkillCheck("Armour", true, $"armor → {combat.armor:P0}, speed% -= 15%");
+        }
+
         if (combat.HasSkill("Deity"))
         {
             // +100% HP, +100% STR, -100% AGI, -90% SPD (não -100%: ver CombatSimulator, mesmo
@@ -310,28 +318,34 @@ public class CombatSceneLoader : MonoBehaviour
                 $"hp {prevHp}→{hp}, str {prevStr}→{combat.str}, agi {prevAgi}→{combat.agility}, speed {prevSpd}→{combat.speed}");
         }
 
-        if (combat.HasSkill("Armour"))
-        {
-            combat.armor += 0.30f;
-            combat.LogSkillCheck("Armour", true, $"armor → {combat.armor:P0}");
-        }
-
         if (combat.HasSkill("Extra Thick Skin"))
         {
             combat.armor += 0.50f;
             combat.LogSkillCheck("Extra Thick Skin", true, $"armor → {combat.armor:P0}");
         }
 
+        if (combat.HasSkill("Toughened Skin"))
+        {
+            combat.armor += 0.10f;
+            combat.LogSkillCheck("Toughened Skin", true, $"armor → {combat.armor:P0}");
+        }
+
         if (combat.HasSkill("Untouchable"))
         {
-            combat.evasion += 0.25f;
+            combat.evasion += 0.30f;
             combat.LogSkillCheck("Untouchable", true, $"evasion → {combat.evasion:P0}");
         }
 
         if (combat.HasSkill("Relentless"))
         {
-            combat.comboChanceBonus += 0.15f;
-            combat.LogSkillCheck("Relentless", true, $"comboChanceBonus → {combat.comboChanceBonus:P0}");
+            combat.accuracy += 0.30f;
+            combat.LogSkillCheck("Relentless", true, $"accuracy → {combat.accuracy:P0}");
+        }
+
+        if (combat.HasSkill("Fists of Fury"))
+        {
+            combat.comboChanceBonus += 0.20f;
+            combat.LogSkillCheck("Fists of Fury", true, $"comboChanceBonus → {combat.comboChanceBonus:P0}");
         }
 
         if (combat.HasSkill("Lead Skeleton"))
@@ -355,8 +369,22 @@ public class CombatSceneLoader : MonoBehaviour
 
         if (combat.HasSkill("Counter Attack"))
         {
-            combat.counter += 0.40f;
-            combat.LogSkillCheck("Counter Attack", true, $"counter → {combat.counter:P0}");
+            combat.blockBonus += 0.10f;
+            combat.reversalAfterBlock += 0.90f;
+            combat.LogSkillCheck("Counter Attack", true,
+                $"blockBonus → {combat.blockBonus:P0}, reversalAfterBlock → {combat.reversalAfterBlock:P0}");
+        }
+
+        if (combat.HasSkill("Sixth Sense"))
+        {
+            combat.counter += 0.10f;
+            combat.LogSkillCheck("Sixth Sense", true, $"counter → {combat.counter:P0}");
+        }
+
+        if (combat.HasSkill("Hostility"))
+        {
+            combat.reversal += 0.30f;
+            combat.LogSkillCheck("Hostility", true, $"reversal → {combat.reversal:P0}");
         }
 
         if (combat.HasSkill("Monk"))

@@ -43,6 +43,8 @@ public class PlayerProfile : ScriptableObject
     public int initiative = 0;
     public float reversal = 0f;
     public float counter = 0f;
+    public float blockBonus = 0f;
+    public float reversalAfterBlock = 0f;
     public float criticalChance = 0f;
     public float hitSpeed = 1f;
 
@@ -74,14 +76,15 @@ public class PlayerProfile : ScriptableObject
     }
 
     // Preview-only: mirrors the HP/str/agility/speed/initiative/critChance/critDamageBonus/
-    // evasion/reversal bonuses from CombatSimulator.ApplySkillStats /
+    // evasion/reversal/counter/comboChanceBonus/armor bonuses from CombatSimulator.ApplySkillStats /
     // CombatSceneLoader.ApplySkillStats, for display purposes (e.g. MainMenuCharacterPreview)
     // without needing a live PlayerCombat/PlayerState instance. Keep in sync with those two if
     // a skill affecting these stats changes.
-    public (int hp, int str, int agility, int speed, int initiative, float criticalChance, float critDamageBonus, float evasion, float reversal) GetEffectiveStats()
+    public (int hp, int str, int agility, int speed, int initiative, float criticalChance, float critDamageBonus, float evasion, float reversal, float counter, float comboChanceBonus, float armor, float accuracy, float blockBonus, float reversalAfterBlock) GetEffectiveStats()
     {
         int hp = maxHealth, s = str, a = agility, sp = speed, init = initiative;
-        float critChance = criticalChance, critDmgBonus = 0f, eva = evasion, rev = reversal;
+        float critChance = criticalChance, critDmgBonus = 0f, eva = evasion, rev = reversal, cnt = counter, combo = 0f, arm = armor, acc = accuracy;
+        float blk = blockBonus, revBlk = reversalAfterBlock;
 
         // Percentuais somados num percentual líquido por status, aplicados uma única vez —
         // evita arredondamento em cascata quando múltiplas skills afetam o mesmo status
@@ -103,7 +106,15 @@ public class PlayerProfile : ScriptableObject
         if (HasSkill("Reconnaissance")) { spPct += 1.5f; init -= 200; critDmgBonus += 0.5f; }
         if (HasSkill("Bodybuilder")) sPct += 0.5f;
         if (HasSkill("First Strike")) init += 200;
-        if (HasSkill("Monk")) init -= 200;
+        if (HasSkill("Monk")) { init -= 200; cnt += 0.40f; }
+        if (HasSkill("Counter Attack")) { blk += 0.10f; revBlk += 0.90f; }
+        if (HasSkill("Sixth Sense")) cnt += 0.10f;
+        if (HasSkill("Hostility")) rev += 0.30f;
+        if (HasSkill("Relentless")) acc += 0.30f;
+        if (HasSkill("Fists of Fury")) combo += 0.20f;
+        if (HasSkill("Armour")) { arm += 0.25f; spPct -= 0.15f; }
+        if (HasSkill("Extra Thick Skin")) arm += 0.50f;
+        if (HasSkill("Toughened Skin")) arm += 0.10f;
         if (HasSkill("Immortal"))
         {
             hpPct += 2.5f;
@@ -122,7 +133,7 @@ public class PlayerProfile : ScriptableObject
             rev    += 0.40f;
             init   -= 200;
         }
-        if (HasSkill("Untouchable")) eva += 0.25f;
+        if (HasSkill("Untouchable")) eva += 0.30f;
         if (HasSkill("Ballet Shoes")) eva += 0.10f;
 
         if (hpPct != 0f || sPct != 0f || aPct != 0f || spPct != 0f)
@@ -134,6 +145,6 @@ public class PlayerProfile : ScriptableObject
         }
         if (evaPct != 0f) eva = Mathf.Max(0f, eva * (1f + evaPct));
 
-        return (hp, s, a, sp, init, critChance, critDmgBonus, eva, rev);
+        return (hp, s, a, sp, init, critChance, critDmgBonus, eva, rev, cnt, combo, arm, acc, blk, revBlk);
     }
 }
