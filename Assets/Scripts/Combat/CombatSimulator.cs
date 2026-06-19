@@ -187,6 +187,12 @@ public class CombatSimulator
 
         if (s.HasSkill("Extra Thick Skin"))    { s.armor += 0.50f; }
         if (s.HasSkill("Toughened Skin"))      { s.armor += 0.10f; }
+        // Shield: +45% block rate (blockBonus, mesmo campo de Counter Attack — soma em
+        // BlockChance) e +25% armor (penalidade de mobilidade do escudo equipado). hasShield
+        // habilita o desarme próprio do escudo (ver ShieldDisarmChance/SimulateHit) — se cair,
+        // os dois bônus são revertidos (ver case ShieldDisarm). Visual (sprite no braço oposto)
+        // é equipado fora daqui, em CombatSceneLoader.Initialize — PlayerState não tem GameObject.
+        if (s.HasSkill("Shield"))              { s.blockBonus += 0.45f; s.armor += 0.25f; s.hasShield = true; }
         if (s.HasSkill("Untouchable"))         { s.evasion += 0.30f; }
         if (s.HasSkill("Relentless"))          { s.accuracy += 0.30f; }
         if (s.HasSkill("Fists of Fury"))       { s.comboChanceBonus += 0.20f; }
@@ -273,17 +279,89 @@ public class CombatSimulator
     {
         Emit(new CombatEvent { type = CombatEventType.TurnStart, playerIndex = attacker.index });
 
-        // 1. Pick up weapon if unarmed (40% chance)
-        if (attacker.currentWeaponData == null && attacker.weaponLoadout.Count > 0 && Roll(0.40f))
+        // Chaining: turno consumido por estar estunado — pula a ação inteira (sem Thief/
+        // pickup/swap/throw/melee), só decrementa o contador e emite StunSkip pra
+        // CombatPlayer encerrar o loop de Hurt + remover a label (ver PlayerCombat.HideStunLabel).
+        // Checado antes até do isFirstTurn abaixo — um turno pulado por stun não é a "primeira
+        // ação real" do personagem pra fins de Troca de Arma.
+        if (attacker.stunnedActions > 0)
+        {
+            attacker.stunnedActions--;
+            Emit(new CombatEvent { type = CombatEventType.StunSkip, playerIndex = attacker.index });
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
+        }
+
+        // Primeiro turno de verdade deste atacante na luta (independente de round/ações extra
+        // por Speed) — usado só pra bloquear Troca de Arma no item 2b abaixo, ver lá o motivo.
+        bool isFirstTurn = !attacker.hasTakenFirstTurn;
+        attacker.hasTakenFirstTurn = true;
+
+        // 1. Thief: rouba a arma do oponente se eu estiver desarmado e ele armado — 44% por
+        // turno, no máximo 2 vezes por luta (thiefUsesRemaining). Checado ANTES do pickup normal
+        // abaixo — os dois exigem estar desarmado, então só um pode acontecer no mesmo turno; se
+        // Thief não triggar (sem usos restantes, oponente desarmado, ou o roll falhar), cai pro
+        // pickup comum normalmente.
+        bool stoleWeapon = false;
+        if (attacker.currentWeaponData == null && defender.currentWeaponData != null
+            && attacker.HasSkill("Thief") && attacker.thiefUsesRemaining > 0 && Roll(0.44f))
+        {
+            var stolen = defender.currentWeaponData;
+            defender.weaponLoadout.Remove(stolen);
+            defender.currentWeaponData = null;
+            attacker.weaponLoadout.Add(stolen);
+            attacker.currentWeaponData = stolen;
+            attacker.thiefUsesRemaining--;
+            Emit(new CombatEvent { type = CombatEventType.Thief, playerIndex = attacker.index, targetIndex = defender.index, weaponName = stolen.weaponName });
+            stoleWeapon = true;
+        }
+
+        // 2. Pick up weapon if unarmed (40% chance) — só se Thief não tiver acontecido acima.
+        if (!stoleWeapon && attacker.currentWeaponData == null && attacker.weaponLoadout.Count > 0 && Roll(0.40f))
         {
             var w = attacker.weaponLoadout[_rng.Next(attacker.weaponLoadout.Count)];
             attacker.currentWeaponData = w;
             Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = w.weaponName });
         }
+        // 2b. Weapon swap if armed (mesma 40% chance do pickup acima) — mecânica geral, vale pra
+        // todo mundo (não é skill, pedido pelo usuário como ação independente de Hideaway). Joga
+        // a arma atual no chão e ela some do loadout/HUB pra sempre (igual a WeaponDrop — não dá
+        // pra sacar de novo) e puxa uma nova arma aleatória do loadout (evita repetir a mesma, se
+        // houver outra opção). !isFirstTurn: quem já nasce armado (EquipStartingWeaponIfNeeded,
+        // 40% antes da luta começar) não pode trocar logo no 1º turno — só teve a arma há um
+        // instante, ainda nem atacou com ela (pedido pelo usuário).
+        else if (!isFirstTurn && !stoleWeapon && attacker.currentWeaponData != null && attacker.weaponLoadout.Count > 1 && Roll(0.40f))
+        {
+            var oldWeapon = attacker.currentWeaponData;
+            int idx = _rng.Next(attacker.weaponLoadout.Count);
+            var newWeapon = attacker.weaponLoadout[idx];
+            if (newWeapon == oldWeapon)
+                newWeapon = attacker.weaponLoadout[(idx + 1) % attacker.weaponLoadout.Count];
 
-        // 2. Check throw before melee — Monk (hitSpeed = 0) guarda em vez de atacar, e
-        // arremessar é um ataque como outro qualquer, então também não acontece pra ele
-        // (senão ele jogava a arma e corria o resto do turno normalmente, contradizendo
+            Emit(new CombatEvent { type = CombatEventType.WeaponSwap, playerIndex = attacker.index, weaponName = oldWeapon.weaponName });
+            attacker.weaponLoadout.Remove(oldWeapon);
+            attacker.currentWeaponData = newWeapon;
+            Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = newWeapon.weaponName });
+        }
+
+        // 3. Hideaway: arremesso forçado a 100% sempre que estiver armado — não rola
+        // ThrowChance(), nunca vai até o defensor pra melee enquanto tiver arma na mão,
+        // independente do tipo dela — NUNCA, nem no combo (SimulateHideawayThrowCombo abaixo
+        // rearremessa em vez de chamar SimulateHitWithDetermination — bug real reportado pelo
+        // usuário: o combo ainda virava melee). Ação extra por Speed é só outra chamada de
+        // SimulateTurn — o forçamento rola de novo do zero automaticamente, sem precisar de
+        // nenhum estado extra entre ações.
+        if (attacker.hitSpeed > 0f && attacker.currentWeaponData != null && attacker.HasSkill("Hideaway"))
+        {
+            SimulateThrow(attacker, defender);
+            SimulateHideawayThrowCombo(attacker, defender);
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
+        }
+
+        // 4. Check throw before melee (sem Hideaway) — Monk (hitSpeed = 0) guarda em vez de
+        // atacar, e arremessar é um ataque como outro qualquer, então também não acontece pra
+        // ele (senão ele jogava a arma e corria o resto do turno normalmente, contradizendo
         // o "guarda em vez de atacar" — bug real reportado pelo usuário).
         if (attacker.hitSpeed > 0f && attacker.currentWeaponData != null && Roll(ThrowChance(attacker)))
         {
@@ -292,19 +370,26 @@ public class CombatSimulator
             return;
         }
 
-        // 3. Melee
+        // 5. Melee
         // Monk (hitSpeed = 0): guarda em vez de atacar — não corre até o adversário.
         if (attacker.hitSpeed > 0f)
             Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index });
-        bool interrupted = SimulateHit(attacker, defender, isCombo: false);
+        bool interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: false, out bool _);
+        SimulateComboLoop(attacker, defender, interrupted);
 
-        // Combo loop (mirrors AttackRoutine's while loop). Each consecutive extra hit
-        // decays the chance by ×0.5 (1st extra hit normal, 2nd ×0.5, 3rd ×0.25, ...) —
-        // mirrors My Brute, where combo probability drops sharply after the first follow-up.
-        // Counter zera o resto do combo (o hit nunca aconteceu de fato), assim como Iron Head
-        // (atacante perde a arma, sem condições de continuar a sequência) — Dodge, Block e
-        // Reversal não interrompem nada, o combo continua normal depois deles. Reversal pode
-        // disparar de novo em cada hit extra do combo, independente do(s) anterior(es).
+        Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+    }
+
+    // Combo loop (mirrors AttackRoutine's while loop). Each consecutive extra hit decays the
+    // chance by ×0.5 (1st extra hit normal, 2nd ×0.5, 3rd ×0.25, ...) — mirrors My Brute, where
+    // combo probability drops sharply after the first follow-up. Counter zera o resto do combo
+    // (o hit nunca aconteceu de fato), assim como Iron Head (atacante perde a arma, sem
+    // condições de continuar a sequência) — Dodge, Block e Reversal não interrompem nada, o
+    // combo continua normal depois deles. Reversal pode disparar de novo em cada hit extra do
+    // combo, independente do(s) anterior(es). Caminho de melee normal (sem Hideaway) — ver
+    // SimulateHideawayThrowCombo abaixo pro equivalente de quem tem a skill.
+    private void SimulateComboLoop(PlayerState attacker, PlayerState defender, bool interrupted)
+    {
         int comboCount = 0;
         while (!interrupted && attacker.isAlive && defender.isAlive)
         {
@@ -312,20 +397,64 @@ public class CombatSimulator
             string weaponLabel = attacker.currentWeaponData != null ? attacker.currentWeaponData.weaponName : "Unarmed";
             Debug.Log($"[ComboChance] {attacker.name} (P{attacker.index + 1}, arma={weaponLabel}) hit extra #{comboCount + 1} chance={comboChance:P1}");
             if (!Roll(comboChance)) break;
-            interrupted = SimulateHit(attacker, defender, isCombo: true);
+            interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: true, out bool _);
             comboCount++;
         }
+    }
 
-        Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+    // Hideaway: combo depois do arremesso forçado TAMBÉM é arremesso, nunca melee — a skill é
+    // "nunca vai pro corpo a corpo enquanto tiver arma", isso vale pra qualquer hit extra do
+    // turno também. Mesma fórmula/decaimento de ComboChance() do combo normal, só que cada hit
+    // extra chama SimulateThrow de novo em vez de SimulateHitWithDetermination. Sem
+    // "interrupted" — SimulateThrow não tem Counter/Iron Head, nenhum resultado dele cancela o
+    // resto da sequência.
+    private void SimulateHideawayThrowCombo(PlayerState attacker, PlayerState defender)
+    {
+        int comboCount = 0;
+        while (attacker.isAlive && defender.isAlive)
+        {
+            float comboChance = ComboChance(attacker, comboCount);
+            string weaponLabel = attacker.currentWeaponData != null ? attacker.currentWeaponData.weaponName : "Unarmed";
+            Debug.Log($"[ComboChance] {attacker.name} (P{attacker.index + 1}, arma={weaponLabel}) hit extra #{comboCount + 1} chance={comboChance:P1}");
+            if (!Roll(comboChance)) break;
+            SimulateThrow(attacker, defender);
+            comboCount++;
+        }
     }
 
     // --- Hit resolution (mirrors HitRoutine) ---
 
+    // Determination: se o golpe não causa dano ao oponente (esquivou, bloqueou, ou o defensor
+    // deu Counter), 60% de chance do atacante tentar OUTRO golpe imediatamente — sempre
+    // isCombo: false (é uma tentativa nova, não uma continuação do combo, então fica elegível
+    // pro desarme de "primeiro hit" de novo). Recursivo: cada nova tentativa que também falhar
+    // rola os mesmos 60% de novo, até acertar de verdade (damageDealt = true) ou a chance falhar.
+    // Chamado tanto pro primeiro golpe do turno quanto por cada hit do loop de combo em
+    // SimulateTurn — os dois usam este wrapper em vez de SimulateHit direto, então Determination
+    // se aplica igual nos dois casos.
+    private bool SimulateHitWithDetermination(PlayerState attacker, PlayerState defender, bool isCombo, out bool damageDealt)
+    {
+        bool interrupted = SimulateHit(attacker, defender, isCombo, out damageDealt);
+
+        while (!damageDealt && attacker.HasSkill("Determination") && attacker.isAlive && defender.isAlive && Roll(0.60f))
+            interrupted = SimulateHit(attacker, defender, isCombo: false, out damageDealt);
+
+        return interrupted;
+    }
+
     // Retorna true se o combo do atacante deve ser interrompido (Counter do defensor, ou
     // Iron Head derrubando a arma do atacante) — false em qualquer outro desfecho (incluindo
-    // Dodge/Block/Reversal, que não interrompem).
-    private bool SimulateHit(PlayerState attacker, PlayerState defender, bool isCombo)
+    // Dodge/Block/Reversal, que não interrompem). damageDealt (out): true só quando o dano
+    // normal de fato foi aplicado ao defensor — usado por Determination (ver
+    // SimulateHitWithDetermination acima) pra saber quando NÃO tentar de novo. No guard do Monk
+    // abaixo, setamos damageDealt = true mesmo sem dano real — esse guard não representa uma
+    // tentativa de golpe que falhou, é a ausência completa de ataque (Monk guarda), então não
+    // deveria nunca disparar um retry de Determination (evitaria ficar girando indefinidamente
+    // num personagem com hitSpeed = 0).
+    private bool SimulateHit(PlayerState attacker, PlayerState defender, bool isCombo, out bool damageDealt)
     {
+        damageDealt = false;
+
         // Monk: guards instead of attacking — checado ANTES do Ballet Shoes abaixo. Um hit que
         // nunca aconteceu (Monk não ataca) não deveria gastar o "esquiva o 1º golpe" do
         // defensor nem emitir um evento Dodge — sem essa ordem, CombatPlayer reposicionava e
@@ -333,7 +462,7 @@ public class CombatSimulator
         // em que ele deveria ficar parado, e o jump-back de TurnEnd disparava depois só por
         // causa desse deslocamento indevido (bug real reportado pelo usuário: "saltos quando
         // não deveria se mexer").
-        if (attacker.hitSpeed <= 0f) return false;
+        if (attacker.hitSpeed <= 0f) { damageDealt = true; return false; }
 
         // Ballet Shoes: first hit of the fight auto-dodged
         if (!isCombo && defender.firstHitAvoided)
@@ -341,6 +470,20 @@ public class CombatSimulator
             defender.firstHitAvoided = false;
             Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index });
             return false;
+        }
+
+        // Counter: atacante já chegou perto e iria atacar, mas o defensor bate primeiro —
+        // cancela completamente o hit do atacante (e o resto do combo dele, já que esse hit
+        // nunca aconteceu de fato). Checado ANTES de Block/Dodge agora — Counter representa o
+        // defensor tomando a iniciativa de volta antes mesmo de precisar se defender; só se
+        // Counter não disparar é que o defensor tenta bloquear (Monk/Sixth Sense davam counter
+        // mas raramente chegavam a disparar de fato, já que Block/Dodge sempre tinham a primeira
+        // chance e, ao suceder, retornavam antes do Counter ser checado — bug real reportado
+        // pelo usuário: Monk não reagia nem depois de bloquear nem ao tomar hit).
+        if (Roll(CounterChance(defender)))
+        {
+            SimulateRetaliation(defender, attacker, CombatEventType.Counter);
+            return true;
         }
 
         // Block check
@@ -356,8 +499,24 @@ public class CombatSimulator
                 attacker.currentWeaponData = null;
                 Emit(new CombatEvent { type = CombatEventType.WeaponDrop, playerIndex = attacker.index, weaponName = wn });
             }
-            // Defender may drop weapon/shield on impact (10%)
-            if (defender.currentWeaponData != null && Roll(0.10f))
+            // Defender may drop weapon/shield on impact — escudo tem prioridade: enquanto o
+            // defensor tiver Shield equipado, só o escudo pode cair neste hit (protege a arma
+            // por baixo dele, igual ao My Brute); só depois que o escudo já caiu (aqui ou em
+            // hit anterior) é que a arma propriamente passa a correr risco de cair ao bloquear.
+            // Shield usa o mesmo ShieldDisarmChance fixo (sem disarmChanceBonus/disarmBonus) e
+            // popup "DROP!" (não "DISARM!" — foi o próprio impacto do bloqueio, não um desarme
+            // ativo do atacante, mesma distinção de WeaponDrop vs Disarm).
+            if (defender.hasShield)
+            {
+                if (Roll(ShieldDisarmChance))
+                {
+                    defender.hasShield   = false;
+                    defender.blockBonus -= 0.45f;
+                    defender.armor      -= 0.25f;
+                    Emit(new CombatEvent { type = CombatEventType.ShieldDrop, playerIndex = defender.index });
+                }
+            }
+            else if (defender.currentWeaponData != null && Roll(0.10f))
             {
                 string wn = defender.currentWeaponData.weaponName;
                 defender.weaponLoadout.Remove(defender.currentWeaponData);
@@ -382,19 +541,13 @@ public class CombatSimulator
             return false;
         }
 
-        // Counter: atacante já chegou perto e iria atacar, mas o defensor bate primeiro —
-        // cancela completamente o hit do atacante (e o resto do combo dele, já que esse hit
-        // nunca aconteceu de fato). Checado antes do dano normal — defensor nunca chega a
-        // tomar o hit quando triggar.
-        if (Roll(CounterChance(defender)))
-        {
-            SimulateRetaliation(defender, attacker, CombatEventType.Counter);
-            return true;
-        }
-
         // Normal hit — fórmula multiplicativa do My Brute
+        damageDealt = true;
         bool  isCrit = Roll(CritChance(attacker));
         float dmg    = CalcDamage(attacker, isCrit);
+
+        // Resistant: cap no dano bruto, antes de Lead Skeleton/armadura (ver ApplyResistantCap).
+        dmg = ApplyResistantCap(defender, dmg);
 
         // Lead Skeleton: -15% dano de arma blunt (Heavy)
         if (defender.leadSkeleton && WeaponData.IsBlunt(attacker.currentWeaponData))
@@ -411,6 +564,21 @@ public class CombatSimulator
         // corrigir (ver Survival no CLAUDE.md).
         Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, isCombo = isCombo, newHp = defender.hp, maxHp = defender.maxHp });
         Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+
+        // Chaining: 3 golpes consecutivos sem tomar dano (ApplyDamage zera o streak assim que
+        // o atacante toma qualquer dano, de qualquer origem — Hit, Counter, Reversal ou Throw)
+        // estuna o defensor por 1 ação dele. Só conta hit melee de verdade (este ponto) — não
+        // Counter/Reversal/Throw, fora do escopo descrito pelo usuário ("atacar"/"combar").
+        if (attacker.HasSkill("Chaining"))
+        {
+            attacker.chainHitStreak++;
+            if (attacker.chainHitStreak >= 3)
+            {
+                attacker.chainHitStreak = 0;
+                defender.stunnedActions++;
+                Emit(new CombatEvent { type = CombatEventType.Stunned, playerIndex = attacker.index, targetIndex = defender.index });
+            }
+        }
 
         if (!defender.isAlive) return false;
 
@@ -435,15 +603,33 @@ public class CombatSimulator
         if (Roll(ReversalChance(defender)))
             SimulateRetaliation(defender, attacker, CombatEventType.Reversal);
 
-        // Disarm (first hit only, not combo). attacker.isAlive: Reversal acima pode ter
-        // matado o atacante na retaliação — sem essa checagem, um atacante já morto ainda
-        // desarmava o defensor que acabou de contra-atacar.
-        if (attacker.isAlive && !isCombo && defender.currentWeaponData != null && Roll(DisarmChance(attacker)))
+        // Desarme (first hit only, not combo). attacker.isAlive: Reversal acima pode ter matado
+        // o atacante na retaliação — sem essa checagem, um atacante já morto ainda desarmava o
+        // defensor que acabou de contra-atacar. Escudo tem prioridade — enquanto o defensor
+        // tiver Shield equipado, só ele pode ser desarmado neste hit (protege a arma por baixo
+        // dele); só depois que o escudo já caiu (aqui ou em hit/bloqueio anterior) a arma passa
+        // a correr risco de desarme de verdade. ShieldDisarmChance é fixa, sem somar
+        // DisarmChance(attacker) (disarmChanceBonus de Shock, disarmBonus da arma do atacante,
+        // ou a futura Impact não afetam essa chance, ver CLAUDE.md).
+        if (attacker.isAlive && !isCombo)
         {
-            string wn = defender.currentWeaponData.weaponName;
-            defender.weaponLoadout.Remove(defender.currentWeaponData);
-            defender.currentWeaponData = null;
-            Emit(new CombatEvent { type = CombatEventType.Disarm, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
+            if (defender.hasShield)
+            {
+                if (Roll(ShieldDisarmChance))
+                {
+                    defender.hasShield   = false;
+                    defender.blockBonus -= 0.45f;
+                    defender.armor      -= 0.25f;
+                    Emit(new CombatEvent { type = CombatEventType.ShieldDisarm, playerIndex = attacker.index, targetIndex = defender.index });
+                }
+            }
+            else if (defender.currentWeaponData != null && Roll(DisarmChance(attacker)))
+            {
+                string wn = defender.currentWeaponData.weaponName;
+                defender.weaponLoadout.Remove(defender.currentWeaponData);
+                defender.currentWeaponData = null;
+                Emit(new CombatEvent { type = CombatEventType.Disarm, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
+            }
         }
 
         return ironHeadTriggered;
@@ -454,9 +640,10 @@ public class CombatSimulator
     // recursão entre as duas mecânicas — uma retaliação é sempre só uma retaliação).
     private void SimulateRetaliation(PlayerState retaliator, PlayerState target, CombatEventType eventType)
     {
-        // Ordem invertida em relação ao SimulateHit principal (Esquiva → Block): aqui o Block é
-        // verificado primeiro — o alvo da retaliação prioriza se defender com a arma/escudo
-        // antes de tentar esquivar.
+        // Sem Counter aqui (ver doc do método acima — retaliação nunca recursa em Counter/
+        // Reversal). Block é verificado antes de Dodge — o alvo da retaliação prioriza se
+        // defender com a arma/escudo antes de tentar esquivar, mesma ordem do SimulateHit
+        // principal (Counter → Block → Dodge) depois do Counter já ter sido descartado.
         if (Roll(BlockChance(retaliator, target)))
         {
             Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = retaliator.index, targetIndex = target.index });
@@ -470,6 +657,9 @@ public class CombatSimulator
 
         bool  isCrit = Roll(CritChance(retaliator));
         float dmg    = CalcDamage(retaliator, isCrit);
+
+        // Resistant: cap no dano bruto, antes de Lead Skeleton/armadura (ver ApplyResistantCap).
+        dmg = ApplyResistantCap(target, dmg);
 
         if (target.leadSkeleton && WeaponData.IsBlunt(retaliator.currentWeaponData))
             dmg *= 0.85f;
@@ -501,17 +691,33 @@ public class CombatSimulator
         bool isThrown   = WeaponData.HasType(weaponData, WeaponType.Thrown);
         string wn       = weaponData?.weaponName ?? "";
 
-        if (!isThrown)
+        // Hideaway: a arma nunca sai da mão de quem arremessa — joga uma réplica e continua
+        // empunhando a mesma arma o turno inteiro (currentWeaponData não é zerado, e ela também
+        // não sai do loadout, mesmo sem a tag Thrown). Sem a skill, segue a regra normal: fica
+        // desarmado até o próprio TurnStart seguinte, e só Thrown sobrevive no loadout.
+        bool keepsWeapon = attacker.HasSkill("Hideaway");
+        if (!isThrown && !keepsWeapon)
         {
             attacker.weaponLoadout.Remove(weaponData);
         }
-        attacker.currentWeaponData = null;
+        if (!keepsWeapon)
+            attacker.currentWeaponData = null;
 
         Emit(new CombatEvent { type = CombatEventType.ThrowWeapon, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
 
-        if (Roll(0.80f))
+        // Hideaway: defensor pode bloquear o arremesso antes do hit/miss normal — mecânica nova,
+        // checada ANTES do Roll(0.80f) de acerto. isThrow = true no evento de Block (mesmo campo
+        // do Hit) pra CombatPlayer pular o swing/reposicionamento do atacante (ele já está
+        // desarmado, sem arma na mão pra um swing de melee fazer sentido).
+        if (Roll(ThrowBlockChance(defender)))
         {
-            int dmg = CalcThrowDamage(weaponData);
+            Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = attacker.index, targetIndex = defender.index, isThrow = true });
+        }
+        else if (Roll(0.80f))
+        {
+            int dmg = CalcThrowDamage(attacker, weaponData);
+            // Resistant: cap no dano bruto, antes da armadura (ver ApplyResistantCap).
+            dmg = Mathf.RoundToInt(ApplyResistantCap(defender, dmg));
             if (defender.armor > 0f)
                 dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
 
@@ -524,13 +730,12 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.Miss, playerIndex = attacker.index, targetIndex = defender.index });
         }
 
-        // 40% re-equip after throw
-        if (attacker.weaponLoadout.Count > 0 && Roll(0.40f))
-        {
-            var w = attacker.weaponLoadout[_rng.Next(attacker.weaponLoadout.Count)];
-            attacker.currentWeaponData = w;
-            Emit(new CombatEvent { type = CombatEventType.WeaponEquipped, playerIndex = attacker.index, weaponName = w.weaponName });
-        }
+        // Sem re-equip imediato aqui — fica desarmado até o próprio TurnStart do próximo turno
+        // dele, que já tem o check normal de 40% pra pegar arma (mesmo padrão de qualquer outro
+        // turno desarmado). Era 40% de chance de reequipar na hora, mas isso fazia o personagem
+        // ocasionalmente "equipar" uma arma já no fim do turno (depois do hit/miss do arremesso),
+        // sem nenhuma ação visível além da troca de ícone — bug real reportado pelo usuário: o
+        // pickup deveria sempre acontecer no início do turno, nunca no meio/fim.
     }
 
     // --- Chance calculations (mirrors PlayerCombat methods) ---
@@ -639,10 +844,26 @@ public class CombatSimulator
         return baseChance + weaponBonus + attacker.disarmChanceBonus;
     }
 
+    // Shield: chance fixa de cair, bem menor que arma normal — diferente de DisarmChance(),
+    // não soma disarmChanceBonus (Shock) nem disarmBonus de arma do atacante, e a futura Impact
+    // (+15% disarm) também não deve aumentar essa chance (ver CLAUDE.md, roadmap de Shield).
+    private const float ShieldDisarmChance = 0.10f;
+
+    // Hideaway não passa mais por aqui — o arremesso dela é forçado a 100% direto em
+    // SimulateTurn (sem rolar ThrowChance nem checar tag nenhuma), ver item 3 lá. Esta fórmula
+    // só decide o throw de quem NÃO tem a skill.
     private float ThrowChance(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null) return 0f;
         return TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f);
+    }
+
+    // Hideaway: +25% de chance do DEFENSOR bloquear um arremesso antes do hit/miss normal —
+    // mecânica nova, não existia nenhum Block contra Throw antes (só Hit 80%/Miss 20%). Base 0%
+    // pra quem não tem a skill (ninguém bloqueia arremesso por padrão).
+    private float ThrowBlockChance(PlayerState defender)
+    {
+        return defender.HasSkill("Hideaway") ? 0.25f : 0f;
     }
 
     // --- Damage calculations (mirrors WeaponBaseDamage / CalcDamage / ThrowDamage) ---
@@ -689,11 +910,29 @@ public class CombatSimulator
         return result;
     }
 
+    // Resistant: nenhum hit isolado pode ultrapassar 25% do HP MÁXIMO de quem tem a skill — cap
+    // aplicado no dano BRUTO (antes de Lead Skeleton/armadura, não depois): essas mitigações do
+    // defensor reduzem por cima do valor já capado, então as duas empilham (ex.: 100 HP máximo,
+    // Resistant capa em 25, +50% armor reduz esses 25 pra 12.5 — arredondado só no finalDamage,
+    // não nos 25 isolados). Usa maxHp (não hp atual) — um personagem já em HP baixo ainda pode
+    // morrer de um hit, o cap só limita o quanto UM hit isolado pode arrancar da barra cheia.
+    private static float ApplyResistantCap(PlayerState target, float damage)
+    {
+        if (!target.HasSkill("Resistant")) return damage;
+        return Mathf.Min(damage, target.maxHp * 0.25f);
+    }
+
     // Survival: se o dano aplicaria HP <= 0 e a skill ainda não foi usada nesta luta, o
     // personagem sobrevive com 1 HP em vez de morrer (uma vez por luta, consome survivalUsed).
     // Usado nos 3 pontos onde dano reduz hp (SimulateHit, SimulateRetaliation, SimulateThrow).
     private int ApplyDamage(PlayerState target, int rawDamage)
     {
+        // Chaining: qualquer dano de qualquer origem (Hit, Counter, Reversal, Throw) zera o
+        // streak de quem toma o dano — centralizado aqui porque os 4 pontos de dano do arquivo
+        // passam por este método, ver SimulateHit pro lado que incrementa/estuna.
+        if (target.HasSkill("Chaining"))
+            target.chainHitStreak = 0;
+
         int newHp = target.hp - rawDamage;
         if (newHp <= 0 && target.HasSkill("Survival") && !target.survivalUsed)
         {
@@ -703,12 +942,14 @@ public class CombatSimulator
         return Mathf.Max(0, newHp);
     }
 
-    private int CalcThrowDamage(WeaponData data)
+    private int CalcThrowDamage(PlayerState attacker, WeaponData data)
     {
-        int result = data == null ? 2 : RollWeaponDamage(data);
+        int weaponDamage = data == null ? 2 : RollWeaponDamage(data);
+        int result       = weaponDamage + attacker.str;
 
-        // Diagnóstico temporário: confirma que o throw NÃO usa o multiplicador de STR.
-        Debug.Log($"[CalcThrowDamage] arma={data?.weaponName ?? "?"} resultado={result} (sem STR)");
+        // Diagnóstico temporário: confirma que o throw agora soma STR (era só weaponBaseDamage,
+        // bug reportado pelo usuário — esperava o mesmo componente aditivo de STR do dano normal).
+        Debug.Log($"[CalcThrowDamage] arma={data?.weaponName ?? "?"} weaponDamage={weaponDamage} str={attacker.str} resultado={result}");
         return result;
     }
 

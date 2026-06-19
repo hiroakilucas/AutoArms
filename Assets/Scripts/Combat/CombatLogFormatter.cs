@@ -25,8 +25,12 @@ public static class CombatLogFormatter
                     sb.AppendLine($"  {Name(e.playerIndex)} pega arma: {e.weaponName}");
                     break;
 
-                case CombatEventType.WeaponEquipped:
-                    sb.AppendLine($"  {Name(e.playerIndex)} equipa: {e.weaponName}");
+                case CombatEventType.WeaponSwap:
+                    sb.AppendLine($"  {Name(e.playerIndex)} troca de arma, larga: {e.weaponName}");
+                    break;
+
+                case CombatEventType.Thief:
+                    sb.AppendLine($"  {Name(e.playerIndex)} rouba a arma de {Name(e.targetIndex)}: {e.weaponName}");
                     break;
 
                 case CombatEventType.ThrowWeapon:
@@ -70,7 +74,9 @@ public static class CombatLogFormatter
                     break;
 
                 case CombatEventType.Block:
-                    sb.AppendLine($"  {Name(e.targetIndex)} bloqueia o ataque de {Name(e.playerIndex)}");
+                    sb.AppendLine(e.isThrow
+                        ? $"  {Name(e.targetIndex)} bloqueia o arremesso de {Name(e.playerIndex)}"
+                        : $"  {Name(e.targetIndex)} bloqueia o ataque de {Name(e.playerIndex)}");
                     break;
 
                 case CombatEventType.Miss:
@@ -87,6 +93,14 @@ public static class CombatLogFormatter
 
                 case CombatEventType.SpeedBonus:
                     sb.AppendLine($"  {Name(e.playerIndex)} ganha {e.extraActions} ação(ões) extra(s) por velocidade");
+                    break;
+
+                case CombatEventType.Stunned:
+                    sb.AppendLine($"  {Name(e.playerIndex)} encadeia 3 golpes e estuna {Name(e.targetIndex)}");
+                    break;
+
+                case CombatEventType.StunSkip:
+                    sb.AppendLine($"  {Name(e.playerIndex)} está estunado e perde a ação");
                     break;
 
                 case CombatEventType.CombatEnd:

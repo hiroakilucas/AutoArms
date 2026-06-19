@@ -481,6 +481,28 @@ MonoBehaviour:
   defender: {fileID: 0}
   defenderAnimationController: {fileID: 0}
   agility: 10
+  str: 10
+  speed: 10
+  armor: 0
+  evasion: 0
+  accuracy: 0
+  initiative: 0
+  reversal: 0
+  counter: 0
+  blockBonus: 0
+  reversalAfterBlock: 0
+  criticalChance: 0
+  critDamageBonus: 0
+  hitSpeed: 1
+  runSpeedMultiplier: 1
+  comboChanceBonus: 0
+  disarmChanceBonus: 0
+  leadSkeleton: 0
+  firstHitAvoided: 0
+  martialArts: 0
+  weaponsMaster: 0
+  skills: []
+  debugProfile: {fileID: 0}
 --- !u!114 &4350329976388066680
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -501,6 +523,10 @@ MonoBehaviour:
   zOffset: 0
   sortingLayer: Weapons
   sortingOrder: 0
+  offHandBone: {fileID: 4947190252748100}
+  shieldPositionOffset: {x: 1, y: -1, z: 0}
+  shieldRotationOffset: {x: 0, y: 0, z: 0}
+  shieldZOffset: 0
 --- !u!114 &6688882012948897385
 MonoBehaviour:
   m_ObjectHideFlags: 0

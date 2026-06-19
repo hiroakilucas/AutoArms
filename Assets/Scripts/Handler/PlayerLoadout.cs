@@ -55,4 +55,14 @@ public class PlayerLoadout : MonoBehaviour
         if (idx <= currentIndex) currentIndex--;
         OnWeaponsChanged?.Invoke();
     }
+
+    // Adiciona uma arma ao loadout em runtime (ex.: arma roubada pela skill Thief) — dispara
+    // OnWeaponsChanged pra WeaponHUD mostrar o ícone novo, mesmo padrão de RemoveCurrentWeapon.
+    // Não afeta o ScriptableObject (mesma garantia de runtimeWeapons já documentada acima).
+    public void AddWeapon(WeaponData weapon)
+    {
+        EnsureRuntime();
+        runtimeWeapons.Add(weapon);
+        OnWeaponsChanged?.Invoke();
+    }
 }

@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_thief
   m_EditorClassIdentifier: 
   skillName: Thief
-  description: "Rouba a arma do advers\xE1rio ao acertar"
-  icon: {fileID: 0}
+  description: "44% por turno (desarmado, oponente armado) de roubar a arma dele
+    \u2014 at\xE9 2x por luta"
+  icon: {fileID: 21300000, guid: fb47b025dcb59c54683ba3ccdce09942, type: 3}
   category: 0
   activationType: 0
-  usesPerFight: 1
+  usesPerFight: 2

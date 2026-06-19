@@ -96,6 +96,17 @@ public class CombatPlayer : MonoBehaviour
                 }
                 break;
 
+            case CombatEventType.WeaponSwap:
+                // Troca de arma estando armado — joga a atual no chão (mesmo pêndulo de
+                // DropWeapon/WeaponDrop, remoção permanente do loadout — some do WeaponHUD,
+                // não pode ser sacada de novo, igual a qualquer outra arma largada). Fire-and-
+                // forget: o PickupWeapon que vem logo a seguir na lista de eventos já cobre a
+                // animação de pegar a nova arma, não precisa esperar a queda terminar.
+                if (attacker != null)
+                    StartCoroutine(PlayerCombat.DropWeapon(attacker, isDisarm: false));
+                yield return null;
+                break;
+
             case CombatEventType.PickupWeapon:
                 if (attacker != null)
                 {
@@ -110,14 +121,14 @@ public class CombatPlayer : MonoBehaviour
                 }
                 break;
 
-            case CombatEventType.WeaponEquipped:
-                if (attacker != null)
-                {
-                    var weaponToEquip = FindWeaponByName(attacker.weaponHandler.loadout, evt.weaponName);
-                    if (weaponToEquip != null) attacker.weaponHandler.EquipSpecific(weaponToEquip);
-                    else attacker.weaponHandler.EquipRandom();
-                }
-                yield return null;
+            case CombatEventType.Thief:
+                // PlayerCombat.StealWeapon cobre o visual inteiro (pula nas costas do
+                // adversário, balançam juntos, desce com a arma) e a troca de dono no
+                // WeaponHandler/loadout de ambos — bloqueante (yield return StartCoroutine,
+                // não fire-and-forget) porque o resto deste mesmo turno (Throw/Run/Melee logo
+                // abaixo) depende do ladrão já estar armado quando a coroutine termina.
+                if (attacker != null && defender != null)
+                    yield return StartCoroutine(PlayerCombat.StealWeapon(attacker, defender));
                 break;
 
             case CombatEventType.Hit:
@@ -259,16 +270,22 @@ public class CombatPlayer : MonoBehaviour
             case CombatEventType.Block:
                 if (defender != null)
                 {
-                    // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
-                    yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
-
                     string trigger = SwingTrigger(attacker);
                     float blockSwingMult = SwingSpeedMultiplier(attacker);
-                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
-                    attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
-
                     float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / blockSwingMult;
-                    yield return new WaitForSeconds(slashHalf);
+
+                    // Hideaway: bloqueio de arremesso — atacante já está desarmado (acabou de
+                    // arremessar a arma), sem sentido repetir um swing de melee nem esperar o
+                    // slashHalf de novo (mesmo motivo do Hit pulando esses passos quando
+                    // evt.isThrow, ver case Hit acima).
+                    if (!evt.isThrow)
+                    {
+                        // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
+                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+                        if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
+                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        yield return new WaitForSeconds(slashHalf);
+                    }
 
                     Vector3 blockPopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
@@ -282,8 +299,11 @@ public class CombatPlayer : MonoBehaviour
                     StartCoroutine(defender.Knockback(blockDir, kbDist, kbDur));
                     yield return StartCoroutine(defender.animationController.PlayBlock(0.36666667f * t));
 
-                    yield return new WaitForSeconds(slashHalf);
-                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                    if (!evt.isThrow)
+                    {
+                        yield return new WaitForSeconds(slashHalf);
+                        if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                    }
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -316,6 +336,23 @@ public class CombatPlayer : MonoBehaviour
                 yield return null;
                 break;
 
+            case CombatEventType.ShieldDisarm:
+                // PlayerCombat.DropShield cobre popup + RemoveShield + a mesma queda em pêndulo
+                // amortecido de DropWeapon (ver CLAUDE.md, Desarmar do Escudo) — ao tomar hit,
+                // popup "DISARM!" (mesma convenção de Disarm de arma).
+                if (defender != null)
+                    StartCoroutine(PlayerCombat.DropShield(defender, isDisarm: true));
+                yield return null;
+                break;
+
+            case CombatEventType.ShieldDrop:
+                // Espelha WeaponDrop: escudo cai pelo próprio impacto de um bloqueio bem-sucedido,
+                // não por um desarme ativo do atacante — popup "DROP!" em vez de "DISARM!".
+                if (attacker != null)
+                    StartCoroutine(PlayerCombat.DropShield(attacker, isDisarm: false));
+                yield return null;
+                break;
+
             case CombatEventType.ThrowWeapon:
                 if (attacker != null)
                 {
@@ -329,13 +366,23 @@ public class CombatPlayer : MonoBehaviour
                         ? inHandWeapon.transform.lossyScale
                         : (attacker.weaponHandler.handBone != null ? attacker.weaponHandler.handBone.lossyScale : Vector3.one) * (weaponData?.scale ?? 1f);
 
-                    // Mirrors CombatSimulator.SimulateThrow: non-Thrown weapons are removed from
-                    // the loadout permanently (so the icon also disappears from WeaponHUD); a
-                    // Thrown weapon just unequips, since it can be picked up/re-equipped later.
-                    if (weaponData != null && !WeaponData.HasType(weaponData, WeaponType.Thrown))
-                        attacker.weaponHandler.UnequipPermanent();
-                    else
-                        attacker.weaponHandler.Unequip();
+                    // Mirrors CombatSimulator.SimulateThrow: Hideaway nunca desequipa — a arma
+                    // fica na mão o turno inteiro, só a réplica voadora abaixo representa o
+                    // arremesso. Sem a skill: non-Thrown weapons are removed from the loadout
+                    // permanently (so the icon also disappears from WeaponHUD); a Thrown weapon
+                    // just unequips, since it can be picked up/re-equipped later.
+                    bool keepsWeapon = weaponData != null && attacker.HasSkill("Hideaway");
+                    if (!keepsWeapon)
+                    {
+                        if (weaponData != null && !WeaponData.HasType(weaponData, WeaponType.Thrown))
+                            attacker.weaponHandler.UnequipPermanent();
+                        else
+                            attacker.weaponHandler.Unequip();
+                    }
+                    // Idle=false antes do trigger (mesmo padrão de PlayCatchWeapon) — garante que
+                    // "Any State → Throwing" dispara mesmo que o frame anterior já tivesse
+                    // deixado Idle=true de um throw anterior neste mesmo turno.
+                    attacker.animationController.SetIdle(false);
                     attacker.GetComponent<Animator>()?.SetTrigger("Throwing");
 
                     if (weaponData?.inHandSprite != null)
@@ -366,6 +413,17 @@ public class CombatPlayer : MonoBehaviour
                     {
                         yield return new WaitForSeconds(0.45f * t);
                     }
+
+                    // Sai do estado Throwing assim que o arremesso termina — a transição
+                    // Throwing → Idle exige Idle=true e CanTransitionToSelf=0 (não reentra em si
+                    // mesma), então sem isso aqui o Animator ficava travado em Throwing entre dois
+                    // arremessos consecutivos do mesmo turno (combo de Hideaway, ver
+                    // SimulateHideawayThrowCombo) — o 2º SetTrigger("Throwing") ficava pendente
+                    // sem nenhuma transição válida pra consumi-lo, deixando o personagem tremendo
+                    // entre poses (bug real reportado pelo usuário, "parece que está com
+                    // parkinson"). Antes só o TurnEnd no fim do turno chamava SetIdle(true), o que
+                    // bastava enquanto só existia 1 arremesso por turno.
+                    attacker.animationController.SetIdle(true);
                 }
                 break;
 
@@ -375,15 +433,37 @@ public class CombatPlayer : MonoBehaviour
                 yield return null;
                 break;
 
+            case CombatEventType.Stunned:
+                // Chaining: 3º hit consecutivo do streak — liga a label + Hurt em loop no
+                // alvo (defender, quem ficou estunado). Fire-and-forget: o resto do turno do
+                // atacante (mais combo, TurnEnd) continua normalmente em paralelo.
+                defender?.ShowStunLabel();
+                yield return null;
+                break;
+
+            case CombatEventType.StunSkip:
+                // Ação consumida pelo stun — sem Thief/pickup/throw/melee neste turno. Desliga
+                // a label/Hurt (volta ao normal) e segue pro TurnEnd como um turno qualquer.
+                attacker?.HideStunLabel();
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
             case CombatEventType.TurnEnd:
                 // Return attacker to spawn (jump-back) — mirrors ReturnToSpawn.
                 // RandomSpawnPos sorteia um ponto NOVO a cada chamada (não a posição original
                 // do personagem) — só faz sentido pular pra lá se o atacante de fato saiu da
                 // própria zona de spawn neste turno (correu até o adversário). Monk (guarda,
                 // hitSpeed = 0) nunca corre até o adversário (RunToDefender é pulado em
-                // CombatSimulator) e já está dentro da zona — sem essa checagem, ele recebia um
-                // jump-back pra um ponto aleatório diferente todo turno, mesmo sem ter saído do lugar.
-                if (attacker != null && !InSpawnZone(attacker.transform.position, attacker.isPlayer1))
+                // CombatSimulator), então o guard `attacker.hitSpeed > 0f` cobre o caso comum dele
+                // já estar dentro da zona — mas isso só por si só não bastava: Monk pode ser
+                // empurrado por knockback PRA FORA da zona enquanto defende nos turnos do
+                // adversário (toma hit, bloqueia, etc.), e como ele nunca corre de volta sozinho,
+                // o turno seguinte DELE ainda o achava fora da zona e disparava um jump-back pra
+                // um ponto aleatório — um "pulinho" sem nenhuma ação visível no turno (bug real
+                // reportado pelo usuário). Por isso o guard agora é incondicional por hitSpeed,
+                // não só pela zona: Monk nunca jump-back no próprio TurnEnd, ponto final — ele é
+                // um guarda estacionário, não decide se reposicionar sozinho.
+                if (attacker != null && attacker.hitSpeed > 0f && !InSpawnZone(attacker.transform.position, attacker.isPlayer1))
                 {
                     float jsDur = attacker.settings?.jumpStartDuration ?? 0.02f;
                     float jh    = attacker.settings?.jumpHeight ?? 2f;

@@ -16,9 +16,20 @@ public class WeaponHandler : MonoBehaviour
     public string sortingLayer = "Weapons";
     public int sortingOrder = 0;
 
+    [Header("Escudo (Off-Hand) — item visual permanente da skill Shield")]
+    [Tooltip("Braço oposto ao handBone (ex: handBone = Left Arm → offHandBone = Right Arm).")]
+    public Transform offHandBone;
+    public Vector3 shieldPositionOffset;
+    public Vector3 shieldRotationOffset;
+    public float shieldZOffset;
+
     private GameObject current;
     public GameObject CurrentWeapon => current;
     public WeaponData CurrentWeaponData { get; private set; }
+
+    private GameObject currentShield;
+    public GameObject CurrentShield => currentShield;
+    public WeaponData CurrentShieldData { get; private set; }
 
     // Fires with the newly equipped WeaponData, or null when unequipped.
     public event System.Action<WeaponData> OnWeaponChanged;
@@ -87,6 +98,35 @@ public class WeaponHandler : MonoBehaviour
         current = null;
         CurrentWeaponData = null;
         OnWeaponChanged?.Invoke(null);
+    }
+
+    // Escudo da skill Shield: item visual permanente no braço oposto, fora do WeaponLoadout —
+    // nunca entra no ciclo de troca de armas (EquipNext/EquipRandom/EquipSpecific não o tocam),
+    // por isso usa um slot (currentShield) e um bone (offHandBone) totalmente separados de
+    // current/handBone. Equipado uma vez no início do combate (CombatSceneLoader.Initialize)
+    // e removido só se a skill for desarmada (CombatPlayer, evento ShieldDisarm).
+    public void EquipShield(WeaponData data)
+    {
+        if (data?.inHandSprite == null || offHandBone == null) return;
+        if (currentShield) Destroy(currentShield);
+
+        CurrentShieldData = data;
+        currentShield = Instantiate(swordBasePrefab, offHandBone);
+        currentShield.transform.localPosition = shieldPositionOffset + new Vector3(0, 0, shieldZOffset);
+        currentShield.transform.localEulerAngles = shieldRotationOffset;
+        currentShield.transform.localScale = Vector3.one * data.scale;
+
+        var sr = currentShield.GetComponent<SpriteRenderer>();
+        sr.sprite = data.inHandSprite;
+        sr.sortingLayerName = sortingLayer;
+        sr.sortingOrder = sortingOrder;
+    }
+
+    public void RemoveShield()
+    {
+        if (currentShield) Destroy(currentShield);
+        currentShield = null;
+        CurrentShieldData = null;
     }
 
     // Unequip and permanently remove this weapon from the runtime loadout for this combat.

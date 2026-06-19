@@ -49,6 +49,18 @@ public class AnimationController : MonoBehaviour
         yield return new WaitForSeconds(duration);
     }
 
-    public void SetIdle(bool state) => anim.SetBool("Idle", state);
+    // Força Running=false junto de Idle=true — Medieval Warrior.controller tinha os dois bools
+    // (Idle e Running) com m_DefaultBool: 1 (true) simultaneamente (Assassin Guy/Medieval
+    // Warrior Girl já tinham os dois corretos em 0/false); sem nada zerando Running explicitamente,
+    // o personagem ficava com a animação de corrida tocando "no lugar" desde o EntryFall até o
+    // primeiro PlayRun de verdade zerar o bool no fim do run (bug real reportado pelo usuário:
+    // "desce correndo no mesmo lugar" antes de avançar pro adversário). Corrigido o default no
+    // .controller, mas mantém essa guarda aqui pra não depender de nenhum Animator Controller
+    // futuro ter os defaults certos.
+    public void SetIdle(bool state)
+    {
+        anim.SetBool("Idle", state);
+        if (state) anim.SetBool("Running", false);
+    }
     public void SetSpeed(float speed) => anim.speed = speed;
 }

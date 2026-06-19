@@ -161,6 +161,10 @@ MonoBehaviour:
   zOffset: 0.5
   sortingLayer: Weapons
   sortingOrder: 0
+  offHandBone: {fileID: 1021720249143257}
+  shieldPositionOffset: {x: 1, y: -1, z: 0}
+  shieldRotationOffset: {x: 0, y: 0, z: 0}
+  shieldZOffset: 0
 --- !u!114 &45243675
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -762,6 +766,7 @@ MonoBehaviour:
   player2MaxHealth: 50
   player2Profile: {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
   useSimulator: 1
+  shieldWeaponData: {fileID: 11400000, guid: 8478c50742c3418e9eaca51076d96a5d, type: 2}
 --- !u!4 &1332891506
 Transform:
   m_ObjectHideFlags: 0
@@ -780,6 +785,11 @@ Transform:
 --- !u!4 &2012125569 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4808958749903386, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
+  m_PrefabInstance: {fileID: 1294674956}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1021720249143257 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4544156623117242, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
   m_PrefabInstance: {fileID: 1294674956}
   m_PrefabAsset: {fileID: 0}
 --- !u!1660057539 &9223372036854775807

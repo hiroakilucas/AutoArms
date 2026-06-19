@@ -35,6 +35,11 @@ public class PlayerState
     public bool martialArts;
     public bool weaponsMaster;
     public bool survivalUsed;
+    public bool hasShield;
+    public int  thiefUsesRemaining = 2;
+    public bool hasTakenFirstTurn;
+    public int  chainHitStreak;
+    public int  stunnedActions;
 
     // Weapons
     public List<WeaponData> weaponLoadout = new List<WeaponData>();

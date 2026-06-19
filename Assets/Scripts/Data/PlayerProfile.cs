@@ -120,6 +120,7 @@ public class PlayerProfile : ScriptableObject
         if (HasSkill("Armour")) { arm += 0.25f; spPct -= 0.15f; }
         if (HasSkill("Extra Thick Skin")) arm += 0.50f;
         if (HasSkill("Toughened Skin")) arm += 0.10f;
+        if (HasSkill("Shield")) { blk += 0.45f; arm += 0.25f; }
         // Lead Skeleton (redefinida — antes só dava -15% dano de Heavy, sem entrar aqui):
         // +15% armor, -15% evasion. O -15% dano de arma blunt (Heavy) continua existindo
         // (ver CombatSimulator/PlayerCombat), só não aparece aqui por não ser um % de stat.

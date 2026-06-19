@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Spriter2UnityDX;
+using TMPro;
 
 [RequireComponent(typeof(Animator))]
 public class PlayerCombat : MonoBehaviour
@@ -43,6 +45,7 @@ public class PlayerCombat : MonoBehaviour
     [HideInInspector] public bool firstHitAvoided = false;
     [HideInInspector] public bool martialArts     = false;
     [HideInInspector] public bool weaponsMaster   = false;
+    [HideInInspector] public bool hasShield       = false;
 
     [Header("Skills — Teste")]
     public List<SkillData> skills = new List<SkillData>();
@@ -72,6 +75,70 @@ public class PlayerCombat : MonoBehaviour
     private List<SpriteRenderer> bodyRenderers;
     private string defaultSortingLayer;
     private Vector2 spawnPosition;
+    private SpriteRenderer faceRenderer;
+    private Sprite[]       faceSprites;
+    private GameObject stunLabel;
+    private Coroutine   stunHurtRoutine;
+
+    // Chaining: chamado quando este personagem é estunado (CombatEventType.Stunned) — label
+    // fixo acima da cabeça (texto por enquanto; o usuário vai trocar por sprite depois) +
+    // Hurt em loop até o próprio StunSkip consumir a ação estunada (ver HideStunLabel).
+    public void ShowStunLabel()
+    {
+        if (stunLabel == null)
+        {
+            stunLabel = new GameObject("StunLabel");
+            stunLabel.transform.SetParent(transform);
+            stunLabel.transform.localPosition = Vector3.up * 2.2f;
+            // Cancela o sinal de localScale.x do pai (mecanismo de flip de direção, ver
+            // StealWeapon) pra o texto nunca renderizar espelhado/de trás pra frente.
+            stunLabel.transform.localScale = new Vector3(Mathf.Sign(transform.localScale.x), 1f, 1f);
+
+            var label = stunLabel.AddComponent<TextMeshPro>();
+            label.alignment      = TextAlignmentOptions.Center;
+            label.sortingLayerID = SortingLayer.NameToID("Characters");
+            label.sortingOrder   = 50;
+            label.fontStyle      = FontStyles.Bold;
+            label.text           = "ATORDOADO!";
+            label.fontSize       = 3.5f;
+            label.color          = new Color(1f, 0.95f, 0.2f);
+        }
+        if (stunHurtRoutine == null)
+            stunHurtRoutine = StartCoroutine(StunHurtLoop());
+    }
+
+    // Encerra o loop de Hurt e remove a label — chamado pelo StunSkip, no início do turno que
+    // consome a ação estunada (ver CombatSimulator.SimulateTurn).
+    public void HideStunLabel()
+    {
+        if (stunHurtRoutine != null)
+        {
+            StopCoroutine(stunHurtRoutine);
+            stunHurtRoutine = null;
+        }
+        if (stunLabel != null)
+        {
+            Destroy(stunLabel);
+            stunLabel = null;
+        }
+        animationController.SetIdle(true);
+    }
+
+    // Hurt não tem nenhum bool de "hold" no Animator Controller (volta pra Idle sozinho via
+    // tempo de saída do próprio clip, diferente de Throwing/Slashing) — então, pra manter a
+    // pose de Hurt "presa" durante toda a duração do stun, o trigger é refeito em loop em vez
+    // de uma chamada única. Intervalo de 0.3s (não settings.hurtDuration, ~0.12s) — bem mais
+    // espaçado que o gap natural entre hits de um combo de verdade, pra não repetir o trigger
+    // rápido demais e dar a mesma cintilação entre poses já corrigida no bug do Throwing
+    // ("parece que está com parkinson").
+    private IEnumerator StunHurtLoop()
+    {
+        while (true)
+        {
+            animator.SetTrigger("Hurt");
+            yield return new WaitForSeconds(0.3f);
+        }
+    }
 
     private static readonly List<GameObject> fallenWeapons = new List<GameObject>();
 
@@ -89,6 +156,21 @@ public class PlayerCombat : MonoBehaviour
         bodyRenderers = new List<SpriteRenderer>(GetComponentsInChildren<SpriteRenderer>());
         if (bodyRenderers.Count > 0)
             defaultSortingLayer = bodyRenderers[0].sortingLayerName;
+
+        // "Face 01" é o nome do GameObject gerado pelo Spriter2UnityDX nos 3 personagens, com um
+        // TextureController (Sprites[0..2] = Face 01/02/03) e um SpriteRenderer próprio. Usado
+        // pelo "piscar" da skill Thief (StealWeapon abaixo). Pega o SpriteRenderer e o array de
+        // sprites direto, em vez de setar TextureController.DisplayedSprite — esse componente só
+        // aplica a troca em Update() quando o Animator não está em transição (IsTransitioning()),
+        // o que pode atrasar/perder a troca durante uma sequência rápida; setar o SpriteRenderer
+        // direto garante a troca no mesmo frame, sem depender desse gate.
+        foreach (var tc in GetComponentsInChildren<TextureController>(true))
+        {
+            if (tc.gameObject.name != "Face 01") continue;
+            faceRenderer = tc.GetComponent<SpriteRenderer>();
+            faceSprites  = tc.Sprites;
+            break;
+        }
     }
 
     private void Start()
@@ -186,7 +268,9 @@ public class PlayerCombat : MonoBehaviour
         return baseChance + weaponBonus + criticalChance;
     }
 
-    // counter: base por arma do defensor + bônus de skills (Shield +0.45f, Counter Attack +0.10f, Monk +0.40f) + bônus da arma.
+    // Legado/código morto enquanto useSimulator=true (ver CombatSimulator.BlockChance, que lê
+    // defender.blockBonus — Shield/Counter Attack somam ali, não em defender.counter, que aqui
+    // virou a mecânica própria de Counter/Reversal). Não atualizado pra refletir blockBonus.
     private float BlockChance()
     {
         if (defender == null) return 0f;
@@ -198,7 +282,8 @@ public class PlayerCombat : MonoBehaviour
         return weaponBonus + defender.counter + weaponBlockBonus;
     }
 
-    // Impact (skill futura): adiciona +0.15f a este valor permanentemente.
+    // Impact (skill futura): adiciona +0.15f a este valor permanentemente. Shield desarma por
+    // uma chance própria e independente (ver CombatSimulator.ShieldDisarmChance), não por aqui.
     private float DisarmChance()
     {
         float baseChance = weaponHandler.CurrentWeapon == null
@@ -256,11 +341,12 @@ public class PlayerCombat : MonoBehaviour
         return (weaponBaseDamage + str) * critMult * sharpMult;
     }
 
-    // Dano do arremesso usa os mesmos ranges sem bônus de STR.
-    private static int ThrowDamage(WeaponData data)
+    // Dano do arremesso soma STR igual ao golpe normal (weaponBaseDamage + str) — era só
+    // weaponBaseDamage, redefinida pelo usuário.
+    private static int ThrowDamage(WeaponData data, int str)
     {
-        if (data == null) return 2;
-        return RollWeaponDamage(data);
+        int weaponDamage = data == null ? 2 : RollWeaponDamage(data);
+        return weaponDamage + str;
     }
 
     // Posição de ataque: imediatamente fora do alcance da arma, na direção do defensor.
@@ -502,7 +588,7 @@ public class PlayerCombat : MonoBehaviour
             Vector2 pushDir = ((Vector2)defender.transform.position - (Vector2)transform.position).normalized;
             defender.StartCoroutine(defender.Knockback(pushDir, settings.knockbackDistance, settings.hurtDuration));
             yield return defenderAnimationController.PlayHurt(settings.hurtDuration);
-            int damage = ThrowDamage(weaponData);
+            int damage = ThrowDamage(weaponData, str);
             defender.GetComponent<HealthSystem>()?.TakeDamage(damage);
             Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.Spawn(popupPos, damage, false);
@@ -575,6 +661,140 @@ public class PlayerCombat : MonoBehaviour
         var p = fallen.transform.position;
         fallen.transform.position = new Vector3(p.x, groundY, p.z);
         fallenWeapons.Add(fallen);
+    }
+
+    // Mesma queda em pêndulo amortecido de DropWeapon, mas pro escudo da skill Shield —
+    // CurrentShieldData/CurrentShield (não current/CurrentWeaponData) e RemoveShield() em vez
+    // de UnequipPermanent(), já que o escudo nunca esteve no WeaponLoadout. isDisarm escolhe o
+    // popup: true (ao tomar hit, ShieldDisarm) → "DISARM!" laranja; false (ao bloquear com
+    // sucesso, ShieldDrop) → "DROP!" laranja, mesma distinção de DropWeapon.
+    public static IEnumerator DropShield(PlayerCombat target, bool isDisarm)
+    {
+        var data = target.weaponHandler.CurrentShieldData;
+        if (data?.inHandSprite == null) yield break;
+
+        var inHand = target.weaponHandler.CurrentShield;
+        Vector3 startPos   = inHand != null ? inHand.transform.position : target.transform.position + Vector3.up * 0.5f;
+        Vector3 worldScale = inHand != null ? inHand.transform.lossyScale : Vector3.one * data.scale;
+
+        target.weaponHandler.RemoveShield();
+
+        Vector3 popupPos = target.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
+        if (isDisarm)
+            DamagePopup.SpawnDisarm(popupPos);
+        else
+            DamagePopup.SpawnDrop(popupPos);
+
+        var fallen = new GameObject("FallenShield");
+        fallen.transform.position   = startPos;
+        fallen.transform.localScale = new Vector3(Mathf.Abs(worldScale.x), Mathf.Abs(worldScale.y), Mathf.Abs(worldScale.z));
+        var sr = fallen.AddComponent<SpriteRenderer>();
+        sr.sprite           = data.inHandSprite;
+        sr.sortingLayerName = "Default";
+        sr.sortingOrder     = 0;
+
+        float groundY   = target.transform.position.y - 1.5f;
+        float velocityY = 0f;
+        float t         = 0f;
+        float theta0    = Random.Range(60f, 100f);
+        const float omega = 10f;
+        const float gamma = 0.8f;
+
+        fallen.transform.rotation = Quaternion.Euler(0f, 0f, theta0);
+
+        while (fallen.transform.position.y > groundY)
+        {
+            velocityY -= 9.8f * Time.deltaTime;
+            fallen.transform.position += new Vector3(0f, velocityY * Time.deltaTime, 0f);
+            t += Time.deltaTime;
+            float angle = theta0 * Mathf.Exp(-gamma * t) * Mathf.Cos(omega * t);
+            fallen.transform.rotation = Quaternion.Euler(0f, 0f, angle);
+            yield return null;
+        }
+
+        var p2 = fallen.transform.position;
+        fallen.transform.position = new Vector3(p2.x, groundY, p2.z);
+        fallenWeapons.Add(fallen);
+    }
+
+    // Visual da skill Thief: o ladrão pula nas costas do adversário (igual montar um cavalo) e
+    // os dois balançam juntos 4 vezes, antes do ladrão descer já com a arma roubada na mão —
+    // referência visual do My Brute original pedida pelo usuário. Não existe sprite dedicado de
+    // "montar" no projeto (Spriter2UnityDX só gera Idle/Running/Slashing/etc.), então é
+    // aproximado via movimento de transform puro (mesmo espírito do pêndulo de DropWeapon/
+    // DropShield acima — sem novo estado de Animator).
+    public static IEnumerator StealWeapon(PlayerCombat thief, PlayerCombat victim)
+    {
+        var data = victim.weaponHandler.CurrentWeaponData;
+        if (data == null) yield break;
+
+        // jumpHeight era uma constante fixa de 0.8 — aumentado pra parecer mais um salto de
+        // verdade (pedido pelo usuário), igual ao arco usado em ReturnToSpawn/DodgeLeap.
+        float jumpHeight = thief.settings != null ? thief.settings.jumpHeight : 2f;
+        // Mesma velocidade de ReturnToSpawn/TurnEnd (RuntimeRunSpeed) — pedido pelo usuário pra
+        // o "pêndulo" de ida e volta não ficar mais lento que o salto normal de fim de turno.
+        float jumpSpeed = thief.RuntimeRunSpeed;
+
+        Vector3 thiefStart  = thief.transform.position;
+        Vector3 thiefScale  = thief.transform.localScale;
+        Vector3 mountOffset = new Vector3(thief.isPlayer1 ? 0.3f : -0.3f, 0.6f, 0f);
+        Vector3 mountPos    = victim.transform.position + mountOffset;
+
+        // Sobe nas costas do adversário — promove o ladrão na sorting layer (igual a um
+        // atacante normal) pra renderizar por cima de quem ele está montando.
+        SetBodyLayer(thief.bodyRenderers, "Characters");
+        SetBodyLayer(victim.bodyRenderers, "Characters2");
+        yield return thief.movement.JumpTo(mountPos, jumpSpeed, jumpHeight);
+
+        // Vira pra mesma direção do adversário ao chegar nas costas dele — mesmo mecanismo de
+        // flip já usado no projeto (sinal de localScale.x; ver Medieval Warrior Girl na cena,
+        // -0.3 pra virar pra esquerda). Restaurado mais abaixo, antes do salto de volta.
+        thief.transform.localScale = new Vector3(
+            Mathf.Sign(victim.transform.localScale.x) * Mathf.Abs(thiefScale.x), thiefScale.y, thiefScale.z);
+
+        // Balançam juntos 4 vezes, pra frente e pra trás (não mais vertical) e um pouco mais
+        // devagar que a primeira versão — a vítima "pisca" a cada ciclo trocando Face 01 por
+        // Face 03 (Spriter2UnityDX), tudo pedido pelo usuário. Seta o SpriteRenderer.sprite
+        // direto (não TextureController.DisplayedSprite) — esse componente só aplica a troca em
+        // Update() quando o Animator não está em transição, o que podia atrasar ou perder a
+        // troca; setar o renderer direto garante o "pisca" no mesmo frame.
+        Vector3 victimBase = victim.transform.position;
+        bool hasFace = victim.faceRenderer != null && victim.faceSprites != null && victim.faceSprites.Length > 2;
+        const float bounceDistance = 0.18f;
+        const float bounceDuration = 0.18f;
+        for (int i = 0; i < 4; i++)
+        {
+            if (hasFace) victim.faceRenderer.sprite = victim.faceSprites[2]; // Face 03
+            float t = 0f;
+            while (t < bounceDuration)
+            {
+                float k = Mathf.Sin((t / bounceDuration) * Mathf.PI) * bounceDistance;
+                thief.transform.position  = mountPos   + Vector3.right * k;
+                victim.transform.position = victimBase + Vector3.right * k * 0.5f;
+                t += Time.deltaTime;
+                yield return null;
+            }
+            if (hasFace) victim.faceRenderer.sprite = victim.faceSprites[0]; // Face 01
+        }
+        thief.transform.position  = mountPos;
+        victim.transform.position = victimBase;
+
+        // Rouba a arma: sai do loadout do adversário e entra no do ladrão — não destrói, igual
+        // ao DropWeapon, mas em vez de cair no chão ela troca de dono direto (WeaponHUD dos dois
+        // lados atualiza via OnWeaponsChanged, mesmo evento de RemoveCurrentWeapon/AddWeapon).
+        victim.weaponHandler.Unequip();
+        victim.weaponHandler.loadout?.RemoveCurrentWeapon(data);
+        thief.weaponHandler.EquipSpecific(data);
+        thief.weaponHandler.loadout?.AddWeapon(data);
+
+        DamagePopup.SpawnDisarm(victim.transform.position + Vector3.up * 1.5f);
+
+        SetBodyLayer(thief.bodyRenderers, thief.defaultSortingLayer);
+        SetBodyLayer(victim.bodyRenderers, victim.defaultSortingLayer);
+
+        thief.transform.localScale = thiefScale; // volta a virar pra direção original antes de saltar de volta
+
+        yield return thief.movement.JumpTo(thiefStart, jumpSpeed, jumpHeight);
     }
 
     // Public so CombatPlayer (CombatSimulator replay) can reuse the same projectile arc

@@ -20,6 +20,10 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("Quando true e player2Profile estiver atribuído, usa CombatSimulator em vez de AttackSequencer.")]
     [SerializeField] private bool useSimulator = true;
 
+    [Header("Shield")]
+    [Tooltip("WeaponData usado como visual permanente da skill Shield (Assets/Data/UI/Weapons/Shield/Shield1.asset).")]
+    [SerializeField] private WeaponData shieldWeaponData;
+
     private const string Player2ProfileFallbackPath =
         "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
@@ -90,6 +94,12 @@ public class CombatSceneLoader : MonoBehaviour
         var health1 = player1Obj.AddComponent<HealthSystem>();
         health1.Initialize(p1MaxHealth);
 
+        // Shield: item visual permanente no braço oposto (offHandBone), fora do WeaponLoadout —
+        // equipado uma única vez aqui, igual ao ajuste de escala da Deity acima, não pelo ciclo
+        // normal de troca de armas (handler.EquipNext/EquipRandom nunca tocam isso).
+        if (handler != null && profile.HasSkill("Shield"))
+            handler.EquipShield(shieldWeaponData);
+
         // useSimulator path computes all of Player2's HP off player2Profile.maxHealth (see
         // CombatSimulator.BuildState) — health2 must start from the same number, or every
         // HealthChanged event's delta is computed against the wrong baseline and damage
@@ -131,6 +141,10 @@ public class CombatSceneLoader : MonoBehaviour
             var p2WeaponHUD = gameObject.AddComponent<WeaponHUD>();
             p2WeaponHUD.Initialize(p2Loadout, p2Handler, false, combatHUD.CanvasTransform);
         }
+
+        // Espelha o equip de Shield do Player1 acima.
+        if (p2Handler != null && player2Profile != null && player2Profile.HasSkill("Shield"))
+            p2Handler.EquipShield(shieldWeaponData);
 
         List<CombatEvent> events = null;
 
@@ -326,6 +340,19 @@ public class CombatSceneLoader : MonoBehaviour
         {
             combat.armor += 0.10f;
             combat.LogSkillCheck("Toughened Skin", true, $"armor → {combat.armor:P0}");
+        }
+
+        if (combat.HasSkill("Shield"))
+        {
+            // +45% block rate (blockBonus, mesmo campo de Counter Attack — soma em BlockChance)
+            // e +25% armor (penalidade de mobilidade do escudo equipado). hasShield habilita o
+            // desarme próprio do escudo (ver CombatSimulator.ShieldDisarmChance) — se cair, os
+            // dois bônus são revertidos. Visual (sprite no braço oposto) equipado fora daqui,
+            // em CombatSceneLoader.Initialize.
+            combat.blockBonus += 0.45f;
+            combat.armor      += 0.25f;
+            combat.hasShield   = true;
+            combat.LogSkillCheck("Shield", true, $"blockBonus → {combat.blockBonus:P0}, armor → {combat.armor:P0}");
         }
 
         if (combat.HasSkill("Untouchable"))
