@@ -123,7 +123,8 @@ public class CombatPlayer : MonoBehaviour
             case CombatEventType.Hit:
                 if (defender != null)
                 {
-                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
+                    float swingMult = SwingSpeedMultiplier(attacker);
+                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / swingMult;
 
                     // Thrown-weapon hits already had their "windup" during ThrowWeapon's flight —
                     // the attacker has no weapon in hand anymore, so don't re-trigger a melee
@@ -132,12 +133,8 @@ public class CombatPlayer : MonoBehaviour
                     {
                         yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
-                        string trigger = attacker?.weaponHandler.currentType switch
-                        {
-                            WeaponType.Heavy  => "SlashingHeavy",
-                            WeaponType.Dagger => "SlashingDagger",
-                            _                 => "Slashing"
-                        };
+                        string trigger = SwingTrigger(attacker);
+                        if (swingMult != 1f) attacker?.animationController.SetSpeed(swingMult);
                         attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
                         yield return new WaitForSeconds(slashHalf);
                     }
@@ -150,8 +147,7 @@ public class CombatPlayer : MonoBehaviour
                     float   kbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
                     float   kbDur   = attacker?.settings?.hurtDuration ?? 0.07f;
 
-                    var hs = evt.targetIndex == 0 ? _h1 : _h2;
-                    hs?.TakeDamage(evt.damage);
+                    ApplyHealthDelta(evt.targetIndex, evt.newHp);
 
                     Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
@@ -164,7 +160,10 @@ public class CombatPlayer : MonoBehaviour
                     // re-trigger it — without this, combo hits retrigger mid-clip and the
                     // animation snaps/restarts instead of playing through.
                     if (!evt.isThrow)
+                    {
                         yield return new WaitForSeconds(slashHalf);
+                        if (swingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                    }
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -182,13 +181,10 @@ public class CombatPlayer : MonoBehaviour
                     // até ele. Counter/Reversal disparam antes de qualquer dano nesta troca
                     // (ver SimulateHit), então não há knockback prévio que o tenha deslocado.
 
-                    float retSlashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
-                    string retTrigger = attacker?.weaponHandler.currentType switch
-                    {
-                        WeaponType.Heavy  => "SlashingHeavy",
-                        WeaponType.Dagger => "SlashingDagger",
-                        _                 => "Slashing"
-                    };
+                    float retSwingMult = SwingSpeedMultiplier(attacker);
+                    float retSlashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / retSwingMult;
+                    string retTrigger = SwingTrigger(attacker);
+                    if (retSwingMult != 1f) attacker?.animationController.SetSpeed(retSwingMult);
                     attacker?.GetComponent<Animator>()?.SetTrigger(retTrigger);
                     yield return new WaitForSeconds(retSlashHalf);
 
@@ -196,8 +192,7 @@ public class CombatPlayer : MonoBehaviour
                     float   retKbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
                     float   retKbDur   = attacker?.settings?.hurtDuration ?? 0.07f;
 
-                    var retHs = evt.targetIndex == 0 ? _h1 : _h2;
-                    retHs?.TakeDamage(evt.damage);
+                    ApplyHealthDelta(evt.targetIndex, evt.newHp);
 
                     Vector3 retPopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
@@ -210,6 +205,7 @@ public class CombatPlayer : MonoBehaviour
                     yield return StartCoroutine(defender.animationController.PlayHurt(retKbDur * t));
 
                     yield return new WaitForSeconds(retSlashHalf);
+                    if (retSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
 
                     // Os estados Slashing/SlashingDagger/SlashingHeavy só têm UMA transição de
                     // saída no Animator Controller: pro estado Jump Start (via bool JumpStart),
@@ -239,15 +235,12 @@ public class CombatPlayer : MonoBehaviour
                     // swings, and exactly when it would have landed, the defender leaps away.
                     yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
-                    string trigger = attacker?.weaponHandler.currentType switch
-                    {
-                        WeaponType.Heavy  => "SlashingHeavy",
-                        WeaponType.Dagger => "SlashingDagger",
-                        _                 => "Slashing"
-                    };
+                    string trigger = SwingTrigger(attacker);
+                    float dodgeSwingMult = SwingSpeedMultiplier(attacker);
+                    if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(dodgeSwingMult);
                     attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
 
-                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
+                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMult;
                     yield return new WaitForSeconds(slashHalf);
 
                     Vector3 dodgePopupPos = defender.transform.position + Vector3.up * 1.5f
@@ -258,6 +251,7 @@ public class CombatPlayer : MonoBehaviour
                     yield return StartCoroutine(defender.DodgeLeap(dodgeDir, dodgeDist));
 
                     yield return new WaitForSeconds(slashHalf);
+                    if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -268,15 +262,12 @@ public class CombatPlayer : MonoBehaviour
                     // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
                     yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
-                    string trigger = attacker?.weaponHandler.currentType switch
-                    {
-                        WeaponType.Heavy  => "SlashingHeavy",
-                        WeaponType.Dagger => "SlashingDagger",
-                        _                 => "Slashing"
-                    };
+                    string trigger = SwingTrigger(attacker);
+                    float blockSwingMult = SwingSpeedMultiplier(attacker);
+                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
                     attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
 
-                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t;
+                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / blockSwingMult;
                     yield return new WaitForSeconds(slashHalf);
 
                     Vector3 blockPopupPos = defender.transform.position + Vector3.up * 1.5f
@@ -292,6 +283,7 @@ public class CombatPlayer : MonoBehaviour
                     yield return StartCoroutine(defender.animationController.PlayBlock(0.36666667f * t));
 
                     yield return new WaitForSeconds(slashHalf);
+                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -340,7 +332,7 @@ public class CombatPlayer : MonoBehaviour
                     // Mirrors CombatSimulator.SimulateThrow: non-Thrown weapons are removed from
                     // the loadout permanently (so the icon also disappears from WeaponHUD); a
                     // Thrown weapon just unequips, since it can be picked up/re-equipped later.
-                    if (weaponData != null && weaponData.type != WeaponType.Thrown)
+                    if (weaponData != null && !WeaponData.HasType(weaponData, WeaponType.Thrown))
                         attacker.weaponHandler.UnequipPermanent();
                     else
                         attacker.weaponHandler.Unequip();
@@ -365,7 +357,7 @@ public class CombatPlayer : MonoBehaviour
                         sr.sortingLayerName = "Weapons";
                         sr.sortingOrder     = 10;
 
-                        bool  rotate = weaponData.type == WeaponType.Thrown;
+                        bool  rotate = WeaponData.HasType(weaponData, WeaponType.Thrown);
                         float arc    = rotate ? 0.5f : 0f;
                         yield return StartCoroutine(attacker.FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f * t, rotate, arc));
                         Destroy(flyingWeapon);
@@ -384,8 +376,14 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.TurnEnd:
-                // Return attacker to spawn (jump-back) — mirrors ReturnToSpawn
-                if (attacker != null)
+                // Return attacker to spawn (jump-back) — mirrors ReturnToSpawn.
+                // RandomSpawnPos sorteia um ponto NOVO a cada chamada (não a posição original
+                // do personagem) — só faz sentido pular pra lá se o atacante de fato saiu da
+                // própria zona de spawn neste turno (correu até o adversário). Monk (guarda,
+                // hitSpeed = 0) nunca corre até o adversário (RunToDefender é pulado em
+                // CombatSimulator) e já está dentro da zona — sem essa checagem, ele recebia um
+                // jump-back pra um ponto aleatório diferente todo turno, mesmo sem ter saído do lugar.
+                if (attacker != null && !InSpawnZone(attacker.transform.position, attacker.isPlayer1))
                 {
                     float jsDur = attacker.settings?.jumpStartDuration ?? 0.02f;
                     float jh    = attacker.settings?.jumpHeight ?? 2f;
@@ -393,8 +391,8 @@ public class CombatPlayer : MonoBehaviour
                     Vector2 spawnPos = RandomSpawnPos(attacker.isPlayer1);
                     yield return StartCoroutine(attacker.animationController.PlayJumpStart(jsDur * t));
                     yield return StartCoroutine(attacker.movement.JumpTo(spawnPos, spd, jh));
-                    attacker.animationController.SetIdle(true);
                 }
+                attacker?.animationController.SetIdle(true);
                 break;
 
             case CombatEventType.CombatEnd:
@@ -433,11 +431,17 @@ public class CombatPlayer : MonoBehaviour
                 attacker.animationController.PlayRun(attackPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
     }
 
-    private void ApplyHealthChanged(CombatEvent evt)
+    private void ApplyHealthChanged(CombatEvent evt) => ApplyHealthDelta(evt.playerIndex, evt.newHp);
+
+    // Compartilhado por Hit/Counter/Reversal/HealthChanged — sempre sincroniza a HealthSystem
+    // pro newHp já resolvido pelo simulador (que já leva Survival em conta), em vez de aplicar
+    // o dano bruto do evento direto. TakeDamage só entende dano relativo (subtração), então o
+    // delta é calculado aqui antes de chamar.
+    private void ApplyHealthDelta(int targetIndex, int newHp)
     {
-        var hs = evt.playerIndex == 0 ? _h1 : _h2;
+        var hs = targetIndex == 0 ? _h1 : _h2;
         if (hs == null) return;
-        int delta = hs.CurrentHealth - evt.newHp;
+        int delta = hs.CurrentHealth - newHp;
         if (delta > 0) hs.TakeDamage(delta);
     }
 
@@ -450,19 +454,46 @@ public class CombatPlayer : MonoBehaviour
         }
     }
 
+    // Heavy e Sharp/default não são somados (não faz sentido físico somar dois alcances de
+    // categoria inteiros) — Heavy tem prioridade, depois Fast desconta — mesma regra de
+    // PlayerCombat.AttackPosition, ver tabela em CLAUDE.md.
     private static Vector2 CalcAttackPosition(PlayerCombat attacker, PlayerCombat defender)
     {
-        float reach = attacker.weaponHandler.CurrentWeapon == null ? 0.8f :
-            attacker.weaponHandler.currentType switch
-            {
-                WeaponType.Dagger => 1.5f,
-                WeaponType.Heavy  => 2.8f,
-                _                 => 2.0f
-            };
+        float reach;
+        if (attacker.weaponHandler.CurrentWeapon == null)
+        {
+            reach = 0.8f;
+        }
+        else
+        {
+            reach = WeaponData.HasType(attacker.weaponHandler.CurrentWeaponData, WeaponType.Heavy) ? 2.8f : 2.0f;
+            if (WeaponData.HasType(attacker.weaponHandler.CurrentWeaponData, WeaponType.Fast)) reach -= 0.5f;
+        }
         Vector2 defPos = defender.transform.position;
         Vector2 attPos = attacker.transform.position;
         Vector2 dir    = (defPos - attPos).normalized;
         return defPos - dir * reach;
+    }
+
+    // Trigger de swing por prioridade Heavy > Fast > default — uma arma só toca uma animação,
+    // ainda que tenha múltiplas tags (ex: Heavy|Blunt entra em SlashingHeavy; Sharp|Fast em
+    // SlashingDagger). attacker null (ex: Monk guardando) cai no default "Slashing".
+    private static string SwingTrigger(PlayerCombat attacker)
+    {
+        var data = attacker?.weaponHandler.CurrentWeaponData;
+        if (WeaponData.HasType(data, WeaponType.Heavy)) return "SlashingHeavy";
+        if (WeaponData.HasType(data, WeaponType.Fast))  return "SlashingDagger";
+        return "Slashing";
+    }
+
+    // Bodybuilder: +40% velocidade de swing, só enquanto empunha arma Heavy — puramente visual
+    // (CombatSimulator não usa hitSpeed pra nada além do guard do Monk, então o bônus precisa
+    // ser aplicado aqui na reprodução, não no cálculo de chances/dano).
+    private static float SwingSpeedMultiplier(PlayerCombat attacker)
+    {
+        if (attacker == null) return 1f;
+        bool heavy = WeaponData.HasType(attacker.weaponHandler.CurrentWeaponData, WeaponType.Heavy);
+        return (heavy && attacker.HasSkill("Bodybuilder")) ? 1.4f : 1f;
     }
 
     private static Vector2 ComputePushDir(PlayerCombat attacker, PlayerCombat defender)
@@ -476,5 +507,12 @@ public class CombatPlayer : MonoBehaviour
         float x = isPlayer1 ? Random.Range(-7.25f, -4.79f) : Random.Range(4.79f, 7.25f);
         float y = Random.Range(-3.90f, -0.81f);
         return new Vector2(x, y);
+    }
+
+    private static bool InSpawnZone(Vector2 pos, bool isPlayer1)
+    {
+        float xMin = isPlayer1 ? -7.25f : 4.79f;
+        float xMax = isPlayer1 ? -4.79f : 7.25f;
+        return pos.x >= xMin && pos.x <= xMax && pos.y >= -3.90f && pos.y <= -0.81f;
     }
 }

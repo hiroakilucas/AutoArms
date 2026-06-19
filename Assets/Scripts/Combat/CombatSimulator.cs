@@ -26,6 +26,12 @@ public class CombatSimulator
         _p1 = BuildState(p1Profile, index: 0);
         _p2 = BuildState(p2Profile, index: 1);
 
+        // Diagnóstico temporário: confirma que os campos de WeaponData chegaram certos do
+        // asset (pedido pelo usuário após suspeitar que damage não estava sendo lido depois
+        // da migração de WeaponType único para WeaponData.types). Remover quando confirmado.
+        LogWeaponLoadout(_p1);
+        LogWeaponLoadout(_p2);
+
         EquipStartingWeaponIfNeeded(_p1);
         EquipStartingWeaponIfNeeded(_p2);
         Player1StartingWeapon = _p1.currentWeaponData;
@@ -84,6 +90,20 @@ public class CombatSimulator
         return s;
     }
 
+    // Diagnóstico temporário (ver chamada em Simulate) — confirma nome, damage, types,
+    // hitSpeed, critChanceBonus e comboBonus de cada WeaponData do loadout, lidos direto do
+    // asset, antes de qualquer sorteio/equip da luta.
+    private void LogWeaponLoadout(PlayerState s)
+    {
+        foreach (var w in s.weaponLoadout)
+        {
+            if (w == null) continue;
+            string types = w.types != null ? string.Join(",", w.types) : "(none)";
+            Debug.Log($"[WeaponLoadout] P{s.index + 1} {s.name}: arma={w.weaponName} damage={w.damage} " +
+                      $"types=[{types}] hitSpeed={w.hitSpeed} critChanceBonus={w.critChanceBonus} comboBonus={w.comboBonus}");
+        }
+    }
+
     // 40% de chance de qualquer um dos dois jogadores já começar a luta com uma arma
     // aleatória do loadout equipada, em vez de sempre desarmado — independe de skill, vale
     // pros dois lados igual. Ver comentário em Player1StartingWeapon/Player2StartingWeapon.
@@ -126,7 +146,10 @@ public class CombatSimulator
             agiPct -= 0.25f;
             spdPct -= 0.25f;
         }
-        if (s.HasSkill("Bodybuilder"))          strPct += 0.5f;
+        // Bodybuilder (redefinida pelo usuário — era strPct += 0.5f/"STR × 1.5"): agora só dá
+        // +10% evasion e +40% hit speed enquanto empunha arma Heavy, checado vivo em
+        // DodgeChance() (evasion) e em CombatPlayer (hit speed, puramente visual — ver nota lá).
+        // Sem estado fixo aqui: a arma equipada pode trocar durante a luta.
 
         // +25% armor (flat, fora do percentual líquido — armor não é um dos quatro status
         // que stackeiam em percentual) e -15% SPD (entra no percentual líquido normalmente).
@@ -167,17 +190,25 @@ public class CombatSimulator
         if (s.HasSkill("Untouchable"))         { s.evasion += 0.30f; }
         if (s.HasSkill("Relentless"))          { s.accuracy += 0.30f; }
         if (s.HasSkill("Fists of Fury"))       { s.comboChanceBonus += 0.20f; }
-        if (s.HasSkill("Lead Skeleton"))       { s.leadSkeleton = true; }
+        // Lead Skeleton (redefinida — antes só dava -15% dano de Heavy): +15% armor, -15%
+        // evasion, mantendo o -15% dano de arma blunt (Heavy) já existente (ver SimulateHit/
+        // SimulateRetaliation). Floor de evasion em 0 garantido pelo clamp incondicional abaixo.
+        if (s.HasSkill("Lead Skeleton"))       { s.leadSkeleton = true; s.armor += 0.15f; s.evasion -= 0.15f; }
         if (s.HasSkill("Ballet Shoes"))        { s.evasion += 0.10f; s.firstHitAvoided = true; }
         if (s.HasSkill("First Strike"))        { s.initiative += 200; }
         if (s.HasSkill("Counter Attack"))      { s.blockBonus += 0.10f; s.reversalAfterBlock += 0.90f; }
         if (s.HasSkill("Sixth Sense"))         { s.counter += 0.10f; }
         if (s.HasSkill("Hostility"))            { s.reversal += 0.30f; }
         if (s.HasSkill("Monk"))                { s.counter += 0.40f; s.initiative -= 200; s.hitSpeed = 0f; }
+        if (s.HasSkill("Martial Arts"))         { s.martialArts = true; }
+        if (s.HasSkill("Shock"))                { s.disarmChanceBonus += 0.50f; }
+        if (s.HasSkill("Weapon Master"))        { s.weaponsMaster = true; }
 
-        // Aplicado por último, depois de Untouchable/Ballet Shoes já terem somado evasion —
-        // garante que Deity zere o total mesmo que outra skill tenha adicionado evasion antes.
-        if (evasionPct != 0f) s.evasion = Mathf.Max(0f, s.evasion * (1f + evasionPct));
+        // Aplicado por último, depois de Untouchable/Ballet Shoes/Lead Skeleton já terem somado
+        // ou subtraído evasion — garante que Deity zere o total mesmo que outra skill já tenha
+        // alterado evasion antes. Incondicional (não só quando evasionPct != 0) pra também
+        // garantir o floor em 0 quando só Lead Skeleton (-15% flat) deixa o total negativo.
+        s.evasion = Mathf.Max(0f, s.evasion * (1f + evasionPct));
     }
 
     // --- Round / turn dispatch ---
@@ -250,8 +281,11 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = w.weaponName });
         }
 
-        // 2. Check throw before melee
-        if (attacker.currentWeaponData != null && Roll(ThrowChance(attacker)))
+        // 2. Check throw before melee — Monk (hitSpeed = 0) guarda em vez de atacar, e
+        // arremessar é um ataque como outro qualquer, então também não acontece pra ele
+        // (senão ele jogava a arma e corria o resto do turno normalmente, contradizendo
+        // o "guarda em vez de atacar" — bug real reportado pelo usuário).
+        if (attacker.hitSpeed > 0f && attacker.currentWeaponData != null && Roll(ThrowChance(attacker)))
         {
             SimulateThrow(attacker, defender);
             Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
@@ -259,13 +293,16 @@ public class CombatSimulator
         }
 
         // 3. Melee
-        Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index });
+        // Monk (hitSpeed = 0): guarda em vez de atacar — não corre até o adversário.
+        if (attacker.hitSpeed > 0f)
+            Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index });
         bool interrupted = SimulateHit(attacker, defender, isCombo: false);
 
         // Combo loop (mirrors AttackRoutine's while loop). Each consecutive extra hit
         // decays the chance by ×0.5 (1st extra hit normal, 2nd ×0.5, 3rd ×0.25, ...) —
         // mirrors My Brute, where combo probability drops sharply after the first follow-up.
-        // Só Counter zera o resto do combo (o hit nunca aconteceu de fato) — Dodge, Block e
+        // Counter zera o resto do combo (o hit nunca aconteceu de fato), assim como Iron Head
+        // (atacante perde a arma, sem condições de continuar a sequência) — Dodge, Block e
         // Reversal não interrompem nada, o combo continua normal depois deles. Reversal pode
         // disparar de novo em cada hit extra do combo, independente do(s) anterior(es).
         int comboCount = 0;
@@ -284,10 +321,20 @@ public class CombatSimulator
 
     // --- Hit resolution (mirrors HitRoutine) ---
 
-    // Retorna true se o combo do atacante deve ser interrompido (Counter ou Reversal do
-    // defensor) — false em qualquer outro desfecho (incluindo Dodge/Block, que não interrompem).
+    // Retorna true se o combo do atacante deve ser interrompido (Counter do defensor, ou
+    // Iron Head derrubando a arma do atacante) — false em qualquer outro desfecho (incluindo
+    // Dodge/Block/Reversal, que não interrompem).
     private bool SimulateHit(PlayerState attacker, PlayerState defender, bool isCombo)
     {
+        // Monk: guards instead of attacking — checado ANTES do Ballet Shoes abaixo. Um hit que
+        // nunca aconteceu (Monk não ataca) não deveria gastar o "esquiva o 1º golpe" do
+        // defensor nem emitir um evento Dodge — sem essa ordem, CombatPlayer reposicionava e
+        // fazia Monk correr+golpear visualmente (RepositionIfNeeded do evento Dodge) num turno
+        // em que ele deveria ficar parado, e o jump-back de TurnEnd disparava depois só por
+        // causa desse deslocamento indevido (bug real reportado pelo usuário: "saltos quando
+        // não deveria se mexer").
+        if (attacker.hitSpeed <= 0f) return false;
+
         // Ballet Shoes: first hit of the fight auto-dodged
         if (!isCombo && defender.firstHitAvoided)
         {
@@ -295,9 +342,6 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index });
             return false;
         }
-
-        // Monk: guards instead of attacking
-        if (attacker.hitSpeed <= 0f) return false;
 
         // Block check
         if (Roll(BlockChance(attacker, defender)))
@@ -352,19 +396,38 @@ public class CombatSimulator
         bool  isCrit = Roll(CritChance(attacker));
         float dmg    = CalcDamage(attacker, isCrit);
 
-        // Lead Skeleton: -15% heavy damage
-        if (defender.leadSkeleton && attacker.currentWeaponData?.type == WeaponType.Heavy)
+        // Lead Skeleton: -15% dano de arma blunt (Heavy)
+        if (defender.leadSkeleton && WeaponData.IsBlunt(attacker.currentWeaponData))
             dmg *= 0.85f;
 
         // Armor reduction
         int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
 
-        Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, isCombo = isCombo });
-
-        defender.hp = Mathf.Max(0, defender.hp - finalDamage);
+        defender.hp = ApplyDamage(defender, finalDamage);
+        // newHp/maxHp também vão no evento Hit (não só no HealthChanged seguinte) — sem isso,
+        // CombatPlayer não tem como saber que Survival salvou o defensor em 1 HP em vez do
+        // valor negativo que o dano bruto (finalDamage) produziria, e aplicava o dano cheio
+        // direto na HealthSystem ao vivo, zerando a barra visualmente até o próximo evento
+        // corrigir (ver Survival no CLAUDE.md).
+        Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, isCombo = isCombo, newHp = defender.hp, maxHp = defender.maxHp });
         Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
 
         if (!defender.isAlive) return false;
+
+        // Iron Head: logo após sofrer o dano (qualquer hit, incluindo combo — não só o
+        // primeiro, diferente do Disarm abaixo), +40% chance do DEFENSOR derrubar a arma do
+        // ATACANTE (inverso do Disarm, que é o atacante desarmando o defensor). Igual ao
+        // Counter, interrompe o resto do combo deste turno — sem arma na mão, o atacante não
+        // continua a sequência (antes só zerava a arma e o combo seguia normalmente, desarmado).
+        bool ironHeadTriggered = false;
+        if (defender.HasSkill("Iron Head") && attacker.currentWeaponData != null && Roll(0.40f))
+        {
+            ironHeadTriggered = true;
+            string ihWn = attacker.currentWeaponData.weaponName;
+            attacker.weaponLoadout.Remove(attacker.currentWeaponData);
+            attacker.currentWeaponData = null;
+            Emit(new CombatEvent { type = CombatEventType.WeaponDrop, playerIndex = attacker.index, weaponName = ihWn });
+        }
 
         // Reversal: depois de já ter tomado o hit, defensor contra-ataca imediatamente — não
         // cancela o combo do atacante (continua normalmente; cada hit extra do combo checa
@@ -383,7 +446,7 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.Disarm, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
         }
 
-        return false;
+        return ironHeadTriggered;
     }
 
     // Usado por Counter e Reversal: o contra-ataque do "retaliator" passa por esquiva/bloqueio/
@@ -408,15 +471,24 @@ public class CombatSimulator
         bool  isCrit = Roll(CritChance(retaliator));
         float dmg    = CalcDamage(retaliator, isCrit);
 
-        if (target.leadSkeleton && retaliator.currentWeaponData?.type == WeaponType.Heavy)
+        if (target.leadSkeleton && WeaponData.IsBlunt(retaliator.currentWeaponData))
             dmg *= 0.85f;
 
         int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - target.armor)));
 
-        Emit(new CombatEvent { type = eventType, playerIndex = retaliator.index, targetIndex = target.index, damage = finalDamage, isCrit = isCrit });
-
-        target.hp = Mathf.Max(0, target.hp - finalDamage);
+        target.hp = ApplyDamage(target, finalDamage);
+        Emit(new CombatEvent { type = eventType, playerIndex = retaliator.index, targetIndex = target.index, damage = finalDamage, isCrit = isCrit, newHp = target.hp, maxHp = target.maxHp });
         Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = target.index, newHp = target.hp, maxHp = target.maxHp });
+
+        // Iron Head: mesma checagem de SimulateHit — target acabou de sofrer o dano da
+        // retaliação, então pode derrubar a arma de quem retaliou.
+        if (target.HasSkill("Iron Head") && retaliator.currentWeaponData != null && Roll(0.40f))
+        {
+            string ihWn = retaliator.currentWeaponData.weaponName;
+            retaliator.weaponLoadout.Remove(retaliator.currentWeaponData);
+            retaliator.currentWeaponData = null;
+            Emit(new CombatEvent { type = CombatEventType.WeaponDrop, playerIndex = retaliator.index, weaponName = ihWn });
+        }
     }
 
     // --- Throw resolution ---
@@ -424,7 +496,9 @@ public class CombatSimulator
     private void SimulateThrow(PlayerState attacker, PlayerState defender)
     {
         var  weaponData = attacker.currentWeaponData;
-        bool isThrown   = weaponData?.type == WeaponType.Thrown;
+        // HasType (não tipo único) — uma arma pode ter Thrown combinado com outra tag (ex: uma
+        // adaga Sharp+Thrown), e ainda assim deve seguir o caminho "volta pro loadout" abaixo.
+        bool isThrown   = WeaponData.HasType(weaponData, WeaponType.Thrown);
         string wn       = weaponData?.weaponName ?? "";
 
         if (!isThrown)
@@ -441,8 +515,8 @@ public class CombatSimulator
             if (defender.armor > 0f)
                 dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
 
-            Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true });
-            defender.hp = Mathf.Max(0, defender.hp - dmg);
+            defender.hp = ApplyDamage(defender, dmg);
+            Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true, newHp = defender.hp, maxHp = defender.maxHp });
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
         }
         else
@@ -461,6 +535,21 @@ public class CombatSimulator
 
     // --- Chance calculations (mirrors PlayerCombat methods) ---
 
+    // Soma os valores-base de cada tag presente na arma (WeaponData.types é uma lista — uma
+    // arma pode ter até 3 tags simultâneas) — ver tabela em CLAUDE.md. Tags sem entrada
+    // explícita (Blunt/Long, exceto onde passadas) contribuem 0; não existe mais um "default"
+    // genérico, cada bônus vem de uma tag específica.
+    private static float TagSum(WeaponData data, float sharp = 0f, float fast = 0f, float heavy = 0f, float thrown = 0f)
+    {
+        if (data == null) return 0f;
+        float total = 0f;
+        if (data.HasType(WeaponType.Sharp))  total += sharp;
+        if (data.HasType(WeaponType.Fast))   total += fast;
+        if (data.HasType(WeaponType.Heavy))  total += heavy;
+        if (data.HasType(WeaponType.Thrown)) total += thrown;
+        return total;
+    }
+
     private float DodgeChance(PlayerState attacker, PlayerState defender)
     {
         // Deity (-100% evasion / "sem resistência a ser atingido"): zerar só o campo
@@ -469,39 +558,34 @@ public class CombatSimulator
         // tudo isso — chance de esquiva fica em 0% de verdade, não só o termo de skill.
         if (defender.noEvasion) return 0f;
 
-        float baseChance = defender.currentWeaponData == null ? 0.10f :
-            defender.currentWeaponData.type switch
-            {
-                WeaponType.Fast   => 0.20f,
-                WeaponType.Dagger => 0.15f,
-                WeaponType.Sword  => 0.10f,
-                WeaponType.Heavy  => 0.05f,
-                _                 => 0.10f
-            };
+        float baseChance = defender.currentWeaponData == null
+            ? 0.10f
+            : TagSum(defender.currentWeaponData, sharp: 0.10f, fast: 0.05f, heavy: 0.05f);
         float agiBonus      = Mathf.Max(0, defender.agility - 3) * 0.02f;
         float weaponEvasion = defender.currentWeaponData != null
             ? defender.currentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
         // accuracy do atacante (Relentless +0.30) é o oposto de evasion — reduz a chance de
         // esquiva do defensor em vez de aumentar a do próprio atacante.
-        float total = baseChance + agiBonus + defender.evasion + weaponEvasion - attacker.accuracy;
+        // Survival: +20% evasion, só enquanto hp == 1 (sai do estado se recuperar HP, e nunca
+        // ativa em outro valor de HP, mesmo baixo) — checado vivo a cada chamada, sem flag fixa.
+        float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
+        // Bodybuilder: +10% evasion ("dexterity"), só enquanto empunha arma Heavy — checado
+        // vivo contra a arma atual, igual ao Survival acima (sem flag fixa de ApplySkillStats).
+        float bodybuilderBonus = (WeaponData.HasType(defender.currentWeaponData, WeaponType.Heavy) && defender.HasSkill("Bodybuilder")) ? 0.10f : 0f;
+        float total = baseChance + agiBonus + defender.evasion + weaponEvasion - attacker.accuracy + survivalBonus + bodybuilderBonus;
         return Mathf.Clamp(total, 0f, 0.60f);
     }
 
     private float BlockChance(PlayerState attacker, PlayerState defender)
     {
-        float weaponBonus = defender.currentWeaponData == null ? 0f :
-            defender.currentWeaponData.type switch
-            {
-                WeaponType.Block  => 0.50f,
-                WeaponType.Dagger => 0.15f,
-                WeaponType.Sword  => 0.15f,
-                WeaponType.Heavy  => 0.15f,
-                WeaponType.Slow   => 0.05f,
-                _                 => 0f
-            };
+        float weaponBonus = defender.currentWeaponData == null
+            ? 0f
+            : TagSum(defender.currentWeaponData, sharp: 0.15f, heavy: 0.15f);
         float weaponBlockBonus = defender.currentWeaponData != null
             ? defender.currentWeaponData.blockBonus : UnarmedStats.BlockBonus;
-        return weaponBonus + weaponBlockBonus + defender.blockBonus;
+        // Survival: +20% block, mesma condição de hp == 1 do DodgeChance acima.
+        float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
+        return weaponBonus + weaponBlockBonus + defender.blockBonus + survivalBonus;
     }
 
     // Counter: atacante corre, ataca, e o defensor bate antes do hit conectar — cancela o
@@ -522,14 +606,9 @@ public class CombatSimulator
 
     private float CritChance(PlayerState attacker)
     {
-        float baseChance = attacker.currentWeaponData == null ? 0.05f :
-            attacker.currentWeaponData.type switch
-            {
-                WeaponType.Dagger => 0.08f,
-                WeaponType.Sword  => 0.05f,
-                WeaponType.Heavy  => 0.03f,
-                _                 => 0.05f
-            };
+        float baseChance = attacker.currentWeaponData == null
+            ? 0.05f
+            : TagSum(attacker.currentWeaponData, sharp: 0.05f, fast: 0.03f, heavy: 0.03f);
         float weaponBonus = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.critChanceBonus : UnarmedStats.CritChanceBonus;
         return baseChance + weaponBonus + attacker.criticalChance;
@@ -540,15 +619,9 @@ public class CombatSimulator
     // para o teto de 35% valer como o pico (1º hit extra) e não ser "recuperado" pelo decaimento.
     private float ComboChance(PlayerState attacker, int comboCount = 0)
     {
-        float baseChance = attacker.currentWeaponData == null ? 0.05f :
-            attacker.currentWeaponData.type switch
-            {
-                WeaponType.Fast   => 0.18f,
-                WeaponType.Dagger => 0.15f,
-                WeaponType.Sword  => 0.12f,
-                WeaponType.Heavy  => 0.04f,
-                _                 => 0.12f
-            };
+        float baseChance = attacker.currentWeaponData == null
+            ? 0.05f
+            : TagSum(attacker.currentWeaponData, sharp: 0.12f, fast: 0.03f, heavy: 0.04f);
         float agiBonus    = Mathf.Max(0, attacker.agility - 3) * 0.008f;
         float weaponCombo = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.comboBonus : UnarmedStats.ComboBonus;
@@ -558,48 +631,33 @@ public class CombatSimulator
 
     private float DisarmChance(PlayerState attacker)
     {
-        float baseChance = attacker.currentWeaponData == null ? 0f :
-            attacker.currentWeaponData.type switch
-            {
-                WeaponType.Dagger => 0.20f,
-                WeaponType.Fast   => 0.15f,
-                WeaponType.Sword  => 0.10f,
-                WeaponType.Heavy  => 0.05f,
-                _                 => 0f
-            };
+        float baseChance = attacker.currentWeaponData == null
+            ? 0f
+            : TagSum(attacker.currentWeaponData, sharp: 0.10f, fast: 0.10f, heavy: 0.05f);
         float weaponBonus = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.disarmBonus : UnarmedStats.DisarmBonus;
-        return baseChance + weaponBonus;
+        return baseChance + weaponBonus + attacker.disarmChanceBonus;
     }
 
     private float ThrowChance(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null) return 0f;
-        return attacker.currentWeaponData.type switch
-        {
-            WeaponType.Thrown  => 1.00f,
-            WeaponType.Dagger  => 0.15f,
-            WeaponType.Fast    => 0.15f,
-            WeaponType.Sword   => 0.15f,
-            WeaponType.Heavy   => 0.10f,
-            _                  => 0f
-        };
+        return TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f);
     }
 
     // --- Damage calculations (mirrors WeaponBaseDamage / CalcDamage / ThrowDamage) ---
 
-    // Dano base da arma (sem STR/crítico/armadura) — Heavy/Sword/Dagger têm variação aleatória estilo My Brute.
+    // weaponData.damage tem prioridade absoluta — cada WeaponData tem seu próprio campo
+    // configurável, então não há mais ranges hardcoded por tag (Random.Range(7,13)/(10,18)/
+    // (30,50) eram valores padrão do protótipo, de antes de cada arma ter o próprio Damage).
+    private static int RollWeaponDamage(WeaponData data) => data.damage > 0 ? data.damage : 3;
+
+    // Dano base da arma (sem STR/crítico/armadura).
     private int WeaponBaseDamage(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null)
-            return UnarmedStats.Damage;
-        return attacker.currentWeaponData.type switch
-        {
-            WeaponType.Heavy  => _rng.Next(30, 50),
-            WeaponType.Sword  => _rng.Next(10, 18),
-            WeaponType.Dagger => _rng.Next(7, 13),
-            _                 => attacker.currentWeaponData.damage > 0 ? attacker.currentWeaponData.damage : 3
-        };
+            return attacker.martialArts ? UnarmedStats.Damage * 2 : UnarmedStats.Damage;
+        return RollWeaponDamage(attacker.currentWeaponData);
     }
 
     private float CritDamageMultiplier(PlayerState attacker)
@@ -609,38 +667,45 @@ public class CombatSimulator
         return baseMult + attacker.critDamageBonus;
     }
 
-    // Fórmula multiplicativa do My Brute: weaponBaseDamage × (1 + str/10) × (critMultiplier se crítico).
-    // Lead Skeleton e armadura são aplicados depois, em SimulateHit.
+    // Fórmula do My Brute original: STR soma direto no dano base da arma (flat, não percentual)
+    // — (weaponBaseDamage + str) × critMultiplier × sharpMult. Lead Skeleton e armadura são
+    // aplicados depois, em SimulateHit. Era weaponBaseDamage × (1 + str/10) (percentual,
+    // divergia do original) — redefinida pelo usuário.
     private float CalcDamage(PlayerState attacker, bool isCrit)
     {
         int   weaponBaseDamage = WeaponBaseDamage(attacker);
-        float strMult          = 1f + attacker.str / 10f;
         float critMult         = isCrit ? CritDamageMultiplier(attacker) : 1f;
-        float result            = weaponBaseDamage * strMult * critMult;
+        // Weapon Master: +50% dano com arma "sharp" (tag Sharp) — checado vivo contra a
+        // arma atual (pode trocar de arma durante a luta), não um flag fixo de ApplySkillStats.
+        bool  isSharp          = WeaponData.IsSharp(attacker.currentWeaponData);
+        float sharpMult        = (attacker.weaponsMaster && isSharp) ? 1.5f : 1f;
+        float result            = (weaponBaseDamage + attacker.str) * critMult * sharpMult;
 
-        // Diagnóstico temporário: confirma os componentes exatos de cada hit (relatos de
-        // dano muito alto — ex: Dagger chegando a ~25 normal/~50 crítico com STR 4-5, quando
-        // o teto teórico da fórmula seria ~18/~22.5). Remover quando confirmado.
+        // Diagnóstico temporário: confirma os componentes exatos de cada hit. Remover quando confirmado.
         string weaponLabel = attacker.currentWeaponData != null ? attacker.currentWeaponData.weaponName : "Unarmed";
         Debug.Log($"[CalcDamage] {attacker.name} arma={weaponLabel} weaponBaseDamage={weaponBaseDamage} " +
-                  $"str={attacker.str} strMult={strMult:F2} critMult={critMult:F2} isCrit={isCrit} resultado={result:F1}");
+                  $"str={attacker.str} critMult={critMult:F2} isCrit={isCrit} resultado={result:F1}");
 
         return result;
     }
 
+    // Survival: se o dano aplicaria HP <= 0 e a skill ainda não foi usada nesta luta, o
+    // personagem sobrevive com 1 HP em vez de morrer (uma vez por luta, consome survivalUsed).
+    // Usado nos 3 pontos onde dano reduz hp (SimulateHit, SimulateRetaliation, SimulateThrow).
+    private int ApplyDamage(PlayerState target, int rawDamage)
+    {
+        int newHp = target.hp - rawDamage;
+        if (newHp <= 0 && target.HasSkill("Survival") && !target.survivalUsed)
+        {
+            target.survivalUsed = true;
+            newHp = 1;
+        }
+        return Mathf.Max(0, newHp);
+    }
+
     private int CalcThrowDamage(WeaponData data)
     {
-        int result;
-        if (data == null)
-            result = 2;
-        else
-            result = data.type switch
-            {
-                WeaponType.Heavy  => _rng.Next(30, 50),
-                WeaponType.Sword  => _rng.Next(10, 18),
-                WeaponType.Dagger => _rng.Next(7, 13),
-                _                 => data.damage > 0 ? data.damage : 3
-            };
+        int result = data == null ? 2 : RollWeaponDamage(data);
 
         // Diagnóstico temporário: confirma que o throw NÃO usa o multiplicador de STR.
         Debug.Log($"[CalcThrowDamage] arma={data?.weaponName ?? "?"} resultado={result} (sem STR)");

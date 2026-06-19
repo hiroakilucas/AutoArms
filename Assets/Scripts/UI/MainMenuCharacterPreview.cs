@@ -66,7 +66,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         nameTxt.alignment = TextAlignmentOptions.Center;
 
         // Stats efetivos (com bônus de skill já aplicados)
-        var (effHp, effStr, effAgi, effSpd, effInit, _, _, _, _, _, _, _, _, _, _) = p.GetEffectiveStats();
+        var (effHp, effStr, effAgi, effSpd, effInit, _, _, _, _, _, _, _, _, _, _, _, _, _, _) = p.GetEffectiveStats();
         var statsGo = new GameObject("Stats");
         statsGo.transform.SetParent(container.transform, false);
         var statsRt = statsGo.AddComponent<RectTransform>();

@@ -18,7 +18,6 @@ public class WeaponHandler : MonoBehaviour
 
     private GameObject current;
     public GameObject CurrentWeapon => current;
-    public WeaponType currentType { get; private set; }
     public WeaponData CurrentWeaponData { get; private set; }
 
     // Fires with the newly equipped WeaponData, or null when unequipped.
@@ -67,7 +66,6 @@ public class WeaponHandler : MonoBehaviour
 
     private void EquipData(WeaponData data)
     {
-        currentType = data.type;
         CurrentWeaponData = data;
         current = Instantiate(swordBasePrefab, handBone);
 
@@ -87,7 +85,6 @@ public class WeaponHandler : MonoBehaviour
     {
         if (current) Destroy(current);
         current = null;
-        currentType = default;
         CurrentWeaponData = null;
         OnWeaponChanged?.Invoke(null);
     }

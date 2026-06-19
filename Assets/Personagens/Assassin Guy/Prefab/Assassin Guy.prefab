@@ -531,12 +531,16 @@ MonoBehaviour:
   initiative: 0
   reversal: 0
   counter: 0
+  blockBonus: 0
+  reversalAfterBlock: 0
   criticalChance: 0
+  critDamageBonus: 0
   hitSpeed: 1
   runSpeedMultiplier: 1
   comboChanceBonus: 0
   leadSkeleton: 0
   firstHitAvoided: 0
+  martialArts: 0
   skills: []
   debugProfile: {fileID: 0}
 --- !u!1 &1505143171391790

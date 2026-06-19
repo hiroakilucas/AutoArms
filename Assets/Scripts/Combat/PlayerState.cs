@@ -24,6 +24,7 @@ public class PlayerState
     public float criticalChance;
     public float critDamageBonus;
     public float comboChanceBonus;
+    public float disarmChanceBonus;
     public float hitSpeed;
     public float runSpeedMultiplier;
 
@@ -31,6 +32,9 @@ public class PlayerState
     public bool leadSkeleton;
     public bool firstHitAvoided;
     public bool noEvasion;
+    public bool martialArts;
+    public bool weaponsMaster;
+    public bool survivalUsed;
 
     // Weapons
     public List<WeaponData> weaponLoadout = new List<WeaponData>();

@@ -17,7 +17,7 @@ MonoBehaviour:
   inHandSprite: {fileID: 21300000, guid: 2343d8692f2de3843bb167815d8aedef, type: 3}
   damage: 40
   speedModifier: 0.3
-  type: 1
+  types: 0400000002000000
   scale: 2.5
   hitSpeed: 0.6
   drawChance: 0.33

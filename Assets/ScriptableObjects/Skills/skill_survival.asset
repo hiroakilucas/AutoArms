@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: skill_survival
   m_EditorClassIdentifier: 
   skillName: Survival
-  description: Sobrevive com 1 HP uma vez por luta
-  icon: {fileID: 0}
+  description: Sobrevive com 1 HP uma vez por luta; com 1 HP, +20% block e +20% evasion
+  icon: {fileID: 21300000, guid: 49da73dcd38198d42b46ad266e3cbedd, type: 3}
   category: 1
   activationType: 0
   usesPerFight: 1

@@ -37,9 +37,12 @@ public class PlayerCombat : MonoBehaviour
     public float hitSpeed = 1f;
     public float runSpeedMultiplier = 1f;
     public float comboChanceBonus = 0f;
+    public float disarmChanceBonus = 0f;
 
     [HideInInspector] public bool leadSkeleton   = false;
     [HideInInspector] public bool firstHitAvoided = false;
+    [HideInInspector] public bool martialArts     = false;
+    [HideInInspector] public bool weaponsMaster   = false;
 
     [Header("Skills — Teste")]
     public List<SkillData> skills = new List<SkillData>();
@@ -116,7 +119,9 @@ public class PlayerCombat : MonoBehaviour
         yield return animationController.PlayIdle(settings.idleDuration);
 
         // Throw verifica ANTES do melee. Se triggar: arremessa do lugar, sem Run+JumpBack.
-        if (defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
+        // Monk (hitSpeed = 0) guarda em vez de atacar — arremessar também é um ataque, então
+        // também não acontece pra ele (mesma checagem de CombatSimulator.SimulateTurn).
+        if (hitSpeed > 0f && defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
             && Random.value < ThrowChance())
         {
             yield return ThrowRoutine();
@@ -139,32 +144,32 @@ public class PlayerCombat : MonoBehaviour
         RestoreDefaultLayers();
     }
 
+    // Soma os valores-base de cada tag presente na arma (WeaponData.types é uma lista) — mesma
+    // tabela/regra de CombatSimulator.TagSum, ver CLAUDE.md.
+    private static float TagSum(WeaponData data, float sharp = 0f, float fast = 0f, float heavy = 0f, float thrown = 0f)
+    {
+        if (data == null) return 0f;
+        float total = 0f;
+        if (data.HasType(WeaponType.Sharp))  total += sharp;
+        if (data.HasType(WeaponType.Fast))   total += fast;
+        if (data.HasType(WeaponType.Heavy))  total += heavy;
+        if (data.HasType(WeaponType.Thrown)) total += thrown;
+        return total;
+    }
+
     private float ThrowChance()
     {
         if (weaponHandler.CurrentWeapon == null) return 0f;
-        return weaponHandler.currentType switch
-        {
-            WeaponType.Thrown  => 1.00f,
-            WeaponType.Dagger  => 0.15f,
-            WeaponType.Fast    => 0.15f,
-            WeaponType.Sword   => 0.15f,
-            WeaponType.Heavy   => 0.10f,
-            _                  => 0f
-        };
+        return TagSum(weaponHandler.CurrentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f);
     }
 
     // comboCount = quantos hits extra de combo já aconteceram neste turno (0 = checagem do 1º hit extra).
     // Decaimento ×0.5 por hit consecutivo, aplicado depois do clamp — ver CombatSimulator.ComboChance.
     private float ComboChance(int comboCount = 0)
     {
-        float base_ = weaponHandler.CurrentWeapon == null ? 0.05f : weaponHandler.currentType switch
-        {
-            WeaponType.Fast   => 0.18f,
-            WeaponType.Dagger => 0.15f,
-            WeaponType.Sword  => 0.12f,
-            WeaponType.Heavy  => 0.04f,
-            _                 => 0.12f
-        };
+        float base_ = weaponHandler.CurrentWeapon == null
+            ? 0.05f
+            : TagSum(weaponHandler.CurrentWeaponData, sharp: 0.12f, fast: 0.03f, heavy: 0.04f);
         float agiBonus    = Mathf.Max(0, agility - 3) * 0.008f;
         float weaponCombo = weaponHandler.CurrentWeaponData != null
             ? weaponHandler.CurrentWeaponData.comboBonus : UnarmedStats.ComboBonus;
@@ -175,13 +180,7 @@ public class PlayerCombat : MonoBehaviour
     // criticalChance: base do profile + bônus de skills (ex: Fierce Brute +0.10f) + bônus da arma.
     private float CritChance()
     {
-        float baseChance = weaponHandler.currentType switch
-        {
-            WeaponType.Dagger => 0.08f,
-            WeaponType.Sword  => 0.05f,
-            WeaponType.Heavy  => 0.03f,
-            _                 => 0.05f
-        };
+        float baseChance = TagSum(weaponHandler.CurrentWeaponData, sharp: 0.05f, fast: 0.03f, heavy: 0.03f);
         float weaponBonus = weaponHandler.CurrentWeaponData != null
             ? weaponHandler.CurrentWeaponData.critChanceBonus : UnarmedStats.CritChanceBonus;
         return baseChance + weaponBonus + criticalChance;
@@ -191,16 +190,9 @@ public class PlayerCombat : MonoBehaviour
     private float BlockChance()
     {
         if (defender == null) return 0f;
-        float weaponBonus = defender.weaponHandler.CurrentWeapon == null ? 0f :
-            defender.weaponHandler.currentType switch
-            {
-                WeaponType.Block  => 0.50f,
-                WeaponType.Slow   => 0.05f,
-                WeaponType.Dagger => 0.15f,
-                WeaponType.Sword  => 0.15f,
-                WeaponType.Heavy  => 0.15f,
-                _                 => 0f
-            };
+        float weaponBonus = defender.weaponHandler.CurrentWeapon == null
+            ? 0f
+            : TagSum(defender.weaponHandler.CurrentWeaponData, sharp: 0.15f, heavy: 0.15f);
         float weaponBlockBonus = defender.weaponHandler.CurrentWeaponData != null
             ? defender.weaponHandler.CurrentWeaponData.blockBonus : UnarmedStats.BlockBonus;
         return weaponBonus + defender.counter + weaponBlockBonus;
@@ -209,17 +201,12 @@ public class PlayerCombat : MonoBehaviour
     // Impact (skill futura): adiciona +0.15f a este valor permanentemente.
     private float DisarmChance()
     {
-        float baseChance = weaponHandler.CurrentWeapon == null ? 0f : weaponHandler.currentType switch
-        {
-            WeaponType.Dagger => 0.20f,
-            WeaponType.Fast   => 0.15f,
-            WeaponType.Sword  => 0.10f,
-            WeaponType.Heavy  => 0.05f,
-            _                 => 0f
-        };
+        float baseChance = weaponHandler.CurrentWeapon == null
+            ? 0f
+            : TagSum(weaponHandler.CurrentWeaponData, sharp: 0.10f, fast: 0.10f, heavy: 0.05f);
         float weaponDisarmBonus = weaponHandler.CurrentWeaponData != null
             ? weaponHandler.CurrentWeaponData.disarmBonus : UnarmedStats.DisarmBonus;
-        return baseChance + weaponDisarmBonus;
+        return baseChance + weaponDisarmBonus + disarmChanceBonus;
     }
 
     // evasion: base por tipo de arma do defensor + bônus de agilidade + evasion do defensor + bônus da arma.
@@ -227,33 +214,26 @@ public class PlayerCombat : MonoBehaviour
     private float DodgeChance()
     {
         if (defender == null) return 0f;
-        float baseChance = defender.weaponHandler.currentType switch
-        {
-            WeaponType.Fast   => 0.20f,
-            WeaponType.Dagger => 0.15f,
-            WeaponType.Sword  => 0.10f,
-            WeaponType.Heavy  => 0.05f,
-            _                 => 0.10f
-        };
+        float baseChance = TagSum(defender.weaponHandler.CurrentWeaponData, sharp: 0.10f, fast: 0.05f, heavy: 0.05f);
         float agiBonus       = Mathf.Max(0, defender.agility - 3) * 0.02f;
         float weaponEvasion  = defender.weaponHandler.CurrentWeaponData != null
             ? defender.weaponHandler.CurrentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
-        return Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion + weaponEvasion);
+        // Bodybuilder: +10% evasion ("dexterity"), só enquanto empunha arma Heavy.
+        float bodybuilderBonus = (WeaponData.HasType(defender.weaponHandler.CurrentWeaponData, WeaponType.Heavy) && defender.HasSkill("Bodybuilder")) ? 0.10f : 0f;
+        return Mathf.Min(0.60f, baseChance + agiBonus + defender.evasion + weaponEvasion + bodybuilderBonus);
     }
 
-    // Dano base da arma (sem STR/crítico/armadura) — Heavy/Sword/Dagger têm variação aleatória estilo My Brute.
+    // weaponData.damage tem prioridade absoluta — cada WeaponData tem seu próprio campo
+    // configurável, então não há mais ranges hardcoded por tag (Random.Range(7,13)/(10,18)/
+    // (30,50) eram valores padrão do protótipo, de antes de cada arma ter o próprio Damage).
+    private static int RollWeaponDamage(WeaponData data) => data.damage > 0 ? data.damage : 3;
+
+    // Dano base da arma (sem STR/crítico/armadura).
     private int WeaponBaseDamage()
     {
         if (weaponHandler.CurrentWeapon == null)
-            return UnarmedStats.Damage;
-        return weaponHandler.currentType switch
-        {
-            WeaponType.Heavy  => Random.Range(30, 50),
-            WeaponType.Sword  => Random.Range(10, 18),
-            WeaponType.Dagger => Random.Range(7, 13),
-            _                 => weaponHandler.CurrentWeaponData?.damage > 0
-                                 ? weaponHandler.CurrentWeaponData.damage : 3
-        };
+            return martialArts ? UnarmedStats.Damage * 2 : UnarmedStats.Damage;
+        return RollWeaponDamage(weaponHandler.CurrentWeaponData);
     }
 
     private float CritDamageMultiplier()
@@ -263,41 +243,44 @@ public class PlayerCombat : MonoBehaviour
         return baseMult + critDamageBonus;
     }
 
-    // Fórmula multiplicativa do My Brute: weaponBaseDamage × (1 + str/10) × (critMultiplier se crítico).
-    // Lead Skeleton e armadura são aplicados depois, em HitRoutine.
+    // Fórmula do My Brute original: STR soma direto no dano base da arma (flat, não percentual)
+    // — (weaponBaseDamage + str) × critMultiplier × sharpMult. Lead Skeleton e armadura são
+    // aplicados depois, em HitRoutine. Era weaponBaseDamage × (1 + str/10) (percentual,
+    // divergia do original) — redefinida pelo usuário.
     private float CalcDamage(bool isCrit)
     {
         int   weaponBaseDamage = WeaponBaseDamage();
         float critMult         = isCrit ? CritDamageMultiplier() : 1f;
-        return weaponBaseDamage * (1f + str / 10f) * critMult;
+        bool  isSharp          = WeaponData.IsSharp(weaponHandler.CurrentWeaponData);
+        float sharpMult        = (weaponsMaster && isSharp) ? 1.5f : 1f;
+        return (weaponBaseDamage + str) * critMult * sharpMult;
     }
 
     // Dano do arremesso usa os mesmos ranges sem bônus de STR.
     private static int ThrowDamage(WeaponData data)
     {
         if (data == null) return 2;
-        return data.type switch
-        {
-            WeaponType.Heavy  => Random.Range(30, 50),
-            WeaponType.Sword  => Random.Range(10, 18),
-            WeaponType.Dagger => Random.Range(7, 13),
-            _                 => data.damage > 0 ? data.damage : 3
-        };
+        return RollWeaponDamage(data);
     }
 
     // Posição de ataque: imediatamente fora do alcance da arma, na direção do defensor.
-    // weaponData.reach soma-se à distância base do tipo de arma.
+    // weaponData.reach soma-se à distância base do tipo de arma. Heavy e Sharp/default não são
+    // somados (não faz sentido físico somar dois alcances de categoria inteiros) — Heavy tem
+    // prioridade, depois Fast desconta (recria exatamente o 1.5 da antiga Dagger = Sharp+Fast).
     private Vector2 AttackPosition()
     {
         if (defender == null) return spawnPosition;
         Vector2 defPos = (Vector2)defender.transform.position;
-        float baseReach = weaponHandler.CurrentWeapon == null ? 0.8f :
-            weaponHandler.currentType switch
-            {
-                WeaponType.Dagger => 1.5f,
-                WeaponType.Heavy  => 2.8f,
-                _                 => 2.0f
-            };
+        float baseReach;
+        if (weaponHandler.CurrentWeapon == null)
+        {
+            baseReach = 0.8f;
+        }
+        else
+        {
+            baseReach = WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Heavy) ? 2.8f : 2.0f;
+            if (WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Fast)) baseReach -= 0.5f;
+        }
         float reach = baseReach + (weaponHandler.CurrentWeaponData?.reach ?? 0);
         Vector2 dir = (defPos - (Vector2)transform.position).normalized;
         return defPos - dir * reach;
@@ -305,7 +288,11 @@ public class PlayerCombat : MonoBehaviour
 
     private IEnumerator StrikeRoutine()
     {
-        yield return animationController.PlayRun(AttackPosition(), RuntimeRunSpeed, movement);
+        // Monk (hitSpeed = 0) guarda em vez de atacar — não corre até o adversário, mesma
+        // checagem de CombatSimulator.SimulateTurn (HitRoutine já saía cedo sem golpear, mas
+        // ainda corria até o adversário antes disso).
+        if (hitSpeed > 0f)
+            yield return animationController.PlayRun(AttackPosition(), RuntimeRunSpeed, movement);
         yield return HitRoutine();
     }
 
@@ -323,12 +310,23 @@ public class PlayerCombat : MonoBehaviour
     // Quando desarmado: usa "Slashing" (soco) com dano calculado por STR.
     private IEnumerator HitRoutine(bool applyKnockback = true, bool isCombo = false)
     {
-        string slashTrigger = weaponHandler.currentType switch
+        // Prioridade Heavy > Fast > default — uma arma só tem uma animação de swing, ainda que
+        // tenha múltiplas tags (ex: Heavy|Blunt entra em SlashingHeavy; Sharp|Fast em SlashingDagger).
+        string slashTrigger =
+            WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Heavy) ? "SlashingHeavy" :
+            WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Fast)  ? "SlashingDagger" :
+            "Slashing";
+
+        // Monk: guarda em vez de atacar (hitSpeed = 0) — checado ANTES do Ballet Shoes abaixo,
+        // mesma ordem de CombatSimulator.SimulateHit. Um hit que nunca aconteceu não deveria
+        // gastar o "esquiva o 1º golpe" do defensor nem fazer ele saltar pra esquivar de um
+        // ataque que o Monk nunca desferiu.
+        if (hitSpeed <= 0f)
         {
-            WeaponType.Heavy  => "SlashingHeavy",
-            WeaponType.Dagger => "SlashingDagger",
-            _                 => "Slashing"
-        };
+            LogSkillCheck("Monk", true, "guarding instead of attacking (hitSpeed = 0)");
+            yield return new WaitForSeconds(settings.slashingDuration);
+            yield break;
+        }
 
         // Ballet Shoes: primeiro golpe da luta automaticamente esquivado
         if (defender != null && defender.firstHitAvoided)
@@ -343,17 +341,11 @@ public class PlayerCombat : MonoBehaviour
             yield break;
         }
 
-        // Monk: guarda em vez de atacar (hitSpeed = 0)
-        if (hitSpeed <= 0f)
-        {
-            LogSkillCheck("Monk", true, "guarding instead of attacking (hitSpeed = 0)");
-            yield return new WaitForSeconds(settings.slashingDuration);
-            yield break;
-        }
-
         float weaponHitSpeed = weaponHandler.CurrentWeaponData != null
             ? weaponHandler.CurrentWeaponData.hitSpeed : UnarmedStats.HitSpeed;
-        float slashSpeed = hitSpeed * weaponHitSpeed;
+        // Bodybuilder: +40% hit speed, só enquanto empunha arma Heavy.
+        float bodybuilderSpeedMult = (WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Heavy) && HasSkill("Bodybuilder")) ? 1.4f : 1f;
+        float slashSpeed = hitSpeed * weaponHitSpeed * bodybuilderSpeedMult;
         if (slashSpeed != 1f) animationController.SetSpeed(slashSpeed);
 
         animator.SetTrigger(slashTrigger);
@@ -406,11 +398,11 @@ public class PlayerCombat : MonoBehaviour
         bool  isCrit = Random.value < CritChance();
         float dmg    = CalcDamage(isCrit);
 
-        // Lead Skeleton: -15% dano de armas Heavy
-        if (defender != null && defender.leadSkeleton && weaponHandler.currentType == WeaponType.Heavy)
+        // Lead Skeleton: -15% dano de arma blunt (Heavy)
+        if (defender != null && defender.leadSkeleton && WeaponData.IsBlunt(weaponHandler.CurrentWeaponData))
         {
             dmg *= 0.85f;
-            defender.LogSkillCheck("Lead Skeleton", true, "heavy damage ×0.85");
+            defender.LogSkillCheck("Lead Skeleton", true, "blunt damage ×0.85");
         }
 
         // Fórmula multiplicativa do My Brute: finalDamage = Max(1, Round(dmg × (1 - armor)))
@@ -425,6 +417,14 @@ public class PlayerCombat : MonoBehaviour
                 + Vector3.up   * 1.5f
                 + Vector3.right * Random.Range(-0.3f, 0.3f);
             DamagePopup.Spawn(popupPos, finalDamage, isCrit);
+        }
+
+        // Iron Head: logo após sofrer o dano (qualquer hit, incluindo combo), +40% chance do
+        // defensor derrubar a arma do atacante (inverso do Disarm abaixo).
+        if (defender != null && defender.HasSkill("Iron Head") && weaponHandler.CurrentWeapon != null
+            && Random.value < 0.40f)
+        {
+            StartCoroutine(DropWeapon(this, isDisarm: false));
         }
 
         if (!isCombo && defender != null && !defender.IsDead
@@ -444,7 +444,7 @@ public class PlayerCombat : MonoBehaviour
     private IEnumerator ThrowRoutine()
     {
         var weaponData = weaponHandler.CurrentWeaponData;
-        bool isThrown = weaponData?.type == WeaponType.Thrown;
+        bool isThrown = WeaponData.HasType(weaponData, WeaponType.Thrown);
 
         // Capture world position and scale BEFORE destroying the weapon object on Unequip.
         // lossyScale reflects real visual size (character has scale ~0.3 applied).
@@ -492,7 +492,7 @@ public class PlayerCombat : MonoBehaviour
         animator.SetTrigger("Throwing");
 
         // Thrown rotates and gets a slight arc; all others fly in a straight horizontal line.
-        bool  rotate = weaponData?.type == WeaponType.Thrown;
+        bool  rotate = isThrown;
         float arc    = isThrown ? 0.5f : 0f;
         yield return FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f, rotate, arc);
         Destroy(flyingWeapon);  // sempre destruído antes de resolver hit/miss
@@ -635,6 +635,14 @@ public class PlayerCombat : MonoBehaviour
 
     private IEnumerator ReturnToSpawn()
     {
+        // Mesma checagem de CombatPlayer.ExecuteEvent (caso TurnEnd): se o personagem nunca
+        // saiu da própria zona de spawn neste turno (Monk guardando, hitSpeed = 0, nunca corre
+        // até o adversário em StrikeRoutine), não tem por que saltar pra um ponto aleatório novo.
+        if (InSpawnZone(transform.position))
+        {
+            animationController.SetIdle(true);
+            yield break;
+        }
         yield return animationController.PlayJumpStart(settings.jumpStartDuration);
         spawnPosition = RandomSpawnPosition();
         yield return movement.JumpTo(spawnPosition, RuntimeRunSpeed, settings.jumpHeight);
@@ -646,6 +654,13 @@ public class PlayerCombat : MonoBehaviour
         float x = isPlayer1 ? Random.Range(-7.25f, -4.79f) : Random.Range(4.79f, 7.25f);
         float y = Random.Range(-3.90f, -0.81f);
         return new Vector2(x, y);
+    }
+
+    private bool InSpawnZone(Vector2 pos)
+    {
+        float xMin = isPlayer1 ? -7.25f : 4.79f;
+        float xMax = isPlayer1 ? -4.79f : 7.25f;
+        return pos.x >= xMin && pos.x <= xMax && pos.y >= -3.90f && pos.y <= -0.81f;
     }
 
     // --- Skill queries ---

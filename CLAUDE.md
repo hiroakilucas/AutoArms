@@ -124,7 +124,7 @@ Both `MainMenuCharacterPreview` and `CharacterSelectController` instantiate the 
 
 `MainMenuCharacterPreview.Start()` also calls `BuildSummaryHUD(profile)` — creates a standalone ScreenSpaceOverlay Canvas (sortingOrder=5) with a semi-transparent strip showing: character name + level, a stats row (HP/STR/AGI/SPD), animated XP bar, and the first 3 skill icons. Container anchors: `(0.30, 0.21)–(0.70, 0.40)` — positioned above the bottom buttons (button tops ≈ 0.188 of 1080p).
 
-The stats row comes from `PlayerProfile.GetEffectiveStats()` — a preview-only calculation (no live `PlayerCombat`/`PlayerState` needed, since those components are destroyed for this display) that mirrors the subset of `CombatSimulator.ApplySkillStats`/`CombatSceneLoader.ApplySkillStats` affecting HP/str/agility/speed (Vitality, Herculean Strength, Feline Agility, Bodybuilder, Immortal). Shows just the four flat numbers normally, or `base→effective` in green when a skill changes any of them. **Keep this method in sync** if a stat-affecting skill's formula changes in either of those two places — it's a third, independent copy of the same logic for display purposes. `CharacterPanel.RefreshAll` (Stats tab, abaixo) also calls `GetEffectiveStats()` agora — antes mostrava `p.maxHealth`/`str`/`agility`/`speed` crus, então escolher uma skill que afeta stats (ex: Immortal) nunca refletia ali.
+The stats row comes from `PlayerProfile.GetEffectiveStats()` — a preview-only calculation (no live `PlayerCombat`/`PlayerState` needed, since those components are destroyed for this display) that mirrors the subset of `CombatSimulator.ApplySkillStats`/`CombatSceneLoader.ApplySkillStats` affecting HP/str/agility/speed (Vitality, Herculean Strength, Feline Agility, Immortal — Bodybuilder não afeta mais STR, ver tabela **Skills que modificam stats** abaixo). Shows just the four flat numbers normally, or `base→effective` in green when a skill changes any of them. **Keep this method in sync** if a stat-affecting skill's formula changes in either of those two places — it's a third, independent copy of the same logic for display purposes. `CharacterPanel.RefreshAll` (Stats tab, abaixo) also calls `GetEffectiveStats()` agora — antes mostrava `p.maxHealth`/`str`/`agility`/`speed` crus, então escolher uma skill que afeta stats (ex: Immortal) nunca refletia ali.
 
 ### CharacterPanel (3-tab slide-in)
 
@@ -230,77 +230,62 @@ The combo fires `SetTrigger(slashTrigger)` from within the Slashing state. This 
 
 ## Combat Systems
 
-### Fórmula de Dano (multiplicativa, estilo My Brute)
+### Fórmula de Dano (estilo My Brute — STR aditiva, não percentual)
 `PlayerCombat.CalcDamage(isCrit)` / `CombatSimulator.CalcDamage(attacker, isCrit)`:
 
 ```
-finalDamage = Max(1, RoundToInt(weaponBaseDamage × (1 + str/10) × critMultiplier × (1 - defenderArmor)))
+finalDamage = Max(1, RoundToInt((weaponBaseDamage + str) × critMultiplier × sharpMult × (1 - defenderArmor)))
 ```
 
-- `weaponBaseDamage` — `WeaponBaseDamage()`: Unarmed 5, Dagger `Random.Range(7,13)`, Sword `Random.Range(10,18)`, Heavy `Random.Range(30,50)`, outros tipos usam `weaponData.damage` (ou 3 se ≤0).
+STR soma direto no dano base da arma como valor flat (não como multiplicador percentual) — alinhado com o My Brute original, onde cada ponto de STR contribui dano fixo adicional. Era `weaponBaseDamage × (1 + str/10)` (percentual, divergia do original) — redefinida pelo usuário.
+
+- `weaponBaseDamage` — `WeaponBaseDamage()`/`RollWeaponDamage()`: `weaponData.damage` direto (valor fixo configurado no asset, sem range aleatório), ou `3` se ≤0; Unarmed 5. Os ranges hardcoded por tipo (`Random.Range(7,13)` Dagger, `(10,18)` Sword, `(30,50)` Heavy) eram valores padrão do protótipo, de antes de cada arma ter o próprio campo `damage` configurável — removidos.
 - `critMultiplier` — `1f` se não for crítico; senão `weaponData.critDamageMultiplier` (ou `UnarmedStats.CritDamageMultiplier = 1.5f` se desarmado).
-- Lead Skeleton (`×0.85`) é aplicado **depois** do crit e **antes** da armadura, só para armas Heavy.
-- Verificação: STR 4, soco base 5 → `5 × (1 + 4/10) = 7`.
+- `sharpMult` — `1.5f` se Weapon Master + arma com a tag Sharp; senão `1f`.
+- Lead Skeleton (`×0.85`) é aplicado **depois** do crit e **antes** da armadura, só para armas com a tag Blunt.
+- Throw (`CalcThrowDamage`/`ThrowDamage`) **não soma STR** — usa só `weaponBaseDamage` (ver seção **Throw Weapon**).
 
-### Propriedades das Armas (`WeaponData`, inspirado no My Brute)
-Campos em `Assets/Scripts/Controller/WeaponData.cs`. Quando desarmado, usa-se a classe estática `UnarmedStats` (mesmo arquivo) em vez de uma instância de `WeaponData`.
+**Verificação:**
+- Succubus `damage: 14`, STR 4, sem crit/armor/Weapon Master → `(14 + 4) × 1 × 1 × 1 = 18`
+- Succubus `damage: 14`, STR 4, com Weapon Master (Sharp) → `(14 + 4) × 1 × 1.5 × 1 = 27`
+- Desarmado (`damage: 5`), STR 4 → `(5 + 4) × 1 × 1 × 1 = 9`
 
-| Campo | Efeito |
-|---|---|
-| `hitSpeed` | Multiplicador de velocidade da animação de slash: `slashSpeed = PlayerCombat.hitSpeed × weaponData.hitSpeed` |
-| `drawChance` | % chance de pegar esta arma ao pick up (campo reservado — sem mecânica de peso ainda) |
-| `reach` | Soma-se à distância base por tipo em `AttackPosition()` |
-| `critChanceBonus` | Soma-se em `CritChance()` |
-| `critDamageMultiplier` | Multiplicador de dano em crítico (substitui o antigo `×2` fixo) |
-| `evasionBonus` | Soma-se em `DodgeChance()` (bônus do **defensor**) |
-| `dexterityBonus` | Reservado (sem mecânica ainda, como `accuracy` em `PlayerProfile`) |
-| `reversalBonus` | Soma-se em `ReversalChance()` (bônus do **defensor**) — ver seção **Counter e Reversal** |
-| `blockBonus` | Soma-se em `BlockChance()` (bônus do **defensor**) |
-| `accuracyBonus` | Reservado |
-| `disarmBonus` | Soma-se em `DisarmChance()` (bônus do **atacante**) |
-| `comboBonus` | Soma-se em `ComboChance()` (bônus do **atacante**) |
-| `deflectBonus` | Reservado |
+### Tipos de Arma (`WeaponType`, `List<WeaponType>` — até 3 tags por arma)
 
-**Valores por tipo:**
-| Propriedade | Unarmed | Knife/Dagger | Broadsword/Sword | Bumps/Heavy |
+`Assets/Scripts/Controller/WeaponData.cs`. O antigo enum exclusivo (`Sword/Heavy/Dagger/Fast/Slow/Thrown/Block`) foi substituído por um enum simples (`None, Sharp, Blunt, Long, Heavy, Fast, Thrown`) guardado numa **lista** (`public List<WeaponType> types`), não um `[Flags]` bitmask — o Inspector do Unity não tem como esconder os valores automáticos `None`/`Everything` que `[Flags]` gera no dropdown de máscara, então a lista é a forma de deixar o usuário adicionar manualmente cada tag (elemento 0, 1, 2...) sem lixo no dropdown. Uma arma pode ter até 3 tags simultâneas (ex: Halberd = `Long, Heavy, Sharp`, Trombone = `Heavy, Blunt`, mirrorando o My Brute original). `Sword` e `Dagger` se fundiram em `Sharp` — a diferença "adaga vs espada" agora vem de combinar `Sharp` com `Fast` (adaga) ou não (espada). `Slow` e `Block` foram removidos (`Slow` não tinha asset usando; `Block` não é um tipo de arma, era uma categoria antiga de shield). `WeaponData.HasType(flag)` (instance) / `WeaponData.HasType(data, flag)` (static, null-safe) são os helpers de leitura (`types.Contains(flag)`), usados em vez de `switch`/`==`; `OnValidate()` avisa no Console se `types.Count > 3` (não força/limpa automaticamente).
+
+**Cada fórmula de chance abaixo soma os valores-base de todas as tags presentes na arma** (não pega o máximo nem usa mais um "default" genérico — cada bônus vem de uma tag específica; tags sem entrada na tabela contribuem 0):
+
+| Fórmula | Sharp | Fast | Heavy | Thrown |
 |---|---|---|---|---|
-| `hitSpeed` | 1.0 | 2.0 | 1.0 | 0.6 |
-| damage (base) | 5 | 10 (7–13) | 14 (10–18) | 40 (30–50) |
-| `drawChance` | — | 0.33 | 0.33 | 0.33 |
-| `reach` | 0 | 0 | +1 | +1 |
-| `critChanceBonus` | +0.05 | +0.25 | +0.30 | +0.20 |
-| `critDamageMultiplier` | 1.5 | 1.25 | 1.30 | 1.20 |
-| `evasionBonus` | +0.10 | +0.10 | 0 | -0.30 |
-| `dexterityBonus` | +0.20 | +0.50 | 0 | -0.65 |
-| `reversalBonus` | 0 | — | +0.10 | -0.30 |
-| `blockBonus` | -0.25 | — | +0.15 | -0.30 |
-| `accuracyBonus` | 0 | — | 0 | +0.30 |
-| `disarmBonus` | +0.05 | — | +0.15 | +0.10 |
-| `comboBonus` | 0 | +0.30 | 0 | -0.60 |
+| `CritChance` base | 0.05 | 0.03 | 0.03 | 0 |
+| `ComboChance` base | 0.12 | 0.03 | 0.04 | 0 |
+| `DodgeChance` base (arma do defensor) | 0.10 | 0.05 | 0.05 | 0 |
+| `DisarmChance` base | 0.10 | 0.10 | 0.05 | 0 |
+| `BlockChance` base (arma do defensor) | 0.15 | 0.00 | 0.15 | 0 |
+| `ThrowChance` | 0.15 | 0.00 | 0.10 | 1.00 |
 
-Os 5 `WeaponData.asset` existentes (`Satyr1`=Dagger, `Golem3`=Heavy, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie`=Sword) já têm esses valores aplicados. `comboBonus` segue a referência oficial do My Brute (Dagger +30%, Sword 0%, Heavy -40% a -60%) — não é esse o campo que inflava o combo; ver seção **Combo** abaixo (decaimento + clamp) para a correção real.
+`Blunt` e `Long` contribuem 0 em todas essas tabelas — `Blunt` só importa pra Lead Skeleton (-15% dano recebido, ver `WeaponData.IsBlunt`) e pra **não** receber o bônus de Weapon Master; `Long` não tem tabela própria — o bônus de Counter Rate/Reversal de cada arma "Long" é definido manualmente por asset (`reversalBonus`/skills futuras), não por uma constante global.
+
+**Dano base não soma por tag** — `weaponData.damage` tem prioridade absoluta (`RollWeaponDamage(data) => data.damage > 0 ? data.damage : 3`), sem depender de Sharp/Heavy/Fast. Cada `WeaponData` configura seu próprio valor fixo no Inspector; não há mais range aleatório por tipo.
+
+**Alcance não é soma pura** (somar distâncias inteiras por tag não faz sentido físico):
+- **Alcance** (`AttackPosition`/`CalcAttackPosition`): `base = Heavy presente ? 2.8 : 2.0`, depois `-0.5` se Fast presente, depois soma o campo `weaponData.reach` (inalterado). Ex: Sharp só = 2.0; Sharp+Fast = 1.5; Heavy só = 2.8.
+- **Trigger de animação** (`Slashing`/`SlashingDagger`/`SlashingHeavy`): prioridade `Heavy > Fast > default` — `CombatPlayer.SwingTrigger`/`PlayerCombat.HitRoutine`.
+- **Bodybuilder/Lead Skeleton**: checam `HasType(data, Heavy)`/`IsBlunt(data)` em vez de `== WeaponType.Heavy`.
+
+Campos não afetados pela migração (continuam somando direto, sem tabela por tag): `hitSpeed`, `drawChance`, `critChanceBonus`, `critDamageMultiplier`, `evasionBonus`, `dexterityBonus`, `reversalBonus`, `blockBonus`, `accuracyBonus`, `disarmBonus`, `comboBonus`, `deflectBonus` — cada um é um valor manual por asset, somado em cima do resultado das tabelas acima (mesmo padrão de sempre, ver `CombatSimulator`/`PlayerCombat`).
+
+Os 5 `WeaponData.asset` existentes: `Satyr1` = `Sharp, Fast`, `Golem3` = `Heavy, Blunt`, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie` = `Sharp` (trio continua idêntico entre si). As tabelas acima foram calibradas pra reproduzir exatamente os valores de chance/dano/alcance que essas 5 armas já tinham antes da migração. `WeaponHandler` não tem mais uma propriedade `currentType` própria (era um espelho de `data.type`, que não existe mais como valor único) — todo lugar que precisa ler o tipo da arma equipada usa `weaponHandler.CurrentWeaponData` direto com `HasType`/`IsSharp`/`IsBlunt`.
 
 ### Critical Hit
-`CritChance()` no atacante = base por tipo de arma + `weaponData.critChanceBonus` (ou `UnarmedStats.CritChanceBonus`) + `criticalChance` (profile/skills):
-| WeaponType | Chance base |
-|---|---|
-| Dagger | 8% |
-| Sword | 5% |
-| Heavy | 3% |
-| others | 5% |
+`CritChance()` no atacante = soma por tag (ver tabela acima) + `weaponData.critChanceBonus` (ou `UnarmedStats.CritChanceBonus`) + `criticalChance` (profile/skills).
 
-On crit: `critMultiplier = weaponData.critDamageMultiplier` (ver tabela de propriedades acima) entra na fórmula multiplicativa de dano. Popup mostra "CRIT!\n{damage}" em vermelho, fonte 5.
+On crit: `critMultiplier = weaponData.critDamageMultiplier` entra na fórmula multiplicativa de dano. Popup mostra "CRIT!\n{damage}" em vermelho, fonte 5.
 > Future skill **Fierce Brute**: +10% crit permanente.
 
 ### Dodge
-`DodgeChance()` on the attacker, reading the **defender's** weapon type:
-| WeaponType (defender) | Chance |
-|---|---|
-| Fast | 20% |
-| Dagger | 15% |
-| Sword | 10% |
-| Heavy | 5% |
-| others | 10% |
+`DodgeChance()` on the attacker, reading the **defender's** weapon tags (soma por tag, ver tabela acima).
 
 Each agility point above 3 adds +2% dodge, plus the defender's `weaponData.evasionBonus` (or `UnarmedStats.EvasionBonus = +10%` if unarmed) e `defender.evasion` (campo de skill, ex: Untouchable +30%, Ballet Shoes +10%). Same AGI threshold adds +0.8% combo in `ComboChance()` (era +1.5%).
 
@@ -309,30 +294,14 @@ Each agility point above 3 adds +2% dodge, plus the defender's `weaponData.evasi
 When dodge triggers: skip knockback, Hurt animation, and damage. Defender plays `DodgeLeap` (JumpStart animation + `JumpTo` backward by `knockbackDistance`, height 0.4) over `settings.dodgeDuration` (separate field from `hurtDuration` — was tied to it before, making the leap snap almost instantly). Popup shows "ESQUIVA!" in blue. Combo continues normally.
 
 ### Combo
-`ComboChance(comboCount)` no atacante — `comboCount` = quantos hits extra de combo já aconteceram neste turno (0 no 1º hit extra):
-| WeaponType | Chance base |
-|---|---|
-| Fast | 18% |
-| Dagger | 15% |
-| Sword | 12% |
-| Heavy | 4% |
-| outros / desarmado | 5% |
+`ComboChance(comboCount)` no atacante — `comboCount` = quantos hits extra de combo já aconteceram neste turno (0 no 1º hit extra). Base = soma por tag (ver tabela em **Tipos de Arma** acima; desarmado = 5%).
 
-Soma-se `weaponData.comboBonus` (ver tabela de Propriedades das Armas — Dagger +30%, Sword 0%, Heavy -60%) + `0.8%` por ponto de AGI acima de 3 + `comboChanceBonus` (skills, ex: Fists of Fury +20% — Relentless **não** soma mais aqui, foi redefinida para +30% accuracy, ver **Dodge** abaixo). Esse total é limitado por `Mathf.Clamp(total, 0f, 0.60f)` — teto de **60%** (era 35%) — e **só depois** multiplicado pelo decaimento `Mathf.Pow(0.5f, comboCount)`: 1º hit extra usa o valor pleno (até 60%), 2º hit extra usa metade (até 30%), 3º um quarto (até 15%), e assim por diante. Mirror oficial do My Brute, onde a chance de combo cai a cada hit consecutivo do mesmo turno.
+Soma-se `weaponData.comboBonus` (campo manual por asset, referência oficial do My Brute — Satyr1 +0.30, Sword trio 0, Golem3 -0.60) + `0.8%` por ponto de AGI acima de 3 + `comboChanceBonus` (skills, ex: Fists of Fury +20% — Relentless **não** soma mais aqui, foi redefinida para +30% accuracy, ver **Dodge** abaixo). Esse total é limitado por `Mathf.Clamp(total, 0f, 0.60f)` — teto de **60%** (era 35%) — e **só depois** multiplicado pelo decaimento `Mathf.Pow(0.5f, comboCount)`: 1º hit extra usa o valor pleno (até 60%), 2º hit extra usa metade (até 30%), 3º um quarto (até 15%), e assim por diante. Mirror oficial do My Brute, onde a chance de combo cai a cada hit consecutivo do mesmo turno.
 
 Valores antigos (base Fast 40%/Dagger 35%/Sword 25%/Heavy 10%/desarmado 10%, AGI +1.5%/ponto, sem clamp, sem decaimento) deixavam personagens com Dagger e AGI alta combando quase sempre e por muitos hits seguidos (ex: Assassin Guy com Satyr1 chegava a ~71-86% por golpe, repetido indefinidamente). `CombatSimulator.SimulateTurn` loga `[ComboChance] {nome} (P{1|2}, arma=...) hit extra #{n} chance={valor}` a cada checagem do loop de combo, antes do `Roll()` — usar isso para confirmar visualmente o decaimento e validar se algum combo de stats/skills ainda está inflando o valor base (pré-decaimento).
 
 ### Block
-`BlockChance()` no atacante, lendo o tipo de arma do **defensor**:
-| WeaponType (defender) | Chance |
-|---|---|
-| Block | 50% |
-| Dagger | 15% |
-| Sword | 15% |
-| Heavy | 15% |
-| Slow | 5% |
-| Sem arma (`CurrentWeapon == null`) | 0% |
-| outros | 0% |
+`BlockChance()` no atacante, lendo as tags da arma do **defensor** (soma por tag, ver tabela em **Tipos de Arma** acima; sem arma equipada = 0).
 
 Soma-se ainda o `weaponData.blockBonus` do defensor (ou `UnarmedStats.BlockBonus = -25%` se desarmado) e `defender.blockBonus` (campo de skill — Counter Attack `+0.10`, ver **Counter e Reversal** abaixo). **`defender.counter` não entra mais aqui** — ver seção **Counter e Reversal** abaixo (rewired pra uma mecânica própria, em vez de ser só um bônus de block).
 
@@ -380,21 +349,13 @@ Eventos novos: `CombatEventType.Counter`/`Reversal` (`playerIndex` = quem retali
 ### Throw Weapon (Jogar Arma)
 Verificado **no início do `AttackRoutine`, ANTES do melee**, após o idle. Se triggar: atacante arremessa do lugar onde está (sem Run até o defensor); turno encerra sem JumpBack. Se não triggar: executa melee normal (Run → Slash → JumpBack).
 
-`ThrowChance()` por tipo de arma:
-| WeaponType | Chance |
-|---|---|
-| Thrown | 100% |
-| Dagger | 15% |
-| Fast | 15% |
-| Sword | 15% |
-| Heavy | 10% |
-| outros / sem arma | 0% |
+`ThrowChance()` = soma por tag (ver tabela em **Tipos de Arma** acima; sem arma = 0).
 
 Flow:
-1. **Thrown** type: `Unequip()` only (stays in loadout, comes back next cycle). **All others**: `UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()` (removed from runtime loadout for this combat).
+1. **Tag `Thrown`** (`HasType`, não `==` exato — uma arma pode combinar Thrown com outra tag): `Unequip()` only (stays in loadout, comes back next cycle). **All others**: `UnequipPermanent()` = `Unequip()` + `loadout.RemoveCurrentWeapon()` (removed from runtime loadout for this combat).
 2. Create `FlyingWeapon` GameObject with the weapon's `inHandSprite`. `localScale = Vector3.one * weaponData.scale` for **all types** (same scale as the in-hand sprite).
 3. `SetTrigger("Throwing")` fires animator concurrently.
-4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Only `WeaponType.Thrown`** rotates (540°/s). All other types fly with fixed rotation.
+4. `FlyWeapon()` moves sprite in a **straight line** over 0.45s. **Only weapons with the `Thrown` tag** rotate (540°/s). All other types fly with fixed rotation.
 5. On landing: 80% hit (weapon damage + Hurt + knockback), 20% miss — defender plays `DodgeLeap` (same animation as dodge) + gray "MISS!" popup.
 6. After hit/miss: **40%** de chance de equipar arma aleatória imediatamente (`EquipRandom()`); 60% fica desarmado até o próximo turno.
 7. `animationController.SetIdle(true)` — obrigatório ao final do caminho de throw para sair do estado `Throwing` antes do próximo turno. Sem isso, o animator fica preso em `Throwing` (a transição `Throwing → Idle` exige `Idle=true`), causando hurt e slash nas animações erradas quando o oponente ataca nesse intervalo.
@@ -408,7 +369,7 @@ Ambos os personagens começam o combate **desarmados**. Ao iniciar cada turno, s
 - **40%** de chance de executar `EquipRandom()` (pega uma arma aleatória do loadout) + animação `CatchWeapon` (0.6s) → ataca com a arma.
 - **60%** não pega → ataca desarmado (soco).
 
-`EquipRandom()` chama `loadout.GetRandomWeapon()` — seleciona aleatoriamente entre as armas disponíveis no runtime loadout (não ciclicamente). Se o loadout estiver vazio, `GetRandomWeapon()` retorna null e `EquipRandom()`/`EquipNext()` chamam `Unequip()` (limpando `currentType`/`CurrentWeaponData` e disparando `OnWeaponChanged(null)`) em vez de destruir a arma visual sem atualizar esse estado — bug antigo deixava o ícone da `WeaponHUD` destacado em amarelo enquanto o personagem batia desarmado.
+`EquipRandom()` chama `loadout.GetRandomWeapon()` — seleciona aleatoriamente entre as armas disponíveis no runtime loadout (não ciclicamente). Se o loadout estiver vazio, `GetRandomWeapon()` retorna null e `EquipRandom()`/`EquipNext()` chamam `Unequip()` (limpando `CurrentWeaponData` e disparando `OnWeaponChanged(null)`) em vez de destruir a arma visual sem atualizar esse estado — bug antigo deixava o ícone da `WeaponHUD` destacado em amarelo enquanto o personagem batia desarmado.
 `PlayCatchWeapon()` chama `ResetTrigger("Hurt")` antes de disparar o trigger para evitar que Hurt enfileirado de um turno anterior interfira.
 
 `CombatPlayer.ExecuteEvent`'s case `TurnStart` espera `0.1s * t` (era `yield return null`, só 1 frame) antes de processar o resto do turno (incluindo `PickupWeapon`/`CatchWeapon`). A transição "Idle → Catch Weapon" no Animator Controller só existe a partir do estado Idle especificamente (não AnyState — ver Animator Controller Architecture abaixo). Em ações extras por velocidade, o `TurnEnd` do turno anterior chama `SetIdle(true)` e o próximo `TurnStart` do mesmo personagem rodava só 1 frame depois — sem tempo do Animator concluir de fato a transição pro estado Idle antes do trigger `CatchWeapon` ser setado, deixando o trigger pendente até o Animator entrar em Idle (que podia acontecer só depois do run/ataque já ter começado, parecendo a animação de pegar arma tocando no fim do turno). Hipótese de causa, não confirmada visualmente — se persistir, verificar a duração de blend da transição `* → Idle` no `.controller` do personagem.
@@ -418,29 +379,16 @@ When `CurrentWeapon == null`, `HitRoutine` uses the `"Slashing"` trigger (punch)
 `ComboChance()` returns 5% base while unarmed, plus AGI bonus and `UnarmedStats.ComboBonus` (0), com o mesmo clamp (60%) e decaimento (×0.5 por hit extra consecutivo). Ver seção **Combo** acima.
 
 ### STR Attribute
-`PlayerCombat.str` (default 10) feeds directly into the multiplicative damage formula: `(1 + str/10)`. There is no longer a "baseline 10 = no bonus" offset — STR scales damage linearly from 0 (no bonus) upward (STR 10 → ×2.0, STR 4 → ×1.4). See **Fórmula de Dano** above for the full formula (`weaponBaseDamage × (1 + str/10) × critMultiplier × (1 - defenderArmor)`).
+`PlayerCombat.str` (default 10) soma direto (flat) no `weaponBaseDamage`, não como multiplicador percentual — `(weaponBaseDamage + str)`. Era `weaponBaseDamage × (1 + str/10)` (percentual), redefinida pelo usuário pra alinhar com o My Brute original (STR contribui dano fixo adicional por ponto). Ver **Fórmula de Dano** acima para a fórmula completa (`(weaponBaseDamage + str) × critMultiplier × sharpMult × (1 - defenderArmor)`).
 
-| `weaponBaseDamage` | Value |
-|---|---|
-| Unarmed (punch) | `UnarmedStats.Damage = 5` |
-| Heavy weapon | `Random.Range(30, 50)` |
-| Sword | `Random.Range(10, 18)` (~10–17) |
-| Dagger | `Random.Range(7, 13)` (~7–12) |
-| Other types | `weaponData.damage` if > 0, else `3` |
+`weaponBaseDamage` (`RollWeaponDamage`) = `weaponData.damage` direto (valor fixo do asset, sem range aleatório nem dependência de tag), ou `3` se ≤0. Unarmed (punch): `UnarmedStats.Damage = 5`.
 
-Throw damage uses the same ranges WITHOUT the STR multiplier (the weapon flies, not a melee hit).
+Throw damage **não soma STR** (a arma voa, não é um golpe corpo a corpo) — usa só `weaponBaseDamage`.
 
 > Future skill **Iron Fist**: increases unarmed damage.
 
 ### Desarmar
-`DisarmChance()` baseado no tipo de arma do **atacante**:
-| WeaponType (atacante) | Chance |
-|---|---|
-| Dagger | 20% |
-| Fast | 15% |
-| Sword | 10% |
-| Heavy | 5% |
-| outros / desarmado | 0% |
+`DisarmChance()` baseado nas tags da arma do **atacante** (soma por tag, ver tabela em **Tipos de Arma** acima; desarmado = 0).
 
 Soma-se ainda o `weaponData.disarmBonus` do atacante (ou `UnarmedStats.DisarmBonus = +5%` se desarmado — soco também pode desarmar).
 
@@ -458,6 +406,11 @@ Só trigga no **primeiro hit do turno** (`isCombo = false`). `HitRoutine(isCombo
 7. Objeto **não é destruído** — fica no chão pelo resto da luta.
 
 Armas caídas são rastreadas na lista estática `PlayerCombat.fallenWeapons`. `CleanupFallenWeapons()` é chamado por `AttackSequencer.OnCombatEnd` ao declarar o vencedor, destruindo todos os objetos e limpando a lista. Nenhum personagem pode pegar a arma caída — ela é puramente visual.
+
+### Survival
+`ApplyDamage(target, rawDamage)` (`CombatSimulator.cs`) — se o dano aplicaria HP ≤ 0 e a skill ainda não foi usada nesta luta (`target.survivalUsed`), o personagem sobrevive com 1 HP em vez de morrer (uma vez por luta, consome `survivalUsed`). Enquanto `hp == 1` e a skill ainda equipada: `+20% evasion` (`DodgeChance`) e `+20% block` (`BlockChance`) — não há cura no jogo hoje, então na prática esse bônus dura até o fim da luta (ou até o personagem efetivamente morrer num próximo hit que ele não sobrevive de novo).
+
+**Bug visual corrigido**: `CombatEvent.Hit`/`Counter`/`Reversal` carregam `newHp`/`maxHp` direto no próprio evento (não só no `HealthChanged` separado que vem depois). Sem isso, `CombatPlayer.ApplyHealthDelta` ficava aplicando o dano bruto (`finalDamage`, antes de Survival entrar em ação) direto na `HealthSystem` ao vivo — que não tem como saber que Survival ia salvar o personagem em 1 HP — e a barra visualmente ia a 0 (clampada) por um frame, mesmo com o log de combate já registrando corretamente "sobrevive com 1 HP". `ApplyHealthDelta` hoje sempre usa o `newHp` já resolvido pelo simulador (que já leva Survival em conta), nunca o dano bruto do evento.
 
 ### Entry Drop (Entrada em Cena)
 Ao carregar `04_CombatScenePVP`, ambos os personagens aparecem 12 unidades acima de sua `spawnPosition` (fora da câmera) e caem simultaneamente com gravidade (28f) antes do combate começar.
@@ -614,7 +567,7 @@ Exceções (todas no caminho do `CombatSimulator`, quando `useSimulator=true`):
 - `CombatSimulator.Simulate()` loga `[CombatSimulator] Iniciando simulação...` na entrada e `[CombatSimulator] {n} eventos gerados` na saída — confirmação rápida de que o simulador rodou, sem precisar ler o log completo.
 - `CombatSimulator.SimulateTurn` loga `[ComboChance] {nome} (P1|P2, arma=...) hit extra #{n} chance={valor}` a cada checagem do loop de combo (antes do `Roll()`) — instrumentação temporária para validar a fórmula de `ComboChance()` (base + AGI + comboBonus da arma + skills, teto 60%, decaimento ×0.5 por hit extra consecutivo). Remover quando o balanceamento estiver confirmado.
 - `CombatSimulator.EmitSpeedBonus` loga `[SpeedBonus] round={n} {nome} (P1|P2) ação extra, index={i}` sempre que o popup "RAPIDO!" é emitido — instrumentação temporária para confirmar que `index` nunca é 0 (ou seja, nunca dispara na 1ª ação do round, só na 2ª em diante). Remover quando confirmado.
-- `CombatSimulator.CalcDamage` loga `[CalcDamage] {nome} arma=... weaponBaseDamage=... str=... strMult=... critMult=... isCrit=... resultado=...` em **todo** hit normal/combo — instrumentação temporária pra investigar relato de dano muito acima do teto teórico da fórmula (ex: Dagger com STR 4-5 deveria ter teto ~18 normal/~22.5 crítico). `CombatSimulator.CalcThrowDamage` loga `[CalcThrowDamage] arma=... resultado=... (sem STR)` em todo arremesso, pra confirmar que o throw não aplica o multiplicador de STR. Remover os dois quando a causa for confirmada.
+- `CombatSimulator.CalcDamage` loga `[CalcDamage] {nome} arma=... weaponBaseDamage=... str=... critMult=... isCrit=... resultado=...` em **todo** hit normal/combo — confirma os componentes exatos da fórmula `(weaponBaseDamage + str) × critMultiplier × sharpMult`. `CombatSimulator.CalcThrowDamage` loga `[CalcThrowDamage] arma=... resultado=... (sem STR)` em todo arremesso, pra confirmar que o throw não soma STR. Remover os dois quando o balanceamento estiver confirmado.
 
 ### CombatLogFormatter
 `Assets/Scripts/Combat/CombatLogFormatter.cs` — `Format(p1Name, p2Name, List<CombatEvent>)` é puro C# (sem MonoBehaviour) e devolve uma string multi-linha legível: um cabeçalho com os dois nomes, uma linha `--- Turno de {nome} ---` por `TurnStart`, e uma linha por ação relevante (pickup/equip/throw/hit com dano+crit/combo+HP resultante/dodge/block/miss/disarm/drop/speed bonus), terminando em `========== VENCEDOR: {nome} ==========`. `Hit` consome o `HealthChanged` emparelhado (mesmo `targetIndex`, evento seguinte) para anexar o HP resultante na mesma linha. `RunToDefender` e `TurnEnd` não geram linha própria.
@@ -663,7 +616,7 @@ Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Edi
 
 | Campo | Tipo | Default | Onde é usado |
 |---|---|---|---|
-| `str` | int | 10 | Fórmula multiplicativa de dano: `weaponBaseDamage × (1 + str/10) × critMultiplier × (1 − defenderArmor)` (ver Combat Systems → Fórmula de Dano) |
+| `str` | int | 10 | Soma flat no dano base: `(weaponBaseDamage + str) × critMultiplier × sharpMult × (1 − defenderArmor)` (ver Combat Systems → Fórmula de Dano) |
 | `agility` | int | 10 | `DodgeChance()`: +2%/ponto acima de 3, teto 60%; `ComboChance()`: +0.8%/ponto acima de 3, teto total 60% |
 | `speed` | int | 10 | `AttackSequencer.CombatLoop`: acumula debt a cada round; debt >= speed do oponente = ação extra (ver Speed System) |
 | `armor` | float | 0 | Fator `(1 − armor)` na fórmula multiplicativa de dano |
@@ -709,7 +662,7 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 | Extra Thick Skin | `armor += 0.50` |
 | Toughened Skin | `armor += 0.10` |
 | Untouchable | `evasion += 0.30` |
-| Bodybuilder | `strPct += 0.5` |
+| Bodybuilder | `heavyDexterityBonus += 0.10`, `heavyHitSpeedBonus += 0.40` — **não afeta mais STR** (era `strPct += 0.5`/"STR × 1.5", redefinida pelo usuário). Informativo apenas no preview: o bônus real só vale enquanto empunha arma Heavy, checado vivo (`HasType(currentWeaponData, Heavy)`) em `DodgeChance`/`HitRoutine`/`CombatPlayer`, não fixado aqui. |
 | Relentless | `accuracy += 0.30` (ver **Dodge** — reduz a esquiva do defensor; era `comboChanceBonus += 0.15`, redefinida pelo usuário) |
 | Fists of Fury | `comboChanceBonus += 0.20` |
 | Lead Skeleton | `leadSkeleton = true` |
@@ -719,9 +672,12 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 | Sixth Sense | `counter += 0.10` — mesmo campo de Monk |
 | Hostility | `reversal += 0.30` |
 | Monk | `counter += 0.40`, `initiative -= 200`, `hitSpeed = 0` |
+| Martial Arts | `martialArts = true` — dobra `UnarmedStats.Damage` em `WeaponBaseDamage()`/`WeaponBaseDamage(attacker)` |
+| Shock | `disarmChanceBonus += 0.50` (soma em `DisarmChance()`) |
+| Weapon Master | `weaponsMaster = true` — habilita `sharpMult = 1.5` em `CalcDamage` quando a arma tem a tag Sharp (ver **Fórmula de Dano**) |
 
 > `accuracy` agora tem mecânica real (Relentless +0.30, ver **Dodge** em Combat Systems). `reversal` agora tem mecânica real, ver **Counter e Reversal** acima.
-> `hitSpeed = 0` (Monk): `HitRoutine` sai cedo — personagem guarda em vez de atacar.
+> `hitSpeed = 0` (Monk): `HitRoutine`/`SimulateHit` sai cedo — personagem guarda em vez de atacar. Esse guard precisa ser checado **antes** de qualquer outra coisa no próprio turno do atacante — três pontos tinham esse guard ausente ou fora de ordem, fazendo Monk ainda se mover/atacar visualmente em alguns turnos (bug reportado: "saltos quando não deveria se mexer"): (1) o check de Throw em `SimulateTurn`/`AttackRoutine` não olhava pra `hitSpeed`, deixando Monk arremessar arma normalmente; (2) `StrikeRoutine` corria até o adversário antes de `HitRoutine` sair cedo; (3) em `SimulateHit`/`HitRoutine`, o auto-dodge de Ballet Shoes (`defender.firstHitAvoided`) era checado **antes** do guard do Monk — Monk "atacava" (CombatPlayer reposicionava + golpe) só pra ver o oponente Ballet Shoes esquivar de um golpe que o Monk nunca deveria ter desferido, e o jump-back de `TurnEnd`/`ReturnToSpawn` disparava depois só por causa desse deslocamento indevido. Todos os três agora checam `hitSpeed > 0f`/`hitSpeed <= 0f` primeiro, nos dois caminhos (`CombatSimulator.cs` e `PlayerCombat.cs`).
 
 ## Third-Party Plugins
 
@@ -807,7 +763,9 @@ Skills implementadas: ver Roadmap de Skills (Fase 2.5) abaixo.
 - [ ] Pugnacious — chance de contra-atacar após levar dano (mecânica já existe via `reversal`/Reversal — ver Counter e Reversal acima; só falta criar o SkillData "Pugnacious" que soma nesse campo, mesmo padrão da Deity)
 - [x] Sixth Sense — +10% counter rate (counter += 0.10, mesma mecânica do Monk — não é mais esquiva, mecânica definida pelo usuário)
 - [x] Hostility — +30% reversal (reversal += 0.30, mecânica definida pelo usuário — não é mais "equipa a arma mais forte primeiro", movida de Passivas de Armas pra aqui por ser uma mecânica de combate, não de arma)
-- [ ] Iron Head — desarma o adversário com a cabeça ao levar hit
+- [x] Monk — +40% counter rate, -200 iniciativa, nunca ataca (guarda) (counter += 0.40, initiative -= 200, hitSpeed = 0; ver **Pegar Arma/Combat Systems → `hitSpeed = 0` (Monk)** pro fix do guard que precisava ser checado antes de Throw/Ballet Shoes/Run pra ele nunca se mover no próprio turno)
+- [x] Shock — +50% chance de desarmar o adversário a cada ataque (disarmChanceBonus += 0.50, soma em `DisarmChance()`)
+- [x] Iron Head — +40% chance de derrubar a arma do atacante ao sofrer um hit (qualquer hit, incluindo combo) e interrompe o resto do combo do atacante (mesmo `interrupted = true` do Counter — ver **Counter e Reversal**)
 - [ ] Sabotage — remove permanentemente uma arma do adversário ao acertar
 - [ ] Thief — rouba a arma do adversário ao acertar
 - [x] Untouchable — +30% evasion (era 25%, rebalanceada pelo usuário)
@@ -820,7 +778,7 @@ Skills implementadas: ver Roadmap de Skills (Fase 2.5) abaixo.
 - [x] Lead Skeleton — -15% dano de armas Heavy (leadSkeleton = true)
 - [x] Extra Thick Skin — armor += 0.50 (50% redução de dano)
 - [x] Toughened Skin — +10% armor (armor += 0.10, mecânica definida pelo usuário; skill não tinha SkillDef no gerador antes, adicionada do zero junto da implementação)
-- [ ] Survival — sobrevive com 1 HP uma vez por luta
+- [x] Survival — sobrevive com 1 HP uma vez por luta (`survivalUsed`, ver seção própria **Survival** em Combat Systems), +20% evasion/+20% block enquanto em 1 HP
 - [x] Ballet Shoes — evasion +10%, primeiro golpe automaticamente esquivado
 
 #### Passivas de Stats
@@ -835,7 +793,8 @@ Skills implementadas: ver Roadmap de Skills (Fase 2.5) abaixo.
 - [ ] Determination — +STR conforme perde HP
 
 #### Passivas de Armas
-- [ ] Weapon Master — +dano com qualquer arma
+- [x] Weapon Master — +50% dano com arma afiada (tag Sharp) (`weaponsMaster = true`, ver `sharpMult` em **Fórmula de Dano**; era "+dano com qualquer arma" no roadmap original, redefinida pra só Sharp)
+- [x] Martial Arts — +100% dano desarmado (`martialArts = true`, dobra `UnarmedStats.Damage` em `WeaponBaseDamage()`; era "combo de socos desarmado melhorado" no roadmap original, redefinida pelo usuário)
 - [ ] Strong Arm — +dano com armas Heavy
 - [ ] Master of Arms — +dano com armas Melee
 - [ ] Weapon Tampering — reduz dano das armas inimigas
@@ -993,5 +952,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Progresso
 - Total: 87 tarefas | Concluídas: 35
-- Última atualização: 2026-06-18 (Skills rebalanceadas/redefinidas nesta sessão: Armour (+25% armor, -15% SPD, era só +30% armor), Untouchable (+30% evasion, era +25%), Relentless (substituída — agora +30% accuracy/reduz esquiva do oponente, era +15% combo chance), Fists of Fury (nova, +20% combo chance, herdou o papel da Relentless), Counter Attack (substituída — agora +10% block + 90% reversal exclusivo de pós-block via novo campo reversalAfterBlock, era +40% counter/cancela hit), Toughened Skin (nova, +10% armor); teto de ComboChance subiu de 35% para 60%; DodgeChance ganhou o termo accuracy (subtrai do atacante, oposto de evasion) e SimulateHit/SimulateRetaliation tiveram a ordem de checagem invertida de Esquiva→Block para Block→Esquiva; CharacterPanel.Stats cresceu de 10 para 15 linhas (ACCURACY, ARMOR, BLOCK, REVERSAL AFTER BLOCK adicionadas) e PlayerProfile.GetEffectiveStats() é agora uma 15-tupla)
-- Última atualização anterior: 2026-06-17 (Botão de velocidade agora alterna 1x↔1.5x (era 2x) e a cena de combate ganhou um EventSystem em runtime, sem o qual nenhum botão do CombatHUD recebia clique; fix de animação de combo retriggerando o Slashing mid-clip; hurtDuration 0.07→0.15s e novo campo dodgeDuration=0.25s separado dele; novo campo comboDelay=0.15s entre cada ação de um combo (hit/esquiva/bloqueio/erro), evitando que combos de 6 ações parecessem só 2-3 por falta de espaçamento; fix de health2 sendo inicializado com player2MaxHealth (50) dessincronizado de player2Profile.maxHealth (70), causando dano aplicado incorretamente; fix de WeaponHandler.EquipRandom/EquipNext destruindo a arma visual sem chamar Unequip quando o loadout esgota, deixando o ícone da WeaponHUD preso em amarelo; ThrowWeapon no CombatPlayer agora cria um FlyingWeapon visível voando até o defensor via PlayerCombat.FlyWeapon (tornado public) e usa UnequipPermanent para armas não-Thrown, removendo o ícone da WeaponHUD; dano/popup/hurt do evento Hit agora aplicam tudo no mesmo instante do impacto, em vez do dano só refletir na barra de vida quando o HealthChanged separado era processado depois; novo campo CombatEvent.isThrow sincroniza o hit de arma arremessada com a chegada do projétil (sem swing/espera de melee redundante); Dodge e Block agora também disparam o swing do atacante sincronizado com a reação do defensor, que antes não tinha nenhuma animação de ataque associada; fix de player1Combat.skills nunca sendo preenchido a partir de profile.skills — fazia a vida visual do Player1 ignorar bônus de skill (ex: Immortal) que o CombatSimulator aplicava corretamente, causando a barra zerar e travar bem antes do Player1 "morrer" de fato no simulador; skill Immortal rebalanceada de +100 HP/×0.5 runSpeed para ×3.5 HP (+250%) e ×0.75 (-25%) em str/agility/speed, aplicada em CombatSimulator e CombatSceneLoader; novo PlayerProfile.GetEffectiveStats() mostra esses stats com bônus de skill já calculados no preview do Menu Principal)
+- Última atualização: 2026-06-19 (WeaponType migrado de enum único para `List<WeaponType>` com até 3 tags por arma — Sharp/Blunt/Long/Heavy/Fast/Thrown somados por tabela em vez de switch por tipo exclusivo, ver **Tipos de Arma**; fórmula de dano redefinida de multiplicativa para STR aditiva (`(weaponBaseDamage + str) × critMultiplier × sharpMult`, era `weaponBaseDamage × (1 + str/10)`); `RollWeaponDamage` simplificado pra usar `weaponData.damage` direto, sem mais ranges hardcoded por tipo; `PlayerProfile.GetWeaponDamageRanges/GetBaseSharpDamageRanges` (preview da aba Stats) atualizados pra mesma fórmula aditiva e pros valores reais dos assets, em vez do range antigo do protótipo; fix do guard do Monk (`hitSpeed = 0`) que não era checado antes do Throw/Ballet Shoes/Run no próprio turno, fazendo Monk ainda se mover/atacar visualmente e levar um jump-back indevido em alguns turnos; roadmap de skills corrigido — Monk, Shock, Iron Head, Survival, Weapon Master e Martial Arts já estavam implementados mas constavam como `[ ]`/ausentes; nova seção **Survival** documentando o fix de HP mostrando 0 visualmente quando a skill deveria salvar em 1 HP; entrada da Bodybuilder na tabela de skills corrigida (não afeta mais STR, redefinida pra bônus condicionados a arma Heavy)
+- Última atualização anterior: 2026-06-18 (Skills rebalanceadas/redefinidas: Armour (+25% armor, -15% SPD, era só +30% armor), Untouchable (+30% evasion, era +25%), Relentless (substituída — agora +30% accuracy/reduz esquiva do oponente, era +15% combo chance), Fists of Fury (nova, +20% combo chance, herdou o papel da Relentless), Counter Attack (substituída — agora +10% block + 90% reversal exclusivo de pós-block via novo campo reversalAfterBlock, era +40% counter/cancela hit), Toughened Skin (nova, +10% armor); teto de ComboChance subiu de 35% para 60%; DodgeChance ganhou o termo accuracy (subtrai do atacante, oposto de evasion) e SimulateHit/SimulateRetaliation tiveram a ordem de checagem invertida de Esquiva→Block para Block→Esquiva; CharacterPanel.Stats cresceu de 10 para 15 linhas (ACCURACY, ARMOR, BLOCK, REVERSAL AFTER BLOCK adicionadas) e PlayerProfile.GetEffectiveStats() é agora uma 15-tupla)

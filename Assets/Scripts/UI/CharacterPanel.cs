@@ -13,7 +13,8 @@ public class CharacterPanel : MonoBehaviour
 
     // Stats tab
     private TMP_Text _charName, _levelText;
-    private TMP_Text _hpVal, _strVal, _agiVal, _spdVal, _initVal, _critChanceVal, _critDmgVal, _evasionVal, _reversalVal, _counterVal, _comboVal, _armorVal, _accuracyVal, _blockVal, _reversalAfterBlockVal;
+    private TMP_Text _hpVal, _strVal, _agiVal, _spdVal, _initVal, _critChanceVal, _critDmgVal, _evasionVal, _reversalVal, _counterVal, _comboVal, _armorVal, _accuracyVal, _blockVal, _reversalAfterBlockVal, _disarmVal;
+    private TMP_Text _unarmedDmgVal, _weaponSharpVal, _daggerDmgVal, _swordDmgVal, _heavyDmgVal, _heavyDexVal, _heavyHitSpeedVal;
     private TMP_Text      _battlesText, _winRateText;
 
     // Skills tab
@@ -257,6 +258,25 @@ public class CharacterPanel : MonoBehaviour
         _armorVal      = BuildStatRow(content.gameObject, "ARMOR");
         _blockVal      = BuildStatRow(content.gameObject, "BLOCK");
         _reversalAfterBlockVal = BuildStatRow(content.gameObject, "REVERSAL AFTER BLOCK");
+        _disarmVal             = BuildStatRow(content.gameObject, "DISARM");
+
+        MakeSep(content);
+
+        // Dano normal (sem crítico) por arquétipo de arma — ver PlayerProfile.GetWeaponDamageRanges().
+        // Desarmado e ARMA AFIADA (logo abaixo, "weapons: none" → "weapons: sharp") usam o
+        // padrão base→efetivo pra destacar bônus de skill (Martial Arts dobra o desarmado;
+        // Weapon Master dá +50% em armas Sharp); Pesado mostra o valor direto, já que nenhuma
+        // skill o modifica ainda.
+        _unarmedDmgVal   = BuildStatRow(content.gameObject, "DANO DESARMADO");
+        _weaponSharpVal  = BuildStatRow(content.gameObject, "ARMA AFIADA (BÔNUS)");
+        _daggerDmgVal    = BuildStatRow(content.gameObject, "DANO ADAGA");
+        _swordDmgVal     = BuildStatRow(content.gameObject, "DANO ESPADA");
+        _heavyDmgVal     = BuildStatRow(content.gameObject, "DANO PESADO");
+        // Bodybuilder: bônus só enquanto empunha Heavy — mostrados aqui, agrupados com DANO
+        // PESADO, mesmo padrão informativo de ARMA AFIADA (a UI não sabe qual arma está
+        // equipada agora, então só confirma a magnitude da skill).
+        _heavyDexVal      = BuildStatRow(content.gameObject, "DEXTERITY (HEAVY)");
+        _heavyHitSpeedVal = BuildStatRow(content.gameObject, "HIT SPEED (HEAVY)");
 
         MakeSep(content);
 
@@ -374,7 +394,7 @@ public class CharacterPanel : MonoBehaviour
         // e subtrai STR/AGI/SPD), mesma lógica de PlayerProfile.GetEffectiveStats() usada no
         // preview do menu principal. Antes mostrava p.maxHealth/str/agility/speed crus, então
         // escolher uma skill que afeta stats nunca aparecia aqui.
-        var (effHp, effStr, effAgi, effSpd, effInit, effCritChance, effCritDmg, effEvasion, effReversal, effCounter, effCombo, effArmor, effAccuracy, effBlock, effReversalAfterBlock) = p.GetEffectiveStats();
+        var (effHp, effStr, effAgi, effSpd, effInit, effCritChance, effCritDmg, effEvasion, effReversal, effCounter, effCombo, effArmor, effAccuracy, effBlock, effReversalAfterBlock, effDisarm, effSharpDmg, effHeavyDex, effHeavyHitSpeed) = p.GetEffectiveStats();
         SetStatValue(_hpVal,   p.maxHealth,  effHp);
         SetStatValue(_strVal,  p.str,        effStr);
         SetStatValue(_agiVal,  p.agility,    effAgi);
@@ -390,6 +410,18 @@ public class CharacterPanel : MonoBehaviour
         SetStatValuePercent(_comboVal,      0f,                effCombo);
         SetStatValuePercent(_blockVal,              p.blockBonus,          effBlock);
         SetStatValuePercent(_reversalAfterBlockVal, p.reversalAfterBlock,  effReversalAfterBlock);
+        SetStatValuePercent(_disarmVal,             0f,                    effDisarm);
+        SetStatValuePercent(_weaponSharpVal,        0f,                    effSharpDmg);
+
+        var dmg     = p.GetWeaponDamageRanges();
+        var baseDmg = p.GetBaseSharpDamageRanges();
+        int baseUnarmedDmg = Mathf.Max(1, UnarmedStats.Damage + effStr);
+        SetStatValue(_unarmedDmgVal, baseUnarmedDmg, dmg.unarmedMin);
+        SetStatRangeWithBase(_daggerDmgVal, baseDmg.daggerMin, baseDmg.daggerMax, dmg.daggerMin, dmg.daggerMax);
+        SetStatRangeWithBase(_swordDmgVal,  baseDmg.swordMin,  baseDmg.swordMax,  dmg.swordMin,  dmg.swordMax);
+        SetStatRange(_heavyDmgVal, dmg.heavyMin, dmg.heavyMax);
+        SetStatValuePercent(_heavyDexVal,      0f, effHeavyDex);
+        SetStatValuePercent(_heavyHitSpeedVal, 0f, effHeavyHitSpeed);
 
         _battlesText.text = $"⚡  Batalhas hoje:  {p.battlesRemaining} / 6";
         _winRateText.text  = $"🏆  Win Rate:  {p.winRate:F1}%";
@@ -427,6 +459,31 @@ public class CharacterPanel : MonoBehaviour
         else
         {
             label.text = $"{baseValue:P0}→<color=#7CD27C>{effectiveValue:P0}</color>";
+            label.fontSize = 13;
+        }
+    }
+
+    // Faixa de dano min–max sem highlight (nenhuma skill modifica Pesado ainda).
+    private static void SetStatRange(TMP_Text label, int min, int max)
+    {
+        label.text = min == max ? $"{min}" : $"{min}–{max}";
+        label.fontSize = 16;
+    }
+
+    // Mesmo padrão base→efetivo de SetStatValue, mas para uma faixa min–max (Adaga/Espada,
+    // afetadas por Weapon Master).
+    private static void SetStatRangeWithBase(TMP_Text label, int baseMin, int baseMax, int effMin, int effMax)
+    {
+        if (baseMin == effMin && baseMax == effMax)
+        {
+            label.text = baseMin == baseMax ? $"{baseMin}" : $"{baseMin}–{baseMax}";
+            label.fontSize = 16;
+        }
+        else
+        {
+            string baseStr = baseMin == baseMax ? $"{baseMin}" : $"{baseMin}–{baseMax}";
+            string effStr  = effMin  == effMax  ? $"{effMin}"  : $"{effMin}–{effMax}";
+            label.text = $"{baseStr}→<color=#7CD27C>{effStr}</color>";
             label.fontSize = 13;
         }
     }
@@ -510,7 +567,7 @@ public class CharacterPanel : MonoBehaviour
         irt2.anchorMin = Vector2.zero; irt2.anchorMax = Vector2.one;
         irt2.offsetMin = new Vector2(68f, 4f); irt2.offsetMax = new Vector2(-8f, -4f);
         var info = infoGo.AddComponent<TextMeshProUGUI>();
-        info.text = $"<b>{w.weaponName}</b>\n<size=13><color=#C8A044>{w.type}</color>  DMG {w.damage}</size>";
+        info.text = $"<b>{w.weaponName}</b>\n<size=13><color=#C8A044>{string.Join(", ", w.types)}</color>  DMG {w.damage}</size>";
         info.fontSize = 16; info.color = Color.white;
         info.alignment = TextAlignmentOptions.MidlineLeft;
     }

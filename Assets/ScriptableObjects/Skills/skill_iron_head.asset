@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: skill_iron_head
   m_EditorClassIdentifier: 
   skillName: Iron Head
-  description: "Desarma o advers\xE1rio com a cabe\xE7a ao levar hit"
-  icon: {fileID: 0}
+  description: +40% chance de derrubar a arma do atacante ao sofrer um hit
+  icon: {fileID: 21300000, guid: 800b3715f23b8674a91f122e068df9f6, type: 3}
   category: 0
   activationType: 0
   usesPerFight: 1

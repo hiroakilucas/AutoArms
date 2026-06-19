@@ -130,7 +130,7 @@ public class CombatResultPanel : MonoBehaviour
                 "Velocidade +2"
             }[attrIndex],
             Kind.Skill  => skill?.description ?? "",
-            Kind.Weapon => weapon != null ? $"{weapon.type} • {weapon.damage} dano" : "",
+            Kind.Weapon => weapon != null ? $"{string.Join(", ", weapon.types)} • {weapon.damage} dano" : "",
             _           => ""
         };
 

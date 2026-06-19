@@ -276,11 +276,9 @@ public class CombatSceneLoader : MonoBehaviour
             combat.LogSkillCheck("Immortal", true, "hp% += 250%, str/agi/speed% -= 25%");
         }
 
-        if (combat.HasSkill("Bodybuilder"))
-        {
-            strPct += 0.5f;
-            combat.LogSkillCheck("Bodybuilder", true, "str% += 50%");
-        }
+        // Bodybuilder (redefinida — era strPct += 0.5f/"STR × 1.5"): +10% evasion e +40% hit
+        // speed enquanto empunha Heavy, checado vivo (DodgeChance/CombatPlayer), sem estado
+        // fixo aqui já que a arma equipada pode trocar durante a luta.
 
         if (combat.HasSkill("Armour"))
         {
@@ -350,8 +348,12 @@ public class CombatSceneLoader : MonoBehaviour
 
         if (combat.HasSkill("Lead Skeleton"))
         {
+            // Redefinida — antes só dava -15% dano de Heavy. Agora também +15% armor, -15%
+            // evasion (floor em 0 garantido pelo clamp incondicional de evasionPct abaixo).
             combat.leadSkeleton = true;
-            combat.LogSkillCheck("Lead Skeleton", true, "heavy damage reduced by 15%");
+            combat.armor   += 0.15f;
+            combat.evasion -= 0.15f;
+            combat.LogSkillCheck("Lead Skeleton", true, $"armor → {combat.armor:P0}, evasion → {combat.evasion:P0}, blunt damage ×0.85");
         }
 
         if (combat.HasSkill("Ballet Shoes"))
@@ -395,13 +397,33 @@ public class CombatSceneLoader : MonoBehaviour
             combat.LogSkillCheck("Monk", true, $"counter +40%, initiative −200, hitSpeed = 0");
         }
 
-        // Aplicado por último, depois de Untouchable/Ballet Shoes já terem somado evasion —
-        // garante que Deity zere o total mesmo que outra skill tenha adicionado evasion antes.
-        if (evasionPct != 0f)
+        if (combat.HasSkill("Martial Arts"))
+        {
+            combat.martialArts = true;
+            combat.LogSkillCheck("Martial Arts", true, "unarmed damage ×2");
+        }
+
+        if (combat.HasSkill("Shock"))
+        {
+            combat.disarmChanceBonus += 0.50f;
+            combat.LogSkillCheck("Shock", true, $"disarmChanceBonus → {combat.disarmChanceBonus:P0}");
+        }
+
+        if (combat.HasSkill("Weapon Master"))
+        {
+            combat.weaponsMaster = true;
+            combat.LogSkillCheck("Weapon Master", true, "+50% damage with sharp-tagged weapons");
+        }
+
+        // Aplicado por último, depois de Untouchable/Ballet Shoes/Lead Skeleton já terem somado
+        // ou subtraído evasion — garante que Deity zere o total mesmo que outra skill já tenha
+        // alterado evasion antes. Incondicional (não só quando evasionPct != 0) pra também
+        // garantir o floor em 0 quando só Lead Skeleton (-15% flat) deixa o total negativo.
         {
             float prevEvasion = combat.evasion;
             combat.evasion = Mathf.Max(0f, combat.evasion * (1f + evasionPct));
-            combat.LogSkillCheck("EvasionPercent", true, $"evasion {prevEvasion:P0} → {combat.evasion:P0}");
+            if (combat.evasion != prevEvasion)
+                combat.LogSkillCheck("EvasionPercent", true, $"evasion {prevEvasion:P0} → {combat.evasion:P0}");
         }
 
         return hp;

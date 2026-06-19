@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [CreateAssetMenu(menuName = "Game/Weapon Data")]
 public class WeaponData : ScriptableObject
@@ -9,7 +10,11 @@ public class WeaponData : ScriptableObject
     public int damage;
     public float speedModifier;
 
-    public WeaponType type;            // tipo da arma
+    // Lista em vez de [Flags] enum — o Inspector do Unity não tem um jeito limpo de esconder
+    // os valores automáticos None/Everything que [Flags] gera no dropdown de máscara. Com uma
+    // lista, o usuário adiciona manualmente cada tag (elemento 0, 1, 2...) — até 3 por arma,
+    // ver OnValidate abaixo.
+    public List<WeaponType> types = new List<WeaponType>();
     [Min(0.01f)]
     public float scale = 1f;      // tamanho arma
 
@@ -27,17 +32,45 @@ public class WeaponData : ScriptableObject
     public float disarmBonus = 0f;
     public float comboBonus = 0f;
     public float deflectBonus = 0f;
+
+    // Checa se esta arma carrega a tag `flag` — uma arma pode ter até 3 tags simultâneas na
+    // lista `types` (ex: Halberd = Long+Heavy+Sharp).
+    public bool HasType(WeaponType flag) => types != null && types.Contains(flag);
+    public static bool HasType(WeaponData data, WeaponType flag) => data != null && data.HasType(flag);
+
+    // Usado por Weapon Master (+50% dano com arma "sharp").
+    public bool IsSharp() => HasType(WeaponType.Sharp);
+    public static bool IsSharp(WeaponData data) => data != null && data.IsSharp();
+
+    // Usado por Lead Skeleton (-15% dano recebido de arma blunt).
+    public bool IsBlunt() => HasType(WeaponType.Blunt);
+    public static bool IsBlunt(WeaponData data) => data != null && data.IsBlunt();
+
+    // Limite informal de 3 tags por arma (espelha o My Brute original, ex: Halberd = 3 tags) —
+    // só avisa no Inspector, não força/limpa automaticamente (o usuário escolhe qual remover).
+    private void OnValidate()
+    {
+        if (types != null && types.Count > 3)
+            Debug.LogWarning($"[WeaponData] {name}: {types.Count} tags em WeaponType (máximo recomendado: 3).");
+    }
 }
 
+// Tipos do My Brute original. Uma arma pode combinar até 3 (ex: Halberd = Long+Heavy+Sharp,
+// Trombone = Heavy+Blunt) via WeaponData.types (List<WeaponType>, não [Flags] bitmask — o
+// Inspector do Unity não some os valores automáticos None/Everything que [Flags] gera no
+// dropdown de máscara). Substituiu o enum exclusivo antigo (Sword/Heavy/Dagger/Fast/Slow/
+// Thrown/Block) — Sword e Dagger se fundiram em Sharp (a distinção "adaga vs espada" agora
+// vem de combinar Sharp com Fast ou não); Slow e Block foram removidos (Slow não tinha asset
+// usando; Block não é um tipo de arma, era uma categoria antiga de shield).
 public enum WeaponType
 {
-    Sword   = 0,
-    Heavy   = 1,
-    Dagger  = 2,
-    Fast    = 3,
-    Slow    = 4,
-    Thrown  = 5,
-    Block   = 6,
+    None   = 0,
+    Sharp,
+    Blunt,
+    Long,
+    Heavy,
+    Fast,
+    Thrown,
 }
 
 // Propriedades do combate desarmado (sem WeaponData associado) — valores do My Brute.

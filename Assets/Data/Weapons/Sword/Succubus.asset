@@ -15,9 +15,9 @@ MonoBehaviour:
   weaponName: Succubus
   icon: {fileID: 21300000, guid: e6873318be738f448b1e595df89e60c4, type: 3}
   inHandSprite: {fileID: 21300000, guid: e6873318be738f448b1e595df89e60c4, type: 3}
-  damage: 14
+  damage: 10
   speedModifier: 0.5
-  type: 0
+  types: 01000000
   scale: 1.75
   hitSpeed: 1
   drawChance: 0.33

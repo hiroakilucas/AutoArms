@@ -40,16 +40,19 @@ public class PlayerLoadout : MonoBehaviour
         return runtimeWeapons[currentIndex];
     }
 
-    // Permanently removes the weapon at currentIndex from this combat's loadout.
-    // Validates that the slot still holds `expected` before removing — guards against index drift.
+    // Permanently removes `expected` from this combat's loadout. Looks it up by reference
+    // instead of trusting currentIndex — CombatPlayer equips weapons via WeaponHandler.EquipSpecific
+    // (to match whatever CombatSimulator picked), which never advances currentIndex, so it stays
+    // stuck at -1 in the simulator-driven path. Falling back to currentIndex only when no
+    // `expected` is given keeps the old cycling behavior (EquipNext/EquipRandom) working too.
     // Does not affect the ScriptableObject asset.
     public void RemoveCurrentWeapon(WeaponData expected = null)
     {
         EnsureRuntime();
-        if (currentIndex < 0 || currentIndex >= runtimeWeapons.Count) return;
-        if (expected != null && runtimeWeapons[currentIndex] != expected) return;
-        runtimeWeapons.RemoveAt(currentIndex);
-        currentIndex--;
+        int idx = expected != null ? runtimeWeapons.IndexOf(expected) : currentIndex;
+        if (idx < 0 || idx >= runtimeWeapons.Count) return;
+        runtimeWeapons.RemoveAt(idx);
+        if (idx <= currentIndex) currentIndex--;
         OnWeaponsChanged?.Invoke();
     }
 }
