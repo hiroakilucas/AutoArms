@@ -9,6 +9,8 @@ public class CombatPlayer : MonoBehaviour
     [HideInInspector] public PlayerCombat    p1Combat;
     [HideInInspector] public PlayerCombat    p2Combat;
     [HideInInspector] public AttackSequencer sequencer;
+    [HideInInspector] public WeaponHUD       p1WeaponHUD;
+    [HideInInspector] public WeaponHUD       p2WeaponHUD;
 
     private List<CombatEvent> _events;
     private float             _playbackSpeed = 1f;
@@ -75,6 +77,41 @@ public class CombatPlayer : MonoBehaviour
 
         switch (evt.type)
         {
+            case CombatEventType.Saboteur:
+                // Pré-fight, emitido antes do 1º TurnStart — popup "SABOTAGE!" acima da
+                // vítima logo no início da animação, antes de qualquer ação de combate. A
+                // arma destruída também cai do próprio ícone na WeaponHUD (abaixo da barra de
+                // vida) até o chão, igual a um Disarm normal — sem isso, o ícone continuava
+                // visível mesmo com a arma já removida do loadout do simulador.
+                if (defender != null)
+                {
+                    // Força o layout group a recalcular antes de ler a posição do ícone —
+                    // RectTransform.position só reflete o resultado final do HorizontalLayoutGroup
+                    // depois de um passe de layout; sem isso, ler a posição logo após o frame em
+                    // que a WeaponHUD foi montada podia pegar um valor desatualizado/zerado.
+                    Canvas.ForceUpdateCanvases();
+
+                    var weaponHud  = GetWeaponHUD(evt.targetIndex);
+                    var weaponData = FindWeaponByName(defender.weaponHandler.loadout, evt.weaponName);
+                    Vector3? iconScreenPos = weaponHud?.GetIconScreenPosition(evt.weaponName);
+
+                    if (weaponHud != null && weaponData != null && iconScreenPos.HasValue && Camera.main != null)
+                    {
+                        weaponHud.RemoveWeapon(weaponData);
+                        float depth = defender.transform.position.z - Camera.main.transform.position.z;
+                        Vector3 startWorldPos = Camera.main.ScreenToWorldPoint(
+                            new Vector3(iconScreenPos.Value.x, iconScreenPos.Value.y, depth));
+                        StartCoroutine(PlayerCombat.DropWeaponFromHud(defender, weaponData, startWorldPos));
+                    }
+                    else
+                    {
+                        Debug.LogError($"[Saboteur] Não foi possível animar a queda da arma destruída ({evt.weaponName}): weaponHud={weaponHud != null}, weaponData={weaponData != null}, iconScreenPos={iconScreenPos.HasValue}, Camera.main={Camera.main != null}");
+                    }
+                }
+                DamagePopup.SpawnSabotage((defender?.transform.position ?? Vector3.zero) + Vector3.up * 1.5f);
+                yield return new WaitForSeconds(0.6f * t);
+                break;
+
             case CombatEventType.TurnStart:
                 // Pequeno buffer antes de qualquer PickupWeapon/CatchWeapon deste turno.
                 // A transição "Idle → Catch Weapon" no Animator só existe a partir do
@@ -274,18 +311,11 @@ public class CombatPlayer : MonoBehaviour
                     float blockSwingMult = SwingSpeedMultiplier(attacker);
                     float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / blockSwingMult;
 
-                    // Hideaway: bloqueio de arremesso — atacante já está desarmado (acabou de
-                    // arremessar a arma), sem sentido repetir um swing de melee nem esperar o
-                    // slashHalf de novo (mesmo motivo do Hit pulando esses passos quando
-                    // evt.isThrow, ver case Hit acima).
-                    if (!evt.isThrow)
-                    {
-                        // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
-                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
-                        if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
-                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
-                        yield return new WaitForSeconds(slashHalf);
-                    }
+                    // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
+                    yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
+                    attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                    yield return new WaitForSeconds(slashHalf);
 
                     Vector3 blockPopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
@@ -299,11 +329,8 @@ public class CombatPlayer : MonoBehaviour
                     StartCoroutine(defender.Knockback(blockDir, kbDist, kbDur));
                     yield return StartCoroutine(defender.animationController.PlayBlock(0.36666667f * t));
 
-                    if (!evt.isThrow)
-                    {
-                        yield return new WaitForSeconds(slashHalf);
-                        if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
-                    }
+                    yield return new WaitForSeconds(slashHalf);
+                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -366,19 +393,14 @@ public class CombatPlayer : MonoBehaviour
                         ? inHandWeapon.transform.lossyScale
                         : (attacker.weaponHandler.handBone != null ? attacker.weaponHandler.handBone.lossyScale : Vector3.one) * (weaponData?.scale ?? 1f);
 
-                    // Mirrors CombatSimulator.SimulateThrow: Hideaway nunca desequipa — a arma
-                    // fica na mão o turno inteiro, só a réplica voadora abaixo representa o
-                    // arremesso. Sem a skill: non-Thrown weapons are removed from the loadout
-                    // permanently (so the icon also disappears from WeaponHUD); a Thrown weapon
-                    // just unequips, since it can be picked up/re-equipped later.
-                    bool keepsWeapon = weaponData != null && attacker.HasSkill("Hideaway");
-                    if (!keepsWeapon)
-                    {
-                        if (weaponData != null && !WeaponData.HasType(weaponData, WeaponType.Thrown))
-                            attacker.weaponHandler.UnequipPermanent();
-                        else
-                            attacker.weaponHandler.Unequip();
-                    }
+                    // Mirrors CombatSimulator.SimulateThrow: a arma some da mão (Unequip), mas
+                    // Hideaway faz ela ficar no loadout igual a uma arma Thrown normal (pode ser
+                    // pega de novo num pickup futuro) mesmo sem ter a tag. Sem a skill e sem a
+                    // tag Thrown, sai do loadout pra sempre (UnequipPermanent — some do WeaponHUD).
+                    if (weaponData != null && !WeaponData.HasType(weaponData, WeaponType.Thrown) && !attacker.HasSkill("Hideaway"))
+                        attacker.weaponHandler.UnequipPermanent();
+                    else
+                        attacker.weaponHandler.Unequip();
                     // Idle=false antes do trigger (mesmo padrão de PlayCatchWeapon) — garante que
                     // "Any State → Throwing" dispara mesmo que o frame anterior já tivesse
                     // deixado Idle=true de um throw anterior neste mesmo turno.
@@ -416,13 +438,10 @@ public class CombatPlayer : MonoBehaviour
 
                     // Sai do estado Throwing assim que o arremesso termina — a transição
                     // Throwing → Idle exige Idle=true e CanTransitionToSelf=0 (não reentra em si
-                    // mesma), então sem isso aqui o Animator ficava travado em Throwing entre dois
-                    // arremessos consecutivos do mesmo turno (combo de Hideaway, ver
-                    // SimulateHideawayThrowCombo) — o 2º SetTrigger("Throwing") ficava pendente
-                    // sem nenhuma transição válida pra consumi-lo, deixando o personagem tremendo
-                    // entre poses (bug real reportado pelo usuário, "parece que está com
-                    // parkinson"). Antes só o TurnEnd no fim do turno chamava SetIdle(true), o que
-                    // bastava enquanto só existia 1 arremesso por turno.
+                    // mesma). Mantido por segurança mesmo agora que Hideaway voltou a ser um
+                    // throw probabilístico só (sem combo de arremesso, no máximo 1 ThrowWeapon
+                    // por turno) — era essencial enquanto existiu um combo de throws no mesmo
+                    // turno (bug real reportado pelo usuário, "parece que está com parkinson").
                     attacker.animationController.SetIdle(true);
                 }
                 break;
@@ -489,6 +508,7 @@ public class CombatPlayer : MonoBehaviour
     // --- Helpers ---
 
     private PlayerCombat GetCombat(int index) => index == 0 ? p1Combat : p2Combat;
+    private WeaponHUD GetWeaponHUD(int index) => index == 0 ? p1WeaponHUD : p2WeaponHUD;
 
     private static WeaponData FindWeaponByName(PlayerLoadout loadout, string name)
     {

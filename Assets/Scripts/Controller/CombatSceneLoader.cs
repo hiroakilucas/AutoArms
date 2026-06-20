@@ -120,9 +120,11 @@ public class CombatSceneLoader : MonoBehaviour
         var combatHUD = gameObject.AddComponent<CombatHUD>();
         combatHUD.Initialize(health1, health2);
 
+        WeaponHUD p1WeaponHUD = null, p2WeaponHUD = null;
+
         if (loadout != null && handler != null)
         {
-            var p1WeaponHUD = gameObject.AddComponent<WeaponHUD>();
+            p1WeaponHUD = gameObject.AddComponent<WeaponHUD>();
             p1WeaponHUD.Initialize(loadout, handler, true, combatHUD.CanvasTransform);
         }
 
@@ -138,7 +140,7 @@ public class CombatSceneLoader : MonoBehaviour
 
         if (p2Loadout != null && p2Handler != null)
         {
-            var p2WeaponHUD = gameObject.AddComponent<WeaponHUD>();
+            p2WeaponHUD = gameObject.AddComponent<WeaponHUD>();
             p2WeaponHUD.Initialize(p2Loadout, p2Handler, false, combatHUD.CanvasTransform);
         }
 
@@ -161,6 +163,11 @@ public class CombatSceneLoader : MonoBehaviour
             events = simulator.Simulate(profile, player2Profile);
 
             Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events));
+
+            // Spy: ícones das armas sabotadas (ver CombatSimulator.ApplySpySabotage) ficam
+            // vermelhos no WeaponHUD de quem foi sabotado, mesmo antes de equipá-las.
+            p1WeaponHUD?.SetSabotagedWeapons(simulator.Player1SabotagedWeapons);
+            p2WeaponHUD?.SetSabotagedWeapons(simulator.Player2SabotagedWeapons);
 
             // Deity: já cai em cena com uma arma na mão, sem disparar nenhuma animação de
             // pickup (EquipSpecific é silencioso) — ver comentário em
@@ -196,9 +203,11 @@ public class CombatSceneLoader : MonoBehaviour
             // AttackSequencer stays idle (player1 never assigned → WaitUntil never resolves);
             // player1Profile já foi setado acima.
             var combatPlayer = gameObject.AddComponent<CombatPlayer>();
-            combatPlayer.p1Combat  = player1Combat;
-            combatPlayer.p2Combat  = player2Combat;
-            combatPlayer.sequencer = attackSequencer;
+            combatPlayer.p1Combat    = player1Combat;
+            combatPlayer.p2Combat    = player2Combat;
+            combatPlayer.sequencer   = attackSequencer;
+            combatPlayer.p1WeaponHUD = p1WeaponHUD;
+            combatPlayer.p2WeaponHUD = p2WeaponHUD;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);
@@ -440,6 +449,12 @@ public class CombatSceneLoader : MonoBehaviour
         {
             combat.weaponsMaster = true;
             combat.LogSkillCheck("Weapon Master", true, "+50% damage with sharp-tagged weapons");
+        }
+
+        if (combat.HasSkill("Sticky Hands"))
+        {
+            combat.stickyHands += 0.50f;
+            combat.LogSkillCheck("Sticky Hands", true, $"stickyHands → {combat.stickyHands:P0}");
         }
 
         // Aplicado por último, depois de Untouchable/Ballet Shoes/Lead Skeleton já terem somado

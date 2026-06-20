@@ -16,6 +16,13 @@ public class CombatSimulator
     public WeaponData Player1StartingWeapon { get; private set; }
     public WeaponData Player2StartingWeapon { get; private set; }
 
+    // Lido por CombatSceneLoader depois de Simulate() pra pintar de vermelho os ícones
+    // sabotados no WeaponHUD da vítima (ver Spy abaixo) — nomes, não referências, porque o
+    // WeaponHUD lê do PlayerLoadout visual (profile.weaponLoadout.weapons original), que nunca
+    // vê os clones sabotados criados só dentro do PlayerState do simulador.
+    public List<string> Player1SabotagedWeapons { get; private set; } = new List<string>();
+    public List<string> Player2SabotagedWeapons { get; private set; } = new List<string>();
+
     public List<CombatEvent> Simulate(PlayerProfile p1Profile, PlayerProfile p2Profile, int seed = -1)
     {
         Debug.Log("[CombatSimulator] Iniciando simulação...");
@@ -31,6 +38,23 @@ public class CombatSimulator
         // da migração de WeaponType único para WeaponData.types). Remover quando confirmado.
         LogWeaponLoadout(_p1);
         LogWeaponLoadout(_p2);
+
+        // Saboteur ANTES de Spy (ordem pedida pelo usuário) — destrói 1 arma aleatória do
+        // loadout do oponente e dá -100 initiative nele, antes de qualquer turno. Validar
+        // Saboteur primeiro garante que Spy calcula "metade do loadout" já em cima do que
+        // sobrou depois da destruição, em vez de sabotar (gastar a redução de -20% dano numa
+        // arma específica) e o Saboteur depois simplesmente destruir essa mesma arma, jogando
+        // fora o trabalho do Spy. Independente entre os dois lados (cada skill se aplica nos
+        // dois sentidos, mesmo que só um lado tenha cada uma).
+        ApplySaboteur(saboteur: _p1, victim: _p2);
+        ApplySaboteur(saboteur: _p2, victim: _p1);
+
+        // Spy: sabota a metade (arredondado pra baixo) das armas do loadout do OPONENTE — já
+        // depois do Saboteur acima, então opera sobre o loadout já reduzido. Antes de qualquer
+        // coisa acontecer na luta — inclusive antes do sorteio de arma inicial
+        // (EquipStartingWeaponIfNeeded) abaixo, que já deve poder sortear uma arma sabotada.
+        Player2SabotagedWeapons = ApplySpySabotage(spy: _p1, victim: _p2);
+        Player1SabotagedWeapons = ApplySpySabotage(spy: _p2, victim: _p1);
 
         EquipStartingWeaponIfNeeded(_p1);
         EquipStartingWeaponIfNeeded(_p2);
@@ -54,6 +78,63 @@ public class CombatSimulator
 
         Debug.Log($"[CombatSimulator] {_events.Count} eventos gerados");
         return _events;
+    }
+
+    // Spy (exclusiva do LaBrute/eternaltwin, não existe no Muxxu original): metade das armas
+    // do loadout da VÍTIMA (arredondado pra baixo), escolhidas aleatoriamente, têm o dano
+    // reduzido em 20% — permanente pro resto da luta, não é um efeito por hit. Clona a
+    // WeaponData em vez de mutar o asset original direto (victim.weaponLoadout guarda a MESMA
+    // referência do ScriptableObject em disco, ver BuildState — mutar weapon.damage ali
+    // corromperia o asset pra qualquer outra luta/personagem que use essa mesma arma).
+    // Substitui a entrada no PlayerState.weaponLoadout pelo clone, então qualquer pickup/swap/
+    // roubo que sortear essa arma depois já usa o dano reduzido automaticamente, sem precisar
+    // de nenhum flag "sabotada" extra em PlayerState.
+    private List<string> ApplySpySabotage(PlayerState spy, PlayerState victim)
+    {
+        var sabotaged = new List<string>();
+        if (!spy.HasSkill("Spy")) return sabotaged;
+
+        int count = Mathf.FloorToInt(victim.weaponLoadout.Count / 2f);
+        if (count <= 0) return sabotaged;
+
+        var pool = new List<int>();
+        for (int i = 0; i < victim.weaponLoadout.Count; i++) pool.Add(i);
+
+        for (int n = 0; n < count; n++)
+        {
+            int pick = _rng.Next(pool.Count);
+            int idx  = pool[pick];
+            pool.RemoveAt(pick);
+
+            var original = victim.weaponLoadout[idx];
+            var sabotagedWeapon = Object.Instantiate(original);
+            sabotagedWeapon.damage = Mathf.RoundToInt(original.damage * 0.80f);
+            victim.weaponLoadout[idx] = sabotagedWeapon;
+            sabotaged.Add(sabotagedWeapon.weaponName);
+        }
+
+        Debug.Log($"[Spy] Armas sabotadas: {string.Join(", ", sabotaged)} (-20% dano).");
+        return sabotaged;
+    }
+
+    // Saboteur (LaBrute): destrói permanentemente 1 arma aleatória do loadout do OPONENTE e dá
+    // -100 initiative nele, antes de qualquer turno — vantagem de agir primeiro (quem age
+    // primeiro compara initiative, ver Speed System). Sem efeito se a vítima não tiver arma
+    // nenhuma no loadout (RemoveAt não tem o que remover). Diferente de Spy, aqui não há clone
+    // nenhum — a arma simplesmente sai do loadout (RemoveAt), igual a um WeaponDrop/Disarm
+    // qualquer, então não precisa de nenhum cuidado especial com o asset original.
+    private void ApplySaboteur(PlayerState saboteur, PlayerState victim)
+    {
+        if (!saboteur.HasSkill("Saboteur")) return;
+        if (victim.weaponLoadout.Count == 0) return;
+
+        int idx = _rng.Next(victim.weaponLoadout.Count);
+        var removed = victim.weaponLoadout[idx];
+        victim.weaponLoadout.RemoveAt(idx);
+        victim.initiative -= 100;
+
+        Debug.Log($"[Saboteur] Arma destruída: {removed.weaponName} | initiative do oponente -100.");
+        Emit(new CombatEvent { type = CombatEventType.Saboteur, playerIndex = saboteur.index, targetIndex = victim.index, weaponName = removed.weaponName });
     }
 
     // --- State building ---
@@ -209,6 +290,10 @@ public class CombatSimulator
         if (s.HasSkill("Martial Arts"))         { s.martialArts = true; }
         if (s.HasSkill("Shock"))                { s.disarmChanceBonus += 0.50f; }
         if (s.HasSkill("Weapon Master"))        { s.weaponsMaster = true; }
+        // Sticky Hands: -50% chance de ser desarmado (DisarmChance) e -50% chance de arremesso,
+        // incluindo o próprio (ThrowChance) — campo numérico em vez de bool, lido direto como
+        // multiplicador (1 - stickyHands) nas duas fórmulas, ver CLAUDE.md.
+        if (s.HasSkill("Sticky Hands"))         { s.stickyHands += 0.50f; }
 
         // Aplicado por último, depois de Untouchable/Ballet Shoes/Lead Skeleton já terem somado
         // ou subtraído evasion — garante que Deity zere o total mesmo que outra skill já tenha
@@ -344,25 +429,11 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = newWeapon.weaponName });
         }
 
-        // 3. Hideaway: arremesso forçado a 100% sempre que estiver armado — não rola
-        // ThrowChance(), nunca vai até o defensor pra melee enquanto tiver arma na mão,
-        // independente do tipo dela — NUNCA, nem no combo (SimulateHideawayThrowCombo abaixo
-        // rearremessa em vez de chamar SimulateHitWithDetermination — bug real reportado pelo
-        // usuário: o combo ainda virava melee). Ação extra por Speed é só outra chamada de
-        // SimulateTurn — o forçamento rola de novo do zero automaticamente, sem precisar de
-        // nenhum estado extra entre ações.
-        if (attacker.hitSpeed > 0f && attacker.currentWeaponData != null && attacker.HasSkill("Hideaway"))
-        {
-            SimulateThrow(attacker, defender);
-            SimulateHideawayThrowCombo(attacker, defender);
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
-            return;
-        }
-
-        // 4. Check throw before melee (sem Hideaway) — Monk (hitSpeed = 0) guarda em vez de
-        // atacar, e arremessar é um ataque como outro qualquer, então também não acontece pra
-        // ele (senão ele jogava a arma e corria o resto do turno normalmente, contradizendo
-        // o "guarda em vez de atacar" — bug real reportado pelo usuário).
+        // 3. Check throw before melee — Hideaway dá 50% fixo (ver ThrowChance), Sticky Hands
+        // multiplica essa chance (qualquer origem) por (1 - stickyHands), e Monk (hitSpeed = 0)
+        // guarda em vez de atacar — arremessar é um ataque como outro qualquer, então também
+        // não acontece pra ele (senão ele jogava a arma e corria o resto do turno normalmente,
+        // contradizendo o "guarda em vez de atacar" — bug real reportado pelo usuário).
         if (attacker.hitSpeed > 0f && attacker.currentWeaponData != null && Roll(ThrowChance(attacker)))
         {
             SimulateThrow(attacker, defender);
@@ -370,7 +441,7 @@ public class CombatSimulator
             return;
         }
 
-        // 5. Melee
+        // 4. Melee
         // Monk (hitSpeed = 0): guarda em vez de atacar — não corre até o adversário.
         if (attacker.hitSpeed > 0f)
             Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index });
@@ -386,8 +457,7 @@ public class CombatSimulator
     // (o hit nunca aconteceu de fato), assim como Iron Head (atacante perde a arma, sem
     // condições de continuar a sequência) — Dodge, Block e Reversal não interrompem nada, o
     // combo continua normal depois deles. Reversal pode disparar de novo em cada hit extra do
-    // combo, independente do(s) anterior(es). Caminho de melee normal (sem Hideaway) — ver
-    // SimulateHideawayThrowCombo abaixo pro equivalente de quem tem a skill.
+    // combo, independente do(s) anterior(es).
     private void SimulateComboLoop(PlayerState attacker, PlayerState defender, bool interrupted)
     {
         int comboCount = 0;
@@ -398,26 +468,6 @@ public class CombatSimulator
             Debug.Log($"[ComboChance] {attacker.name} (P{attacker.index + 1}, arma={weaponLabel}) hit extra #{comboCount + 1} chance={comboChance:P1}");
             if (!Roll(comboChance)) break;
             interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: true, out bool _);
-            comboCount++;
-        }
-    }
-
-    // Hideaway: combo depois do arremesso forçado TAMBÉM é arremesso, nunca melee — a skill é
-    // "nunca vai pro corpo a corpo enquanto tiver arma", isso vale pra qualquer hit extra do
-    // turno também. Mesma fórmula/decaimento de ComboChance() do combo normal, só que cada hit
-    // extra chama SimulateThrow de novo em vez de SimulateHitWithDetermination. Sem
-    // "interrupted" — SimulateThrow não tem Counter/Iron Head, nenhum resultado dele cancela o
-    // resto da sequência.
-    private void SimulateHideawayThrowCombo(PlayerState attacker, PlayerState defender)
-    {
-        int comboCount = 0;
-        while (attacker.isAlive && defender.isAlive)
-        {
-            float comboChance = ComboChance(attacker, comboCount);
-            string weaponLabel = attacker.currentWeaponData != null ? attacker.currentWeaponData.weaponName : "Unarmed";
-            Debug.Log($"[ComboChance] {attacker.name} (P{attacker.index + 1}, arma={weaponLabel}) hit extra #{comboCount + 1} chance={comboChance:P1}");
-            if (!Roll(comboChance)) break;
-            SimulateThrow(attacker, defender);
             comboCount++;
         }
     }
@@ -623,7 +673,7 @@ public class CombatSimulator
                     Emit(new CombatEvent { type = CombatEventType.ShieldDisarm, playerIndex = attacker.index, targetIndex = defender.index });
                 }
             }
-            else if (defender.currentWeaponData != null && Roll(DisarmChance(attacker)))
+            else if (defender.currentWeaponData != null && Roll(DisarmChance(attacker, defender)))
             {
                 string wn = defender.currentWeaponData.weaponName;
                 defender.weaponLoadout.Remove(defender.currentWeaponData);
@@ -691,29 +741,26 @@ public class CombatSimulator
         bool isThrown   = WeaponData.HasType(weaponData, WeaponType.Thrown);
         string wn       = weaponData?.weaponName ?? "";
 
-        // Hideaway: a arma nunca sai da mão de quem arremessa — joga uma réplica e continua
-        // empunhando a mesma arma o turno inteiro (currentWeaponData não é zerado, e ela também
-        // não sai do loadout, mesmo sem a tag Thrown). Sem a skill, segue a regra normal: fica
-        // desarmado até o próprio TurnStart seguinte, e só Thrown sobrevive no loadout.
-        bool keepsWeapon = attacker.HasSkill("Hideaway");
-        if (!isThrown && !keepsWeapon)
+        // Hideaway: a arma some da mão igual a qualquer arma Thrown (Unequip — não
+        // UnequipPermanent), mesmo sem ter a tag — fica desarmado até o próprio TurnStart
+        // seguinte, mas a arma continua no loadout, podendo ser pega de novo num pickup futuro
+        // (40% normal). Sem a skill e sem a tag Thrown, a arma sai do loadout pra sempre
+        // (UnequipPermanent).
+        bool staysInLoadout = isThrown || attacker.HasSkill("Hideaway");
+        if (!staysInLoadout)
         {
             attacker.weaponLoadout.Remove(weaponData);
         }
-        if (!keepsWeapon)
-            attacker.currentWeaponData = null;
+        attacker.currentWeaponData = null;
 
         Emit(new CombatEvent { type = CombatEventType.ThrowWeapon, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
 
-        // Hideaway: defensor pode bloquear o arremesso antes do hit/miss normal — mecânica nova,
-        // checada ANTES do Roll(0.80f) de acerto. isThrow = true no evento de Block (mesmo campo
-        // do Hit) pra CombatPlayer pular o swing/reposicionamento do atacante (ele já está
-        // desarmado, sem arma na mão pra um swing de melee fazer sentido).
-        if (Roll(ThrowBlockChance(defender)))
-        {
-            Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = attacker.index, targetIndex = defender.index, isThrow = true });
-        }
-        else if (Roll(0.80f))
+        // Hideaway: +25% block contra arremessos recebidos — reduz direto a chance de acerto do
+        // throw (80% → 55%, miss sobe de 20% pra 45%), em vez de um 3º resultado separado de
+        // Block. Mais simples que a versão anterior (Roll(ThrowBlockChance) + evento Block
+        // próprio) e bate com os valores oficiais do LaBrute.
+        float hitChance = 0.80f - (defender.HasSkill("Hideaway") ? 0.25f : 0f);
+        if (Roll(hitChance))
         {
             int dmg = CalcThrowDamage(attacker, weaponData);
             // Resistant: cap no dano bruto, antes da armadura (ver ApplyResistantCap).
@@ -834,14 +881,18 @@ public class CombatSimulator
         return total * Mathf.Pow(0.5f, comboCount);
     }
 
-    private float DisarmChance(PlayerState attacker)
+    // Sticky Hands (defender): multiplica a chance final por (1 - stickyHands) — 50% reduz a
+    // chance de o defensor ser desarmado pela metade, em cima de qualquer outro bônus do
+    // atacante (Shock/disarmBonus da arma).
+    private float DisarmChance(PlayerState attacker, PlayerState defender)
     {
         float baseChance = attacker.currentWeaponData == null
             ? 0f
             : TagSum(attacker.currentWeaponData, sharp: 0.10f, fast: 0.10f, heavy: 0.05f);
         float weaponBonus = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.disarmBonus : UnarmedStats.DisarmBonus;
-        return baseChance + weaponBonus + attacker.disarmChanceBonus;
+        float total = baseChance + weaponBonus + attacker.disarmChanceBonus;
+        return total * (1f - defender.stickyHands);
     }
 
     // Shield: chance fixa de cair, bem menor que arma normal — diferente de DisarmChance(),
@@ -849,21 +900,16 @@ public class CombatSimulator
     // (+15% disarm) também não deve aumentar essa chance (ver CLAUDE.md, roadmap de Shield).
     private const float ShieldDisarmChance = 0.10f;
 
-    // Hideaway não passa mais por aqui — o arremesso dela é forçado a 100% direto em
-    // SimulateTurn (sem rolar ThrowChance nem checar tag nenhuma), ver item 3 lá. Esta fórmula
-    // só decide o throw de quem NÃO tem a skill.
+    // Hideaway: 50% fixo, substitui a soma por tag (não soma a ela) — valores oficiais do
+    // LaBrute. Sticky Hands multiplica o resultado por (1 - stickyHands), seja a chance base ou
+    // o fixo de Hideaway — dificulta jogar a própria arma fora até por acidente.
     private float ThrowChance(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null) return 0f;
-        return TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f);
-    }
-
-    // Hideaway: +25% de chance do DEFENSOR bloquear um arremesso antes do hit/miss normal —
-    // mecânica nova, não existia nenhum Block contra Throw antes (só Hit 80%/Miss 20%). Base 0%
-    // pra quem não tem a skill (ninguém bloqueia arremesso por padrão).
-    private float ThrowBlockChance(PlayerState defender)
-    {
-        return defender.HasSkill("Hideaway") ? 0.25f : 0f;
+        float chance = attacker.HasSkill("Hideaway")
+            ? 0.50f
+            : TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f);
+        return chance * (1f - attacker.stickyHands);
     }
 
     // --- Damage calculations (mirrors WeaponBaseDamage / CalcDamage / ThrowDamage) ---

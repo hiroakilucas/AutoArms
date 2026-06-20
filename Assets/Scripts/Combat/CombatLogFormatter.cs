@@ -103,6 +103,10 @@ public static class CombatLogFormatter
                     sb.AppendLine($"  {Name(e.playerIndex)} está estunado e perde a ação");
                     break;
 
+                case CombatEventType.Saboteur:
+                    sb.AppendLine($"  {Name(e.playerIndex)} sabota {Name(e.targetIndex)}: destrói {e.weaponName} (-100 iniciativa)");
+                    break;
+
                 case CombatEventType.CombatEnd:
                     sb.AppendLine($"========== VENCEDOR: {Name(e.playerIndex)} ==========");
                     break;

@@ -10,12 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
-  m_Name: skill_hideaway
+  m_Name: skill_sticky_hands
   m_EditorClassIdentifier: 
-  skillName: Hideaway
-  description: "50% chance de arremesso (fixa), +25% bloqueio contra arremessos recebidos,
-    arma volta pro loadout (n\xE3o desaparece)"
-  icon: {fileID: 21300000, guid: 009234c7d41099e409e5439b5b7362c6, type: 3}
-  category: 3
+  skillName: Sticky Hands
+  description: "-50% chance de ser desarmado, -50% chance de arremesso (pr\xF3prio)"
+  icon: {fileID: 21300000, guid: 3ae85b31ebb1edb4b8795f1396272bbb, type: 3}
+  category: 1
   activationType: 0
   usesPerFight: 1

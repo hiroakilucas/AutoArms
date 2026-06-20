@@ -9,6 +9,7 @@ public class WeaponHUD : MonoBehaviour
     private bool _isPlayer1;
     private Transform _container;
     private readonly Dictionary<WeaponData, GameObject> _iconMap = new Dictionary<WeaponData, GameObject>();
+    private readonly HashSet<string> _sabotagedNames = new HashSet<string>();
 
     public void Initialize(PlayerLoadout loadout, WeaponHandler handler, bool isPlayer1, Transform canvasTransform)
     {
@@ -28,6 +29,38 @@ public class WeaponHUD : MonoBehaviour
         if (_loadout != null) _loadout.OnWeaponsChanged  -= Rebuild;
         if (_handler != null) _handler.OnWeaponChanged   -= OnWeaponHandlerChanged;
     }
+
+    // Spy: chamado pelo CombatSceneLoader depois de CombatSimulator.Simulate() rodar — armas
+    // sabotadas (nomes, ver CombatSimulator.Player1SabotagedWeapons/Player2SabotagedWeapons)
+    // ficam com o ícone vermelho em vez do preto semi-transparente padrão, mesmo quando não
+    // estão equipadas. Não precisa de Rebuild — só reaplica a cor dos ícones já existentes.
+    public void SetSabotagedWeapons(IEnumerable<string> weaponNames)
+    {
+        _sabotagedNames.Clear();
+        if (weaponNames != null)
+            foreach (var n in weaponNames)
+                _sabotagedNames.Add(n);
+        UpdateHighlight();
+    }
+
+    // Saboteur: posição em tela (Screen Space Overlay, então transform.position já é em
+    // pixels) do ícone da arma destruída, pra CombatPlayer poder spawnar a queda visual
+    // saindo exatamente de cima do ícone — null se a arma não estiver mais no HUD (já caiu,
+    // ou nunca apareceu por falta de inHandSprite).
+    public Vector3? GetIconScreenPosition(string weaponName)
+    {
+        foreach (var kvp in _iconMap)
+        {
+            if (kvp.Value != null && kvp.Key != null && kvp.Key.weaponName == weaponName)
+                return kvp.Value.transform.position;
+        }
+        return null;
+    }
+
+    // Saboteur: remove o ícone permanentemente do HUD (a arma nunca foi equipada, então
+    // RemoveCurrentWeapon's fallback por currentIndex não serve — precisa do `expected`
+    // explícito pra achar a entrada certa por referência, independente do que está em mãos).
+    public void RemoveWeapon(WeaponData data) => _loadout.RemoveCurrentWeapon(data);
 
     private void OnWeaponHandlerChanged(WeaponData _) => UpdateHighlight();
 
@@ -96,10 +129,16 @@ public class WeaponHUD : MonoBehaviour
         foreach (var kvp in _iconMap)
         {
             if (kvp.Value == null) continue;
-            bool isActive = kvp.Key == active;
-            kvp.Value.GetComponent<Image>().color = isActive
-                ? new Color(0.85f, 0.72f, 0.20f, 0.70f)
-                : new Color(0f, 0f, 0f, 0.35f);
+            bool isActive    = kvp.Key == active;
+            bool isSabotaged = kvp.Key.weaponName != null && _sabotagedNames.Contains(kvp.Key.weaponName);
+            Color color;
+            if (isActive)
+                color = new Color(0.85f, 0.72f, 0.20f, 0.70f);
+            else if (isSabotaged)
+                color = new Color(0.75f, 0.15f, 0.15f, 0.55f);
+            else
+                color = new Color(0f, 0f, 0f, 0.35f);
+            kvp.Value.GetComponent<Image>().color = color;
         }
     }
 

@@ -40,6 +40,7 @@ public class PlayerCombat : MonoBehaviour
     public float runSpeedMultiplier = 1f;
     public float comboChanceBonus = 0f;
     public float disarmChanceBonus = 0f;
+    public float stickyHands = 0f;
 
     [HideInInspector] public bool leadSkeleton   = false;
     [HideInInspector] public bool firstHitAvoided = false;
@@ -660,6 +661,68 @@ public class PlayerCombat : MonoBehaviour
 
         var p = fallen.transform.position;
         fallen.transform.position = new Vector3(p.x, groundY, p.z);
+        fallenWeapons.Add(fallen);
+    }
+
+    // Saboteur: mesma queda em pêndulo amortecido de DropWeapon, mas a arma nunca esteve
+    // equipada (destruída direto do loadout, antes do 1º turno) — não tem CurrentWeapon/mão
+    // pra sair de, então começa de `startWorldPos` (posição do ícone na WeaponHUD, já
+    // convertida de tela pra mundo por CombatPlayer) em vez do handBone. Quem chama já
+    // removeu a arma do loadout/HUD (WeaponHUD.RemoveWeapon) — aqui só cuida da queda visual.
+    public static IEnumerator DropWeaponFromHud(PlayerCombat victim, WeaponData data, Vector3 startWorldPos)
+    {
+        if (data?.inHandSprite == null) yield break;
+
+        // O X nunca muda durante a queda (só Y, por gravidade) — se o ícone na WeaponHUD
+        // converter pra um X fora da arena jogável (ex: ícones nos cantos da tela, perto da
+        // borda), a arma cai reto fora da área visível e parece "desaparecer do mapa" (bug
+        // real reportado pelo usuário). Clampa só o X nos mesmos limites de ClampToArena
+        // (±7.25) — não usa ClampToArena inteiro porque ele também clampa Y pro intervalo de
+        // posição de PERSONAGEM (-3.90 a -0.81), o que destruiria a altura inicial da queda
+        // (bem mais alta, perto do topo da tela, de propósito).
+        startWorldPos.x = Mathf.Clamp(startWorldPos.x, -7.25f, 7.25f);
+
+        var fallen = new GameObject("FallenWeapon");
+        fallen.transform.position   = startWorldPos;
+        // data.scale por si só é grande demais — é o multiplicador relativo ao bone da mão,
+        // que por sua vez já está dentro do personagem (escala raiz ~0.3, ver
+        // CombatSceneLoader.Initialize). DropWeapon/DropShield não têm esse problema porque
+        // usam inHand.transform.lossyScale (escala já resolvida pela hierarquia); aqui não
+        // existe nenhum objeto na mão pra ler de — multiplicar manualmente pela escala raiz
+        // do personagem reproduz o mesmo resultado.
+        fallen.transform.localScale = victim.transform.lossyScale * data.scale;
+        var sr = fallen.AddComponent<SpriteRenderer>();
+        sr.sprite           = data.inHandSprite;
+        sr.sortingLayerName = "Default";
+        // sortingOrder 1 (não 0) — o fundo da arena também está na layer Default, ordem 0;
+        // como os dois ficam no mesmo Z (sprites 2D), empatam no critério de profundidade da
+        // câmera e a ordem de desenho fica indefinida (podia renderizar atrás do fundo,
+        // invisível durante toda a queda). +1 garante a arma sempre na frente do fundo, sem
+        // mudar a relação com Characters/Weapons (ainda abaixo dos dois, igual a um
+        // DropWeapon normal já pousado).
+        sr.sortingOrder     = 1;
+
+        float groundY   = victim.transform.position.y - 1.5f;
+        float velocityY = 0f;
+        float t         = 0f;
+        float theta0    = Random.Range(60f, 100f);
+        const float omega = 10f;
+        const float gamma = 0.8f;
+
+        fallen.transform.rotation = Quaternion.Euler(0f, 0f, theta0);
+
+        while (fallen.transform.position.y > groundY)
+        {
+            velocityY -= 9.8f * Time.deltaTime;
+            fallen.transform.position += new Vector3(0f, velocityY * Time.deltaTime, 0f);
+            t += Time.deltaTime;
+            float angle = theta0 * Mathf.Exp(-gamma * t) * Mathf.Cos(omega * t);
+            fallen.transform.rotation = Quaternion.Euler(0f, 0f, angle);
+            yield return null;
+        }
+
+        var p2 = fallen.transform.position;
+        fallen.transform.position = new Vector3(p2.x, groundY, p2.z);
         fallenWeapons.Add(fallen);
     }
 

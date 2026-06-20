@@ -10,7 +10,7 @@ public enum CombatEventType
     Counter,         // playerIndex = counterer (deals damage), targetIndex = original attacker (countered), damage, isCrit. Cancela o hit do atacante e o resto do combo.
     Reversal,        // playerIndex = quem reverte (deals damage), targetIndex = original attacker (alvo), damage, isCrit. Acontece depois do atacante já ter acertado; cancela o resto do combo dele.
     Dodge,           // playerIndex = attacker, targetIndex = dodger
-    Block,           // playerIndex = attacker, targetIndex = blocker (50% knockback, no damage). isThrow = true when blocking a thrown weapon (Hideaway) — skips the attacker's melee swing/reposition
+    Block,           // playerIndex = attacker, targetIndex = blocker (50% knockback, no damage)
     Miss,            // playerIndex = attacker, targetIndex = missed (defender DodgeLeaps)
     Disarm,          // playerIndex = attacker, targetIndex = disarmed, weaponName
     WeaponDrop,      // playerIndex = player who dropped, weaponName
@@ -20,6 +20,7 @@ public enum CombatEventType
     SpeedBonus,      // playerIndex = faster player, extraActions (for RAPIDO! popup)
     Stunned,         // playerIndex = Chaining holder (landed the 3rd consecutive hit), targetIndex = player who becomes stunned for 1 action
     StunSkip,        // playerIndex = stunned player whose action is being skipped (consumes 1 stunnedActions)
+    Saboteur,        // playerIndex = Saboteur holder, targetIndex = victim who permanently loses a random weapon and -100 initiative, weaponName = destroyed weapon. Emitted once, pre-fight (first event(s) in the list).
     TurnEnd,         // playerIndex = acting player (attacker returns to spawn)
     CombatEnd,       // playerIndex = winner
 }

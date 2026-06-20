@@ -27,6 +27,7 @@ public class PlayerState
     public float disarmChanceBonus;
     public float hitSpeed;
     public float runSpeedMultiplier;
+    public float stickyHands;
 
     // Skill state flags
     public bool leadSkeleton;
