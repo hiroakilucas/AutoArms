@@ -453,10 +453,14 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.Stunned:
-                // Chaining: 3º hit consecutivo do streak — liga a label + Hurt em loop no
-                // alvo (defender, quem ficou estunado). Fire-and-forget: o resto do turno do
-                // atacante (mais combo, TurnEnd) continua normalmente em paralelo.
+                // Chaining: 3º hit consecutivo do streak — liga a label persistente + pose de
+                // atordoado no alvo (defender, quem ficou estunado), e mostra um popup
+                // "ESTUNADO!" instantâneo (sobe e desaparece, igual a um Disarm/Sabotage) pra
+                // marcar o momento exato em que o stun foi recebido. Fire-and-forget: o resto
+                // do turno do atacante (mais combo, TurnEnd) continua normalmente em paralelo.
                 defender?.ShowStunLabel();
+                if (defender != null)
+                    DamagePopup.SpawnStun(defender.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f));
                 yield return null;
                 break;
 

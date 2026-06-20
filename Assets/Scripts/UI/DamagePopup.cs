@@ -111,6 +111,31 @@ public class DamagePopup : MonoBehaviour
         origin               = transform.position;
     }
 
+    // Chaining: popup instantâneo no momento exato do 3º hit que estuna — diferente da label
+    // persistente "ATORDOADO!" (PlayerCombat.ShowStunLabel, fica presa acima da cabeça até o
+    // stun ser consumido), esse aqui sobe e desaparece como qualquer outro popup, só pra marcar
+    // visualmente o instante em que o stun foi recebido.
+    public static void SpawnStun(Vector3 worldPos)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitStun();
+    }
+
+    void InitStun()
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = "ESTUNADO!";
+        label.fontSize       = 4f;
+        baseColor            = new Color(1f, 0.95f, 0.2f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     public static void SpawnDrop(Vector3 worldPos)
     {
         var go = new GameObject("DamagePopup");

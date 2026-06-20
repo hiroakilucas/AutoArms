@@ -79,11 +79,20 @@ public class PlayerCombat : MonoBehaviour
     private SpriteRenderer faceRenderer;
     private Sprite[]       faceSprites;
     private GameObject stunLabel;
-    private Coroutine   stunHurtRoutine;
+    private Coroutine   stunDazedRoutine;
 
     // Chaining: chamado quando este personagem é estunado (CombatEventType.Stunned) — label
-    // fixo acima da cabeça (texto por enquanto; o usuário vai trocar por sprite depois) +
-    // Hurt em loop até o próprio StunSkip consumir a ação estunada (ver HideStunLabel).
+    // fixo acima da cabeça (texto por enquanto; o usuário vai trocar por sprite depois) + pose
+    // de "atordoado" (Face 03, olhos fechados, mesmo sprite do piscar de Thief) até o próprio
+    // StunSkip consumir a ação estunada (ver HideStunLabel). Era um loop de SetTrigger("Hurt")
+    // repetido — visualmente não combinava com "estunado" (parecia só levando hit repetidamente);
+    // redefinido pelo usuário pra essa pose estática.
+    //
+    // O tronco tombado pra frente (bone "Body" rotacionado manualmente) foi tentado e revertido
+    // — o pivot desse bone no rig do Spriter2UnityDX não fica no centro do sprite, então
+    // rotacionar -20° girava o tronco pra fora da silhueta do personagem, deixando-o "sem
+    // corpo" visualmente (bug real reportado pelo usuário). Sem solução segura sem testar
+    // visualmente no Editor — só Face 03 por enquanto.
     public void ShowStunLabel()
     {
         if (stunLabel == null)
@@ -104,40 +113,39 @@ public class PlayerCombat : MonoBehaviour
             label.fontSize       = 3.5f;
             label.color          = new Color(1f, 0.95f, 0.2f);
         }
-        if (stunHurtRoutine == null)
-            stunHurtRoutine = StartCoroutine(StunHurtLoop());
+        if (stunDazedRoutine == null)
+            stunDazedRoutine = StartCoroutine(StunDazedLoop());
     }
 
-    // Encerra o loop de Hurt e remove a label — chamado pelo StunSkip, no início do turno que
-    // consome a ação estunada (ver CombatSimulator.SimulateTurn).
+    // Encerra a pose de atordoado e remove a label — chamado pelo StunSkip, no início do turno
+    // que consome a ação estunada (ver CombatSimulator.SimulateTurn).
     public void HideStunLabel()
     {
-        if (stunHurtRoutine != null)
+        if (stunDazedRoutine != null)
         {
-            StopCoroutine(stunHurtRoutine);
-            stunHurtRoutine = null;
+            StopCoroutine(stunDazedRoutine);
+            stunDazedRoutine = null;
         }
         if (stunLabel != null)
         {
             Destroy(stunLabel);
             stunLabel = null;
         }
+        if (faceRenderer != null && faceSprites != null && faceSprites.Length > 0)
+            faceRenderer.sprite = faceSprites[0]; // Face 01, volta ao normal
         animationController.SetIdle(true);
     }
 
-    // Hurt não tem nenhum bool de "hold" no Animator Controller (volta pra Idle sozinho via
-    // tempo de saída do próprio clip, diferente de Throwing/Slashing) — então, pra manter a
-    // pose de Hurt "presa" durante toda a duração do stun, o trigger é refeito em loop em vez
-    // de uma chamada única. Intervalo de 0.3s (não settings.hurtDuration, ~0.12s) — bem mais
-    // espaçado que o gap natural entre hits de um combo de verdade, pra não repetir o trigger
-    // rápido demais e dar a mesma cintilação entre poses já corrigida no bug do Throwing
-    // ("parece que está com parkinson").
-    private IEnumerator StunHurtLoop()
+    // Mantém a pose presa todo frame (igual ao antigo loop de Hurt) porque o Animator (Idle em
+    // loop) continua trocando o sprite da face normalmente em paralelo — sem reforçar a cada
+    // frame, a troca manual seria sobrescrita no frame seguinte.
+    private IEnumerator StunDazedLoop()
     {
+        bool hasFace = faceRenderer != null && faceSprites != null && faceSprites.Length > 2;
         while (true)
         {
-            animator.SetTrigger("Hurt");
-            yield return new WaitForSeconds(0.3f);
+            if (hasFace) faceRenderer.sprite = faceSprites[2]; // Face 03, olhos fechados
+            yield return null;
         }
     }
 

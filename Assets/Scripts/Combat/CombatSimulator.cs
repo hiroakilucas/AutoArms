@@ -627,6 +627,18 @@ public class CombatSimulator
                 attacker.chainHitStreak = 0;
                 defender.stunnedActions++;
                 Emit(new CombatEvent { type = CombatEventType.Stunned, playerIndex = attacker.index, targetIndex = defender.index });
+
+                // Estuna também derruba a arma do estunado, se ele tiver uma — pedido pelo
+                // usuário. Reusa o mesmo CombatEventType.Disarm do desarme normal (sem chance
+                // nenhuma envolvida, é garantido) — CombatPlayer já sabe tocar a queda em
+                // pêndulo via PlayerCombat.DropWeapon, sem precisar de nenhum case novo.
+                if (defender.currentWeaponData != null)
+                {
+                    string stunnedWn = defender.currentWeaponData.weaponName;
+                    defender.weaponLoadout.Remove(defender.currentWeaponData);
+                    defender.currentWeaponData = null;
+                    Emit(new CombatEvent { type = CombatEventType.Disarm, playerIndex = attacker.index, targetIndex = defender.index, weaponName = stunnedWn });
+                }
             }
         }
 
