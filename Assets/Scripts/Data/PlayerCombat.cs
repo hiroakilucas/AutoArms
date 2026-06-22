@@ -83,6 +83,9 @@ public class PlayerCombat : MonoBehaviour
     private GameObject netVisual;
     private Coroutine   netFaceRoutine;
     private Coroutine   netOscillateRoutine;
+    private GameObject fierceBruteAura;
+    private Coroutine   fierceBruteAuraPulseRoutine;
+    private static Sprite _glowSprite;
 
     // Chaining: chamado quando este personagem é estunado (CombatEventType.Stunned) — label
     // fixo acima da cabeça (texto por enquanto; o usuário vai trocar por sprite depois) + pose
@@ -219,6 +222,97 @@ public class PlayerCombat : MonoBehaviour
             netVisual.transform.localPosition = lp;
             yield return null;
         }
+    }
+
+    // Skill Fierce Brute: aura roxa persistente enquanto o buff (CombatSimulator.
+    // PlayerState.fierceBruteActive) estiver ativo — chamada pelo CombatPlayer (case
+    // FierceBruteActivated) e destruída de novo no Hit que consome o buff (com sucesso ou não,
+    // ver CombatPlayer). Sprite gerado por procedimento (círculo com fade radial) em vez de um
+    // asset novo — não existe nenhum sprite de glow pronto no projeto ainda.
+    public void ShowFierceBruteAura()
+    {
+        if (fierceBruteAura != null) return;
+
+        fierceBruteAura = new GameObject("FierceBruteAura");
+        fierceBruteAura.transform.SetParent(transform);
+        fierceBruteAura.transform.localPosition = Vector3.zero;
+        fierceBruteAura.transform.localScale    = Vector3.one * 2.5f; // calibrável
+
+        var sr = fierceBruteAura.AddComponent<SpriteRenderer>();
+        sr.sprite           = GetGlowSprite();
+        sr.color            = new Color(0.5f, 0f, 0.8f, 0.25f);
+        sr.sortingLayerName = "Characters";
+        sr.sortingOrder     = -1; // atrás de qualquer parte do corpo (todas usam ordem >= 0)
+
+        fierceBruteAuraPulseRoutine = StartCoroutine(FierceBruteAuraPulseLoop());
+    }
+
+    // Pulso de alpha entre 0.15 e 0.35 via seno — mesmo padrão pedido pelo usuário pra outros
+    // efeitos pulsantes (frequência ~3Hz, arbitrária/calibrável).
+    private IEnumerator FierceBruteAuraPulseLoop()
+    {
+        var sr = fierceBruteAura.GetComponent<SpriteRenderer>();
+        while (fierceBruteAura != null)
+        {
+            float wave  = (Mathf.Sin(Time.time * 3f) + 1f) * 0.5f;
+            var   c     = sr.color;
+            c.a         = Mathf.Lerp(0.15f, 0.35f, wave);
+            sr.color    = c;
+            yield return null;
+        }
+    }
+
+    // Destrói a aura com um fade rápido (chamado tanto no Hit que acerta com o buff — fade
+    // rápido pedido pelo usuário, 0.2s — quanto em qualquer desfecho que consome o buff sem
+    // acertar: dodge/block/counter/reversal/arremesso).
+    public void HideFierceBruteAura(float fadeDuration = 0.2f)
+    {
+        if (fierceBruteAura == null) return;
+        if (fierceBruteAuraPulseRoutine != null) { StopCoroutine(fierceBruteAuraPulseRoutine); fierceBruteAuraPulseRoutine = null; }
+        StartCoroutine(FadeOutAndDestroy(fierceBruteAura, fadeDuration));
+        fierceBruteAura = null;
+    }
+
+    private IEnumerator FadeOutAndDestroy(GameObject go, float duration)
+    {
+        var sr = go.GetComponent<SpriteRenderer>();
+        float startAlpha = sr.color.a;
+        float elapsed = 0f;
+        while (elapsed < duration && go != null)
+        {
+            elapsed += Time.deltaTime;
+            var c = sr.color;
+            c.a = Mathf.Lerp(startAlpha, 0f, elapsed / duration);
+            sr.color = c;
+            yield return null;
+        }
+        if (go != null) Destroy(go);
+    }
+
+    // Círculo branco com fade radial (alpha caindo do centro pra borda, "blur" pobre) gerado uma
+    // única vez e cacheado — evita depender de um asset de glow que não existe no projeto ainda.
+    private static Sprite GetGlowSprite()
+    {
+        if (_glowSprite != null) return _glowSprite;
+
+        const int size = 64;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        Vector2 center  = new Vector2(size / 2f, size / 2f);
+        float   maxDist = size / 2f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dist  = Vector2.Distance(new Vector2(x, y), center);
+                float alpha = Mathf.Clamp01(1f - dist / maxDist);
+                alpha *= alpha; // queda mais suave perto da borda
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+        tex.Apply();
+
+        _glowSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+        return _glowSprite;
     }
 
     private static readonly List<GameObject> fallenWeapons = new List<GameObject>();

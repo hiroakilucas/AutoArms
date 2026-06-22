@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 // Replays a pre-calculated event list from CombatSimulator as animation.
 // Bridges the pure-logic simulator with the existing MonoBehaviour components.
@@ -589,6 +590,35 @@ public class CombatPlayer : MonoBehaviour
                 yield return null;
                 break;
 
+            case CombatEventType.FierceBruteActivated:
+                // Super "Fierce Brute": NÃO consome o turno (ver CombatSimulator.SimulateTurn,
+                // item "0e") — só liga o ghost trail + aura persistente aqui. A pose de braço
+                // levantado NÃO toca neste evento (1ª versão tocava aqui, na posição de spawn,
+                // antes de correr até o defensor — ficava parecendo um slash sendo dado no lugar
+                // errado, bug reportado pelo usuário); ela foi movida pro case Hit (ver
+                // PlayFierceBrutePose), que já roda DEPOIS de RepositionIfNeeded — ou seja, na
+                // posição correta, bem ao lado do defensor, imediatamente antes do swing de
+                // verdade. O resto do turno (Thief/pickup/throw/melee) continua normalmente nos
+                // eventos seguintes da mesma lista.
+                if (attacker != null)
+                {
+                    // Ghost trail (efeito Matrix) — fire-and-forget, sem yield, pra não atrasar
+                    // o resto da sequência. Duração bem maior que antes (pedido do usuário: o
+                    // trail não durava o suficiente pra ainda estar tocando durante a corrida até
+                    // o defensor, que só começa no RunToDefender — evento futuro, ainda nem
+                    // emitido aqui) — 1.5s cobre com folga a corrida + a pose + o swing seguintes.
+                    // Escalado por t (1x/2x), igual a todo o resto da sequência.
+                    StartCoroutine(SpawnGhostTrail(attacker.transform, 1.5f * t, 0.06f * t, new Color(0.5f, 0f, 0.8f, 0.6f)));
+
+                    // Aura persistente — fica ligada através de qualquer evento seguinte (Thief/
+                    // pickup/throw/RunToDefender) até o Hit que consome o buff (ver case Hit,
+                    // isFierceBrute) ou até falhar por dodge/block/counter/reversal/arremesso
+                    // (ver CombatSimulator.SimulateHit/SimulateTurn).
+                    attacker.ShowFierceBruteAura();
+                }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
             case CombatEventType.Hit:
                 if (defender != null)
                 {
@@ -601,6 +631,13 @@ public class CombatPlayer : MonoBehaviour
                     if (!evt.isThrow)
                     {
                         yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+
+                        // Fierce Brute: pose de braço levantado (power-up) AQUI — já depois do
+                        // reposicionamento, ou seja, na posição certa ao lado do defensor — em
+                        // vez de no case FierceBruteActivated (posição de spawn, antes de correr;
+                        // bug corrigido, ver comentário lá).
+                        if (evt.isFierceBrute && attacker != null)
+                            yield return StartCoroutine(PlayFierceBrutePose(attacker, t));
 
                         string trigger = SwingTrigger(attacker);
                         if (swingMult != 1f) attacker?.animationController.SetSpeed(swingMult);
@@ -620,7 +657,23 @@ public class CombatPlayer : MonoBehaviour
 
                     Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
-                    DamagePopup.Spawn(popupPos, evt.damage, evt.isCrit);
+
+                    if (evt.isFierceBrute)
+                    {
+                        // Fierce Brute conectou: flash de tela, popup "×2!" diferenciado, aura
+                        // do atacante destruída (fade rápido, 0.2s — o buff já cumpriu seu
+                        // papel) e um ghost trail extra mais curto no instante do impacto pra
+                        // reforçar o golpe, além do que já tocou na ativação.
+                        DamagePopup.SpawnFierceBrute(popupPos, evt.damage, evt.isCrit);
+                        StartCoroutine(FlashScreenWhite(0.15f));
+                        attacker?.HideFierceBruteAura(0.2f);
+                        if (attacker != null)
+                            StartCoroutine(SpawnGhostTrail(attacker.transform, 0.4f * t, 0.06f * t, new Color(0.5f, 0f, 0.8f, 0.6f)));
+                    }
+                    else
+                    {
+                        DamagePopup.Spawn(popupPos, evt.damage, evt.isCrit);
+                    }
 
                     StartCoroutine(defender.Knockback(pushDir, kbDist, kbDur * t));
                     yield return StartCoroutine(defender.animationController.PlayHurt(kbDur * t));
@@ -670,6 +723,15 @@ public class CombatPlayer : MonoBehaviour
                     else
                         DamagePopup.SpawnReversal(retPopupPos, evt.damage, evt.isCrit);
 
+                    // Fierce Brute: aqui quem possivelmente tinha o buff é o ATACANTE ORIGINAL
+                    // (targetIndex deste evento, "defender" na nomenclatura local — playerIndex/
+                    // "attacker" é o retaliador) — Counter cancela o hit dele antes de conectar
+                    // (consome o buff sem dobro); Reversal-após-hit já não tem nada pra destruir
+                    // (o Hit anterior já resolveu o buff), e Reversal-após-bloqueio também já foi
+                    // limpo pelo Block que veio antes — chamada incondicional seguindo o mesmo
+                    // padrão no-op-se-não-existir do Block/Dodge acima.
+                    defender?.HideFierceBruteAura();
+
                     StartCoroutine(defender.Knockback(retPushDir, retKbDist, retKbDur * t));
                     yield return StartCoroutine(defender.animationController.PlayHurt(retKbDur * t));
 
@@ -715,6 +777,10 @@ public class CombatPlayer : MonoBehaviour
                     Vector3 dodgePopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
                     DamagePopup.SpawnDodge(dodgePopupPos);
+
+                    // Fierce Brute: esquivado consome o buff de qualquer forma — ver mesmo
+                    // comentário no case Block.
+                    attacker?.HideFierceBruteAura();
                     Vector2 dodgeDir = ComputePushDir(attacker, defender);
                     float   dodgeDist = attacker?.settings?.knockbackDistance ?? 0.5f;
                     yield return StartCoroutine(defender.DodgeLeap(dodgeDir, dodgeDist));
@@ -741,6 +807,12 @@ public class CombatPlayer : MonoBehaviour
                     Vector3 blockPopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
                     DamagePopup.SpawnBlock(blockPopupPos);
+
+                    // Fierce Brute: bloqueado/esquivado/contra-atacado consome o buff de
+                    // qualquer forma (sem dobro, sem flash) — destrói a aura roxa do atacante se
+                    // ela existir (no-op se não); chamada incondicional é segura, HideFierceBruteAura
+                    // já checa null por conta própria.
+                    attacker?.HideFierceBruteAura();
 
                     float kbDist = (attacker?.settings?.knockbackDistance ?? 0.5f) * 0.5f;
                     float kbDur  = (attacker?.settings?.hurtDuration ?? 0.07f) * t;
@@ -804,6 +876,11 @@ public class CombatPlayer : MonoBehaviour
             case CombatEventType.ThrowWeapon:
                 if (attacker != null)
                 {
+                    // Fierce Brute: escopado só a melee (CombatSimulator.SimulateHit) — se o
+                    // turno virou arremesso em vez disso, o buff já foi zerado lá sem efeito;
+                    // destrói a aura aqui também, senão ficaria órfã (no-op se não existir).
+                    attacker.HideFierceBruteAura();
+
                     // Capture sprite/position/scale before Unequip destroys the in-hand weapon object.
                     var weaponData   = attacker.weaponHandler.CurrentWeaponData;
                     var inHandWeapon = attacker.weaponHandler.CurrentWeapon;
@@ -1045,6 +1122,152 @@ public class CombatPlayer : MonoBehaviour
             yield return null;
         }
         Destroy(frag);
+    }
+
+    // Skill Fierce Brute — pose de braço levantado (power-up), chamada pelo case Hit já depois
+    // de RepositionIfNeeded (posição correta, ao lado do defensor) em vez de no case
+    // FierceBruteActivated (posição de spawn — bug corrigido, ver comentário lá). Pausa o
+    // Animator pra a rotação manual do handBone não ser sobrescrita pela própria animação de
+    // Idle/Run no frame seguinte (mesmo motivo de qualquer outro override manual de bone/sprite
+    // no projeto, ver StunDazedLoop/NetFaceLoop em PlayerCombat).
+    private IEnumerator PlayFierceBrutePose(PlayerCombat character, float t)
+    {
+        var armBone = character.weaponHandler.handBone;
+        if (armBone == null) yield break;
+
+        var anim = character.GetComponent<Animator>();
+        if (anim != null) anim.speed = 0f;
+
+        Quaternion fromRot = armBone.localRotation;
+        Quaternion toRot   = Quaternion.Euler(-90f, 0f, 0f);
+
+        float liftDuration = 0.2f * t;
+        float elapsed = 0f;
+        while (elapsed < liftDuration)
+        {
+            elapsed += Time.deltaTime;
+            armBone.localRotation = Quaternion.Lerp(fromRot, toRot, elapsed / liftDuration);
+            yield return null;
+        }
+        armBone.localRotation = toRot;
+
+        yield return new WaitForSeconds(0.3f * t);
+
+        float returnDuration = 0.15f * t;
+        elapsed = 0f;
+        while (elapsed < returnDuration)
+        {
+            elapsed += Time.deltaTime;
+            armBone.localRotation = Quaternion.Lerp(toRot, fromRot, elapsed / returnDuration);
+            yield return null;
+        }
+        armBone.localRotation = fromRot;
+
+        if (anim != null) anim.speed = 1f;
+    }
+
+    // Skill Fierce Brute — efeito "Matrix" de ghost trail: clona todos os SpriteRenderers filhos
+    // do personagem (membros do rig, igual ao Spriter2UnityDX) a cada `interval`, por `duration`
+    // segundos, cada clone desaparecendo sozinho via FadeOutAndDestroy.
+    // Bug corrigido (ghost trail não aparecia): GetComponentsInChildren<SpriteRenderer>() sem
+    // includeInactive perdia qualquer parte do rig que o Spriter2UnityDX desativa via SetActive
+    // entre frames de animação (PrefabBuilder.cs linha ~146 — variantes de sprite por bone são
+    // GameObjects separados, só o do frame atual fica ativo) — em alguns frames isso podia
+    // zerar renderers o suficiente pra o trail sair vazio/incompleto. `true` inclui todos,
+    // mesmo os momentaneamente desligados. sr.sprite == null também pulado (renderer existe mas
+    // ainda não recebeu nenhum sprite, ex.: TextureController que ainda não rodou Start()).
+    private IEnumerator SpawnGhostTrail(Transform target, float duration, float interval, Color ghostColor)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            var renderers = target.GetComponentsInChildren<SpriteRenderer>(true);
+            // Diagnóstico temporário: confirma que o rig está sendo encontrado. Remover quando confirmado.
+            Debug.Log($"[GhostTrail] {target.name}: {renderers.Length} SpriteRenderers encontrados.");
+
+            foreach (var sr in renderers)
+            {
+                if (sr.sprite == null) continue;
+
+                var ghost = new GameObject("GhostTrail");
+                ghost.transform.position   = sr.transform.position;
+                ghost.transform.rotation   = sr.transform.rotation;
+                ghost.transform.localScale = sr.transform.lossyScale;
+                var ghostSr = ghost.AddComponent<SpriteRenderer>();
+                ghostSr.sprite           = sr.sprite;
+                ghostSr.color            = ghostColor;
+                // Characters2 (atrás de Weapons/Characters na ordem de layers do projeto, ver
+                // CLAUDE.md) — trail sempre atrás do personagem/arma de verdade, em vez de
+                // depender de sortingOrder - 1 dentro da MESMA layer do corpo (arriscava
+                // overlaps imprevisíveis entre partes do rig que compartilham ordem).
+                ghostSr.sortingLayerName = "Characters2";
+                ghostSr.sortingOrder     = sr.sortingOrder;
+                ghostSr.flipX            = sr.flipX;
+                ghostSr.flipY            = sr.flipY;
+                // 0.5s de fade (era 0.3s) — rastro mais longo/denso, pedido pelo usuário.
+                StartCoroutine(FadeOutAndDestroyGhost(ghost, 0.5f));
+            }
+            yield return new WaitForSeconds(interval);
+            elapsed += interval;
+        }
+    }
+
+    private IEnumerator FadeOutAndDestroyGhost(GameObject go, float duration)
+    {
+        if (go == null) yield break;
+        var sr = go.GetComponent<SpriteRenderer>();
+        if (sr == null) yield break;
+
+        float startAlpha = sr.color.a;
+        float elapsed = 0f;
+        while (elapsed < duration && go != null)
+        {
+            elapsed += Time.deltaTime;
+            var c = sr.color;
+            c.a = Mathf.Lerp(startAlpha, 0f, elapsed / duration);
+            sr.color = c;
+            yield return null;
+        }
+        if (go != null) Destroy(go);
+    }
+
+    // Skill Fierce Brute — flash branco de tela inteira no momento do hit que consome o buff:
+    // Canvas/Image temporários criados e destruídos na hora (sem nenhuma referência wireada),
+    // alpha 0 → 0.4 → 0 em `duration` segundos no total.
+    private IEnumerator FlashScreenWhite(float duration)
+    {
+        var canvasGo = new GameObject("FierceBruteFlash");
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 1000;
+        canvasGo.AddComponent<CanvasScaler>();
+
+        var imgGo = new GameObject("Flash");
+        imgGo.transform.SetParent(canvasGo.transform, false);
+        var img = imgGo.AddComponent<Image>();
+        img.color = new Color(1f, 1f, 1f, 0f);
+        var rect = img.rectTransform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        float half    = duration * 0.5f;
+        float elapsed = 0f;
+        while (elapsed < half)
+        {
+            elapsed += Time.deltaTime;
+            img.color = new Color(1f, 1f, 1f, Mathf.Lerp(0f, 0.4f, elapsed / half));
+            yield return null;
+        }
+        elapsed = 0f;
+        while (elapsed < half)
+        {
+            elapsed += Time.deltaTime;
+            img.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.4f, 0f, elapsed / half));
+            yield return null;
+        }
+        Destroy(canvasGo);
     }
 
     private static Vector2 RandomSpawnPos(bool isPlayer1)

@@ -29,6 +29,7 @@ public enum CombatEventType
     NetThrow,        // playerIndex = attacker, targetIndex = defender. Super: throws a net that ALWAYS lands (no Dodge/Block roll at all) — no damage, just sets defender.netEnsnared = true. Consumes the whole turn.
     NetEnsnaredSkip, // playerIndex = ensnared player whose action is being skipped this turn (still netEnsnared — distinct from StunSkip, which represents a temporary Chaining stun that always ends after exactly 1 skipped action; Net keeps skipping every turn until NetFreed).
     NetFreed,        // playerIndex = player who just broke free of the net (received a hit while netEnsnared — see CombatSimulator.ApplyDamage/SimulateThrow/SimulateRetaliation/Simulate*Attack call sites).
+    FierceBruteActivated, // playerIndex = attacker who just activated the buff (fierceBruteActive = true) — doesn't end the turn, falls through to Thief/pickup/throw/melee normally; the buff doubles damage (and +10% crit) on the next melee hit this same turn (see Hit.isFierceBrute below), consumed either way (hit lands or not).
     TurnEnd,         // playerIndex = acting player (attacker returns to spawn)
     CombatEnd,       // playerIndex = winner
 }
@@ -45,6 +46,7 @@ public class CombatEvent
     public bool  isMidFight; // Saboteur event only — true when emitted by Sabotage (per-hit) instead of Saboteur (pre-fight); skips the post-popup pause so the weapon falls without blocking the fight.
     public bool  isDodged;   // HasteAttack only — defender dodged the dash, no damage.
     public bool  isBlocked;  // HasteAttack only — defender blocked the dash, no damage.
+    public bool  isFierceBrute; // Hit only — true when this hit consumed an active Fierce Brute buff (damage already doubled in CombatSimulator) — tells CombatPlayer to show the flash/×2 popup/destroy the attacker's aura.
     public int   newHp;
     public int   maxHp;
     public int   extraActions;

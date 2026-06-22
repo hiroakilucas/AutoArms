@@ -42,6 +42,8 @@ public class PlayerState
     public int  hasteUsesRemaining = 1;
     public int  piledriverUsesRemaining = 1;
     public int  netUsesRemaining = 1;
+    public int  fierceBruteUsesRemaining = 1;
+    public bool fierceBruteActive;
     public bool hasTakenFirstTurn;
     public int  chainHitStreak;
     public int  stunnedActions;

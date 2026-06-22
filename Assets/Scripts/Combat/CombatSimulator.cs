@@ -294,6 +294,10 @@ public class CombatSimulator
         // incluindo o próprio (ThrowChance) — campo numérico em vez de bool, lido direto como
         // multiplicador (1 - stickyHands) nas duas fórmulas, ver CLAUDE.md.
         if (s.HasSkill("Sticky Hands"))         { s.stickyHands += 0.50f; }
+        // Fierce Brute: 1 uso base + 1 extra pra cada 30 de STR (já com strPct aplicado acima —
+        // lido depois do bloco de hpPct/strPct/agiPct/spdPct, então usa o STR final do
+        // personagem, não o base do profile).
+        if (s.HasSkill("Fierce Brute"))         { s.fierceBruteUsesRemaining = 1 + Mathf.FloorToInt(s.str / 30f); }
 
         // Aplicado por último, depois de Untouchable/Ballet Shoes/Lead Skeleton já terem somado
         // ou subtraído evasion — garante que Deity zere o total mesmo que outra skill já tenha
@@ -450,6 +454,20 @@ public class CombatSimulator
             return;
         }
 
+        // 0e. Fierce Brute (Super, usos escaláveis com STR — ver ApplySkillStats): 33% de chance
+        // por turno quando disponível. Diferente das outras Supers acima, NÃO consome a ação
+        // inteira do turno — só seta o buff e cai direto pro fluxo normal (Thief/pickup/throw/
+        // melee), porque o efeito É justamente dobrar o dano do hit normal que vem a seguir
+        // neste mesmo turno (ver CalcChance/CritChance e o consumo do buff em SimulateHit).
+        // Mesmo guard de hitSpeed > 0 (Monk nunca dispara nenhuma Super, incluído aqui por
+        // consistência mesmo sem texto explícito do usuário sobre isso).
+        if (attacker.hitSpeed > 0f && attacker.HasSkill("Fierce Brute") && attacker.fierceBruteUsesRemaining > 0 && Roll(0.33f))
+        {
+            attacker.fierceBruteUsesRemaining--;
+            attacker.fierceBruteActive = true;
+            Emit(new CombatEvent { type = CombatEventType.FierceBruteActivated, playerIndex = attacker.index });
+        }
+
         // 1. Thief: rouba a arma do oponente se eu estiver desarmado e ele armado — 44% por
         // turno, no máximo 2 vezes por luta (thiefUsesRemaining). Checado ANTES do pickup normal
         // abaixo — os dois exigem estar desarmado, então só um pode acontecer no mesmo turno; se
@@ -504,6 +522,12 @@ public class CombatSimulator
         // contradizendo o "guarda em vez de atacar" — bug real reportado pelo usuário).
         if (attacker.hitSpeed > 0f && attacker.currentWeaponData != null && Roll(ThrowChance(attacker)))
         {
+            // Fierce Brute escopado só a CalcDamage/melee (ver SimulateHit) — se o turno virou
+            // arremesso em vez de melee, o buff simplesmente se perde aqui (sem dobro, sem
+            // crítico bônus) em vez de carregar pro turno seguinte, o que quebraria a semântica
+            // de "ataque do MESMO TURNO que ativou" e poderia dobrar um hit bem mais tarde sem
+            // relação com a ativação original.
+            attacker.fierceBruteActive = false;
             SimulateThrow(attacker, defender);
             Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
             return;
@@ -573,6 +597,14 @@ public class CombatSimulator
     {
         damageDealt = false;
 
+        // Fierce Brute: só a 1ª tentativa de hit do turno (isCombo == false) é elegível pro
+        // dobro de dano — combo extra nunca dobra, e cada retry de Determination (também
+        // isCombo == false) só vê o buff true na 1ª chamada de fato, já que é consumido (true
+        // ou false) antes do retorno desta função, qualquer que seja o desfecho (ver branches
+        // abaixo e a doc original: "se o hit falhar por qualquer motivo, o buff é consumido
+        // mesmo assim").
+        bool fierceBruteThisHit = !isCombo && attacker.fierceBruteActive;
+
         // Monk: guards instead of attacking — checado ANTES do Ballet Shoes abaixo. Um hit que
         // nunca aconteceu (Monk não ataca) não deveria gastar o "esquiva o 1º golpe" do
         // defensor nem emitir um evento Dodge — sem essa ordem, CombatPlayer reposicionava e
@@ -586,6 +618,7 @@ public class CombatSimulator
         if (!isCombo && defender.firstHitAvoided)
         {
             defender.firstHitAvoided = false;
+            if (fierceBruteThisHit) attacker.fierceBruteActive = false;
             Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index });
             return false;
         }
@@ -602,6 +635,7 @@ public class CombatSimulator
         // direto pro Block (também gated abaixo).
         if (!defender.netEnsnared && Roll(CounterChance(defender)))
         {
+            if (fierceBruteThisHit) attacker.fierceBruteActive = false;
             SimulateRetaliation(defender, attacker, CombatEventType.Counter);
             return true;
         }
@@ -610,6 +644,7 @@ public class CombatSimulator
         // enredado; a rede impede evadir o próximo ataque, ver descrição original da skill Net).
         if (!defender.netEnsnared && Roll(BlockChance(attacker, defender)))
         {
+            if (fierceBruteThisHit) attacker.fierceBruteActive = false;
             Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = attacker.index, targetIndex = defender.index });
 
             // Attacker may drop weapon on impact (15%)
@@ -658,14 +693,24 @@ public class CombatSimulator
         // Dodge check — gated por !defender.netEnsnared ("não pode usar dodge" enquanto enredado).
         if (!defender.netEnsnared && Roll(DodgeChance(attacker, defender)))
         {
+            if (fierceBruteThisHit) attacker.fierceBruteActive = false;
             Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index });
             return false;
         }
 
         // Normal hit — fórmula multiplicativa do My Brute
         damageDealt = true;
-        bool  isCrit = Roll(CritChance(attacker));
+        bool  isCrit = Roll(CritChance(attacker)); // já soma +10% de Fierce Brute se ativo — lido ANTES de zerar o flag abaixo.
         float dmg    = CalcDamage(attacker, isCrit);
+
+        // Fierce Brute: dobra o dano BRUTO deste hit, antes do Resistant cap (pra não furar o
+        // teto de 25% do HP máximo que essa skill garante) — e consome o buff agora que o hit
+        // de fato conectou.
+        if (fierceBruteThisHit)
+        {
+            dmg *= 2f;
+            attacker.fierceBruteActive = false;
+        }
 
         // Resistant: cap no dano bruto, antes de Lead Skeleton/armadura (ver ApplyResistantCap).
         dmg = ApplyResistantCap(defender, dmg);
@@ -683,7 +728,7 @@ public class CombatSimulator
         // valor negativo que o dano bruto (finalDamage) produziria, e aplicava o dano cheio
         // direto na HealthSystem ao vivo, zerando a barra visualmente até o próximo evento
         // corrigir (ver Survival no CLAUDE.md).
-        Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, isCombo = isCombo, newHp = defender.hp, maxHp = defender.maxHp });
+        Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, isCombo = isCombo, isFierceBrute = fierceBruteThisHit, newHp = defender.hp, maxHp = defender.maxHp });
         Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
 
         // Chaining: 3 golpes consecutivos sem tomar dano (ApplyDamage zera o streak assim que
@@ -1112,7 +1157,10 @@ public class CombatSimulator
             : TagSum(attacker.currentWeaponData, sharp: 0.05f, fast: 0.03f, heavy: 0.03f);
         float weaponBonus = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.critChanceBonus : UnarmedStats.CritChanceBonus;
-        return baseChance + weaponBonus + attacker.criticalChance;
+        // Fierce Brute: +10% crítico enquanto o buff estiver ativo (lido ANTES de SimulateHit
+        // consumir/zerar fierceBruteActive depois do hit — ver lá).
+        float fierceBruteBonus = attacker.fierceBruteActive ? 0.10f : 0f;
+        return baseChance + weaponBonus + attacker.criticalChance + fierceBruteBonus;
     }
 
     // comboCount = quantos hits extra de combo já aconteceram neste turno (0 = checagem do 1º hit extra).

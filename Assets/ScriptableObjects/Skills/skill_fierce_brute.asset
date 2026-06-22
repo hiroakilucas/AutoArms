@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_fierce_brute
   m_EditorClassIdentifier: 
   skillName: Fierce Brute
-  description: "Dano duplo no pr\xF3ximo hit (1x por luta)"
-  icon: {fileID: 0}
+  description: "33% por turno: dobra o dano do pr\xF3ximo golpe e +10% cr\xEDtico
+    (1 uso base + 1 a cada 30 de STR)"
+  icon: {fileID: 21300000, guid: 93222694c87bd1e4797d5691cf1fa8d2, type: 3}
   category: 4
   activationType: 1
   usesPerFight: 1

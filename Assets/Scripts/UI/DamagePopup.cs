@@ -245,6 +245,30 @@ public class DamagePopup : MonoBehaviour
         origin = transform.position;
     }
 
+    // Fierce Brute: mesmo popup de dano normal, mas com uma linha "×2!" abaixo do número e cor
+    // laranja intensa em vez do amarelo padrão — pedido explícito do usuário pra diferenciar
+    // visualmente o hit que consumiu o buff.
+    public static void SpawnFierceBrute(Vector3 worldPos, int damage, bool isCrit)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitFierceBrute(damage, isCrit);
+    }
+
+    void InitFierceBrute(int damage, bool isCrit)
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = isCrit ? $"CRIT! {damage}\n×2!" : $"{damage}\n×2!";
+        label.fontSize       = isCrit ? 5f : 4f;
+        baseColor            = new Color(1f, 0.35f, 0f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void Update()
     {
         elapsed += Time.deltaTime;

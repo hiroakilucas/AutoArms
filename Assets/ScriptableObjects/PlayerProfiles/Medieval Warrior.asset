@@ -19,10 +19,10 @@ MonoBehaviour:
   weaponLoadout: {fileID: 11400000, guid: 501d244af57792bf64799733faa8427e, type: 2}
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 77
+  maxHealth: 74
   str: 4
-  agility: 2
-  speed: 5
+  agility: 5
+  speed: 6
   armor: 0
   evasion: 0
   accuracy: 0
@@ -34,9 +34,10 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills:
-  - {fileID: 11400000, guid: dc432635d1c08f444bc03f4a3291955d, type: 2}
-  level: 2
+  - {fileID: 11400000, guid: bbf7c930a08ccdf42877d14196b85d5a, type: 2}
+  - {fileID: 11400000, guid: 22eb5f9e49f87de459addafba984db4d, type: 2}
+  level: 3
   winRate: 0
-  xpCurrent: 4
-  xpRequired: 12
+  xpCurrent: 6
+  xpRequired: 20
   battlesRemaining: 0
