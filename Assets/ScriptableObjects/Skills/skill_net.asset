@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_net
   m_EditorClassIdentifier: 
   skillName: Net
-  description: "Imobiliza o advers\xE1rio (1x por luta)"
-  icon: {fileID: 0}
+  description: "50% por turno: imobiliza o oponente sem dano, sempre acerta \u2014
+    ele s\xF3 se solta ao sofrer um hit (1x por luta)"
+  icon: {fileID: 21300000, guid: 5e5125457ea79544da0c6dc2b11001e9, type: 3}
   category: 4
   activationType: 1
   usesPerFight: 1

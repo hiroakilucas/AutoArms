@@ -205,12 +205,22 @@ MonoBehaviour:
   initiative: 0
   reversal: 0
   counter: 0
+  blockBonus: 0
+  reversalAfterBlock: 0
   criticalChance: 0
+  critDamageBonus: 0
   hitSpeed: 1
   runSpeedMultiplier: 1
   comboChanceBonus: 0
+  disarmChanceBonus: 0
+  stickyHands: 0
+  leadSkeleton: 0
+  firstHitAvoided: 0
+  martialArts: 0
+  weaponsMaster: 0
+  hasShield: 0
   skills: []
-  logSkills: 1
+  debugProfile: {fileID: 0}
 --- !u!114 &45243677
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -360,7 +370,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-
 --- !u!1 &904002940
 GameObject:
   m_ObjectHideFlags: 0
@@ -760,13 +769,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   attackSequencer: {fileID: 904002941}
-  player1SpawnPoint: {fileID: 0}
   player2Object: {fileID: 45243663}
   selectedProfileHolder: {fileID: 11400000, guid: 922f3509158987247abc4e20f118b45c, type: 2}
   player2MaxHealth: 50
   player2Profile: {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
   useSimulator: 1
   shieldWeaponData: {fileID: 11400000, guid: 8478c50742c3418e9eaca51076d96a5d, type: 2}
+  piledriverEffectPrefab: {fileID: 1658514718516592994, guid: 5f7e146aa5be0e148a138bde0f0407b9, type: 3}
+  netFlyingSprite: {fileID: 21300000, guid: dc7fda0a3cc05f348bd70634c4abf146, type: 3}
+  netLandedSprite: {fileID: 21300000, guid: 447749ab3346b6b40a280fb00b482de9, type: 3}
 --- !u!4 &1332891506
 Transform:
   m_ObjectHideFlags: 0
@@ -798,7 +809,6 @@ SceneRoots:
   m_Roots:
   - {fileID: 519420032}
   - {fileID: 1294674956}
-
   - {fileID: 1066112932}
   - {fileID: 1332891506}
   - {fileID: 904002942}

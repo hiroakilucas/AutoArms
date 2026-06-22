@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_flash_flood
   m_EditorClassIdentifier: 
   skillName: Flash Flood
-  description: "Dano em \xE1rea (1x por luta)"
-  icon: {fileID: 0}
+  description: "17% por a\xE7\xE3o: com 3+ armas no invent\xE1rio, arremessa 3 aleat\xF3rias
+    que sempre acertam (1x por luta)"
+  icon: {fileID: 21300000, guid: e5e66485ea780034687e74ad325f830f, type: 3}
   category: 4
   activationType: 1
   usesPerFight: 1

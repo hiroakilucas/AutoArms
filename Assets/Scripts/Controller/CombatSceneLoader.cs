@@ -24,6 +24,16 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("WeaponData usado como visual permanente da skill Shield (Assets/Data/UI/Weapons/Shield/Shield1.asset).")]
     [SerializeField] private WeaponData shieldWeaponData;
 
+    [Header("Piledriver")]
+    [Tooltip("Prefab do efeito de explosão da skill Piledriver (Assets/Data/UI/SkillEffect/Piledriver/PiledriverExplosion.prefab, gerado por Tools > AutoArms > Generate Piledriver Effect Prefab).")]
+    [SerializeField] private GameObject piledriverEffectPrefab;
+
+    [Header("Net")]
+    [Tooltip("Sprite da rede em voo (Assets/Data/UI/SkillEffect/Net/net1.png).")]
+    [SerializeField] private Sprite netFlyingSprite;
+    [Tooltip("Sprite da rede caída/oscilando sobre o enredado (Assets/Data/UI/SkillEffect/Net/net2.png).")]
+    [SerializeField] private Sprite netLandedSprite;
+
     private const string Player2ProfileFallbackPath =
         "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
@@ -208,6 +218,9 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.sequencer   = attackSequencer;
             combatPlayer.p1WeaponHUD = p1WeaponHUD;
             combatPlayer.p2WeaponHUD = p2WeaponHUD;
+            combatPlayer.piledriverEffectPrefab = piledriverEffectPrefab;
+            combatPlayer.netFlyingSprite = netFlyingSprite;
+            combatPlayer.netLandedSprite = netLandedSprite;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);

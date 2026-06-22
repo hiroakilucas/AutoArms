@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
-  m_Name: skill_sabotage
+  m_Name: skill_piledriver
   m_EditorClassIdentifier: 
-  skillName: Sabotage
-  description: "+50% chance de destruir uma arma do HUD do advers\xE1rio a cada golpe
-    acertado"
-  icon: {fileID: 21300000, guid: 7cbbe17d350448540806fe8d41ef49e3, type: 3}
-  category: 0
-  activationType: 0
+  skillName: Piledriver
+  description: '17% por turno: agarra e cai sobre o oponente, dano baseado na STR
+    dele, nunca esquivado/bloqueado (1x por luta)'
+  icon: {fileID: 21300000, guid: 4a2912bd8191df247b02862edc44a89f, type: 3}
+  category: 4
+  activationType: 1
   usesPerFight: 1

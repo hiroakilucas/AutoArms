@@ -80,6 +80,9 @@ public class PlayerCombat : MonoBehaviour
     private Sprite[]       faceSprites;
     private GameObject stunLabel;
     private Coroutine   stunDazedRoutine;
+    private GameObject netVisual;
+    private Coroutine   netFaceRoutine;
+    private Coroutine   netOscillateRoutine;
 
     // Chaining: chamado quando este personagem é estunado (CombatEventType.Stunned) — label
     // fixo acima da cabeça (texto por enquanto; o usuário vai trocar por sprite depois) + pose
@@ -145,6 +148,75 @@ public class PlayerCombat : MonoBehaviour
         while (true)
         {
             if (hasFace) faceRenderer.sprite = faceSprites[2]; // Face 03, olhos fechados
+            yield return null;
+        }
+    }
+
+    // Skill Net: chamado pelo CombatPlayer (case NetThrow) quando este personagem acaba de ser
+    // enredado — pose de agachado (Face 02, mesmo padrão reforçado todo frame do StunDazedLoop
+    // acima) + sprite da rede caída (net2), parented a este transform (acompanha qualquer
+    // knockback) oscilando lateralmente em loop. Continua "ligado" através de qualquer número
+    // de NetEnsnaredSkip seguidos — só termina quando ReleaseNet() é chamado (CombatPlayer, case
+    // NetFreed, ao sofrer um hit de verdade).
+    public void ShowNetEnsnared(Sprite netLandedSprite, float scale = 1f)
+    {
+        if (netFaceRoutine == null)
+            netFaceRoutine = StartCoroutine(NetFaceLoop());
+
+        if (netVisual == null)
+        {
+            netVisual = new GameObject("NetVisual");
+            netVisual.transform.SetParent(transform);
+            netVisual.transform.localPosition = Vector3.zero;
+            // Cancela o sinal de localScale.x do pai (flip de direção, mesmo padrão do
+            // StunLabel acima) pra a rede nunca renderizar espelhada quando o personagem
+            // está virado pra esquerda.
+            netVisual.transform.localScale = new Vector3(Mathf.Sign(transform.localScale.x) * scale, scale, 1f);
+            var sr = netVisual.AddComponent<SpriteRenderer>();
+            sr.sprite           = netLandedSprite;
+            sr.sortingLayerName = "Characters";
+            sr.sortingOrder     = 30;
+            netOscillateRoutine = StartCoroutine(NetOscillateLoop());
+        }
+    }
+
+    // Solta este personagem da rede — para os loops de face/oscilação e restaura Face 01, mas
+    // devolve o próprio GameObject da rede pro chamador (CombatPlayer) animar a sequência de
+    // libertação (scale-up + fragmentos) antes de destruí-lo, em vez de já destruir aqui.
+    public GameObject ReleaseNet()
+    {
+        if (netFaceRoutine != null) { StopCoroutine(netFaceRoutine); netFaceRoutine = null; }
+        if (netOscillateRoutine != null) { StopCoroutine(netOscillateRoutine); netOscillateRoutine = null; }
+        if (faceRenderer != null && faceSprites != null && faceSprites.Length > 0)
+            faceRenderer.sprite = faceSprites[0]; // Face 01, volta ao normal
+        animationController.SetIdle(true);
+
+        var go = netVisual;
+        netVisual = null;
+        return go;
+    }
+
+    private IEnumerator NetFaceLoop()
+    {
+        bool hasFace = faceRenderer != null && faceSprites != null && faceSprites.Length > 1;
+        while (true)
+        {
+            if (hasFace) faceRenderer.sprite = faceSprites[1]; // Face 02, agachado
+            yield return null;
+        }
+    }
+
+    // Oscilação lateral suave (amplitude ~0.05, frequência ~2Hz) — posição ABSOLUTA a cada
+    // frame (não um "+=" acumulado): a descrição original pedia um incremento por frame, mas
+    // somar Mathf.Sin(Time.time) every frame não estabiliza num vaivém, só deriva sem limite.
+    // Recalcular o X relativo a partir de Time.time direto produz o vaivém pretendido de verdade.
+    private IEnumerator NetOscillateLoop()
+    {
+        while (netVisual != null)
+        {
+            var lp = netVisual.transform.localPosition;
+            lp.x = Mathf.Sin(Time.time * 2f) * 0.05f;
+            netVisual.transform.localPosition = lp;
             yield return null;
         }
     }

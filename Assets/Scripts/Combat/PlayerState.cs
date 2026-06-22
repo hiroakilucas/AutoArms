@@ -38,9 +38,21 @@ public class PlayerState
     public bool survivalUsed;
     public bool hasShield;
     public int  thiefUsesRemaining = 2;
+    public int  flashFloodUsesRemaining = 1;
+    public int  hasteUsesRemaining = 1;
+    public int  piledriverUsesRemaining = 1;
+    public int  netUsesRemaining = 1;
     public bool hasTakenFirstTurn;
     public int  chainHitStreak;
     public int  stunnedActions;
+    public bool netEnsnared;
+
+    // Pets (Fase 3, roadmap — ainda não implementados): quando o alvo enredado for um pet,
+    // este campo é setado true em vez de netEnsnared sozinho, e SimulateTurn deve tratar isso
+    // como permanente — nunca libera o pet mesmo ao sofrer dano (diferente do oponente normal,
+    // que se solta no próximo hit que sofrer). Campo preparado agora, sem lógica de pet ainda
+    // (não existe PlayerState de pet pra setar isso de verdade).
+    public bool netEnsnaredPermanent;
 
     // Weapons
     public List<WeaponData> weaponLoadout = new List<WeaponData>();

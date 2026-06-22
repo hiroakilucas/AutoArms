@@ -364,6 +364,18 @@ public class CombatSimulator
     {
         Emit(new CombatEvent { type = CombatEventType.TurnStart, playerIndex = attacker.index });
 
+        // Net: turno inteiro perdido enquanto enredado — checado antes até do stun do Chaining
+        // abaixo ("antes de tudo", pedido pelo usuário). Diferente de stunnedActions (contador
+        // que zera por conta própria depois de 1 ação), netEnsnared não tem contador — continua
+        // pulando turno após turno até o próprio atacante sofrer um hit (ver NetFreed nos pontos
+        // de dano) ou, no caso de pets (netEnsnaredPermanent, ainda não implementado), nunca.
+        if (attacker.netEnsnared)
+        {
+            Emit(new CombatEvent { type = CombatEventType.NetEnsnaredSkip, playerIndex = attacker.index });
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
+        }
+
         // Chaining: turno consumido por estar estunado — pula a ação inteira (sem Thief/
         // pickup/swap/throw/melee), só decrementa o contador e emite StunSkip pra
         // CombatPlayer encerrar o loop de Hurt + remover a label (ver PlayerCombat.HideStunLabel).
@@ -381,6 +393,62 @@ public class CombatSimulator
         // por Speed) — usado só pra bloquear Troca de Arma no item 2b abaixo, ver lá o motivo.
         bool isFirstTurn = !attacker.hasTakenFirstTurn;
         attacker.hasTakenFirstTurn = true;
+
+        // 0. Flash Flood (Super, 1x por luta): 17% de chance por ação, exige >= 3 armas no
+        // weaponLoadout e o uso ainda disponível. weaponLoadout inclui a arma em mão enquanto
+        // equipada (nunca é removida da lista só por estar empunhada — ver BuildState/
+        // pickup/swap), então essa mesma contagem >= 3 cobre os dois cenários: armado (mão +
+        // 2 outras) ou desarmado (3 quaisquer do loadout) — ver SimulateFlashFlood pra como a
+        // arma em mão é sempre incluída quando armado. hitSpeed > 0 — Monk (guarda, nunca
+        // ataca) também não pode disparar isso, mesma checagem de Throw/Melee abaixo. Checado
+        // ANTES de Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno (sem
+        // mais nada acontecendo neste mesmo turno).
+        if (attacker.hitSpeed > 0f && attacker.HasSkill("Flash Flood") && attacker.flashFloodUsesRemaining > 0
+            && attacker.weaponLoadout.Count >= 3 && Roll(0.17f))
+        {
+            SimulateFlashFlood(attacker, defender);
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
+        }
+
+        // 0b. Haste (Super, 1x por luta): 23% de chance por turno quando disponível. Não exige
+        // arma nenhuma (dano vem só de Speed, ver SimulateHaste) — diferente de Flash Flood.
+        // Mesma checagem de hitSpeed > 0 (Monk nunca dispara nenhuma Super). Checado ANTES de
+        // Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno.
+        if (attacker.hitSpeed > 0f && attacker.HasSkill("Haste") && attacker.hasteUsesRemaining > 0 && Roll(0.23f))
+        {
+            SimulateHaste(attacker, defender);
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
+        }
+
+        // 0c. Piledriver (Super, 1x por luta): 17% de chance por turno quando disponível
+        // (valor fixo do jogo original). NUNCA pode ser esquivado nem bloqueado — ignora
+        // DodgeChance/BlockChance inteiramente (o atacante já agarrou o defensor antes de
+        // pular; não há janela pra reagir depois do grab). Dano escala com a STR do
+        // DEFENSOR, não do atacante — ver SimulatePiledriver. Mesmo guard de hitSpeed > 0.
+        if (attacker.hitSpeed > 0f && attacker.HasSkill("Piledriver") && attacker.piledriverUsesRemaining > 0 && Roll(0.17f))
+        {
+            SimulatePiledriver(attacker, defender);
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
+        }
+
+        // 0d. Net (Super, 1x por luta): 50% de chance por turno quando disponível (valor fixo
+        // do jogo original, "Usage Rate: 50%"). NÃO causa dano — puro controle. SEMPRE ACERTA,
+        // nem checa BlockChance/DodgeChance (rede arremessada em área, sem como esquivar) —
+        // mesmo padrão de "ignora dodge/block" do Flash Flood, mas aqui não há resultado
+        // nenhum a errar. Marca defender.netEnsnared = true (ver topo deste método e
+        // SimulateHit/SimulateRetaliation/SimulateThrow/Simulate*Attack pros pontos onde o
+        // status bloqueia esquiva/bloqueio/counter-attack e onde é removido ao sofrer hit).
+        if (attacker.hitSpeed > 0f && attacker.HasSkill("Net") && attacker.netUsesRemaining > 0 && Roll(0.50f))
+        {
+            attacker.netUsesRemaining--;
+            defender.netEnsnared = true;
+            Emit(new CombatEvent { type = CombatEventType.NetThrow, playerIndex = attacker.index, targetIndex = defender.index });
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
+        }
 
         // 1. Thief: rouba a arma do oponente se eu estiver desarmado e ele armado — 44% por
         // turno, no máximo 2 vezes por luta (thiefUsesRemaining). Checado ANTES do pickup normal
@@ -530,14 +598,17 @@ public class CombatSimulator
         // mas raramente chegavam a disparar de fato, já que Block/Dodge sempre tinham a primeira
         // chance e, ao suceder, retornavam antes do Counter ser checado — bug real reportado
         // pelo usuário: Monk não reagia nem depois de bloquear nem ao tomar hit).
-        if (Roll(CounterChance(defender)))
+        // Net: defensor enredado não pode counterar — "não pode usar counter-attack" — cai
+        // direto pro Block (também gated abaixo).
+        if (!defender.netEnsnared && Roll(CounterChance(defender)))
         {
             SimulateRetaliation(defender, attacker, CombatEventType.Counter);
             return true;
         }
 
-        // Block check
-        if (Roll(BlockChance(attacker, defender)))
+        // Block check — gated por !defender.netEnsnared ("não pode usar block/parry" enquanto
+        // enredado; a rede impede evadir o próximo ataque, ver descrição original da skill Net).
+        if (!defender.netEnsnared && Roll(BlockChance(attacker, defender)))
         {
             Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = attacker.index, targetIndex = defender.index });
 
@@ -584,8 +655,8 @@ public class CombatSimulator
             return false;
         }
 
-        // Dodge check
-        if (Roll(DodgeChance(attacker, defender)))
+        // Dodge check — gated por !defender.netEnsnared ("não pode usar dodge" enquanto enredado).
+        if (!defender.netEnsnared && Roll(DodgeChance(attacker, defender)))
         {
             Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index });
             return false;
@@ -644,6 +715,28 @@ public class CombatSimulator
 
         if (!defender.isAlive) return false;
 
+        // Sabotage: 50% de chance, a cada golpe que acerta (qualquer hit, incluindo combo —
+        // não só o primeiro), de destruir permanentemente uma arma aleatória do HUD do
+        // defensor — só as com ícone CINZA (na "bolsa", não equipadas). A arma com ícone
+        // DOURADO (a que está na mão dele agora) nunca é elegível — pedido pelo usuário, a
+        // skill não deve influenciar o que o oponente já está empunhando, só o resto do HUD.
+        // Reusa o mesmo CombatEventType.Saboteur (e a mesma queda visual em pêndulo do ícone
+        // até o chão) já usado pela skill Saboteur pré-luta — só a origem muda (aqui é por
+        // hit, durante o combate, em vez de uma vez só antes do 1º turno).
+        if (attacker.HasSkill("Sabotage"))
+        {
+            var sabotagePool = new List<WeaponData>();
+            foreach (var w in defender.weaponLoadout)
+                if (w != defender.currentWeaponData) sabotagePool.Add(w);
+
+            if (sabotagePool.Count > 0 && Roll(0.50f))
+            {
+                var destroyed = sabotagePool[_rng.Next(sabotagePool.Count)];
+                defender.weaponLoadout.Remove(destroyed);
+                Emit(new CombatEvent { type = CombatEventType.Saboteur, playerIndex = attacker.index, targetIndex = defender.index, weaponName = destroyed.weaponName, isMidFight = true });
+            }
+        }
+
         // Iron Head: logo após sofrer o dano (qualquer hit, incluindo combo — não só o
         // primeiro, diferente do Disarm abaixo), +40% chance do DEFENSOR derrubar a arma do
         // ATACANTE (inverso do Disarm, que é o atacante desarmando o defensor). Igual ao
@@ -661,8 +754,12 @@ public class CombatSimulator
 
         // Reversal: depois de já ter tomado o hit, defensor contra-ataca imediatamente — não
         // cancela o combo do atacante (continua normalmente; cada hit extra do combo checa
-        // Reversal de novo, igual a este).
-        if (Roll(ReversalChance(defender)))
+        // Reversal de novo, igual a este). Gated por !defender.netEnsnared — "não pode usar
+        // counter-attack" enquanto enredado (Reversal é a 2ª metade dessa mecânica, ver Counter
+        // já gated acima). CheckNetFreed (no fim do método) só solta o defensor DEPOIS deste
+        // check — ele ainda está enredado no exato momento do próprio hit que vai libertá-lo,
+        // então não pode usar Reversal neste mesmo golpe.
+        if (!defender.netEnsnared && Roll(ReversalChance(defender)))
             SimulateRetaliation(defender, attacker, CombatEventType.Reversal);
 
         // Desarme (first hit only, not combo). attacker.isAlive: Reversal acima pode ter matado
@@ -693,6 +790,11 @@ public class CombatSimulator
                 Emit(new CombatEvent { type = CombatEventType.Disarm, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
             }
         }
+
+        // Net: solta o defensor DEPOIS de toda a resolução deste hit (Reversal/Desarme acima já
+        // rodaram com netEnsnared ainda true, corretamente bloqueados) — qualquer hit de
+        // verdade que o defensor sofra encerra o status.
+        CheckNetFreed(defender);
 
         return ironHeadTriggered;
     }
@@ -771,8 +873,11 @@ public class CombatSimulator
         // throw (80% → 55%, miss sobe de 20% pra 45%), em vez de um 3º resultado separado de
         // Block. Mais simples que a versão anterior (Roll(ThrowBlockChance) + evento Block
         // próprio) e bate com os valores oficiais do LaBrute.
+        // Net: defensor enredado não pode evadir o arremesso também — força acerto, ignorando
+        // hitChance/Hideaway por completo (mesmo "sempre acerta" das outras checagens, ver
+        // Counter/Block/Dodge gated em SimulateHit/SimulateHaste).
         float hitChance = 0.80f - (defender.HasSkill("Hideaway") ? 0.25f : 0f);
-        if (Roll(hitChance))
+        if (defender.netEnsnared || Roll(hitChance))
         {
             int dmg = CalcThrowDamage(attacker, weaponData);
             // Resistant: cap no dano bruto, antes da armadura (ver ApplyResistantCap).
@@ -783,6 +888,7 @@ public class CombatSimulator
             defender.hp = ApplyDamage(defender, dmg);
             Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true, newHp = defender.hp, maxHp = defender.maxHp });
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+            CheckNetFreed(defender);
         }
         else
         {
@@ -795,6 +901,137 @@ public class CombatSimulator
         // ocasionalmente "equipar" uma arma já no fim do turno (depois do hit/miss do arremesso),
         // sem nenhuma ação visível além da troca de ícone — bug real reportado pelo usuário: o
         // pickup deveria sempre acontecer no início do turno, nunca no meio/fim.
+    }
+
+    // --- Flash Flood (Super) ---
+
+    // Se o atacante estiver armado, a arma em mão é SEMPRE uma das 3 arremessadas (ordem
+    // garantida: sempre a 1ª de ffWeapons) — as outras 2 são sorteadas aleatoriamente do
+    // restante do weaponLoadout (que inclui a própria arma em mão enquanto equipada, ver
+    // BuildState/pickup/swap acima — nunca é removida da lista só por estar empunhada).
+    // Se estiver desarmado, as 3 são sorteadas aleatoriamente do weaponLoadout inteiro, como
+    // antes. Em ambos os casos arremessa cada uma em sequência — todas SEMPRE ACERTAM: nunca
+    // passam por Roll(BlockChance)/Roll(DodgeChance) (e, quando pets existirem, também não
+    // devem poder interceptar este ataque). Armadura e Resistant do defensor continuam
+    // valendo normalmente — só esquiva/bloqueio/pet são ignorados, não mitigação de dano. As
+    // 3 armas saem da mão e do loadout pra sempre (consumidas no arremesso, mesmo as com a
+    // tag Thrown) — diferente de SimulateThrow, que devolve armas Thrown ao loadout.
+    private void SimulateFlashFlood(PlayerState attacker, PlayerState defender)
+    {
+        attacker.flashFloodUsesRemaining--;
+
+        var pool = new List<int>();
+        for (int i = 0; i < attacker.weaponLoadout.Count; i++) pool.Add(i);
+
+        var chosen = new List<WeaponData>();
+        if (attacker.currentWeaponData != null)
+        {
+            chosen.Add(attacker.currentWeaponData);
+            pool.Remove(attacker.weaponLoadout.IndexOf(attacker.currentWeaponData));
+        }
+        while (chosen.Count < 3 && pool.Count > 0)
+        {
+            int pick = _rng.Next(pool.Count);
+            int idx  = pool[pick];
+            pool.RemoveAt(pick);
+            chosen.Add(attacker.weaponLoadout[idx]);
+        }
+        foreach (var w in chosen)
+            attacker.weaponLoadout.Remove(w);
+        attacker.currentWeaponData = null; // arma em mão (se havia) também foi arremessada
+
+        var weaponNames = new List<string>();
+        var damages     = new List<int>();
+        var hpAfter     = new List<int>();
+
+        foreach (var w in chosen)
+        {
+            int dmg = CalcThrowDamage(attacker, w);
+            dmg = Mathf.RoundToInt(ApplyResistantCap(defender, dmg));
+            if (defender.armor > 0f)
+                dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
+
+            defender.hp = ApplyDamage(defender, dmg);
+
+            weaponNames.Add(w.weaponName);
+            damages.Add(dmg);
+            hpAfter.Add(defender.hp);
+        }
+
+        Emit(new CombatEvent
+        {
+            type        = CombatEventType.FlashFlood,
+            playerIndex = attacker.index,
+            targetIndex = defender.index,
+            ffWeapons   = weaponNames,
+            ffDamages   = damages,
+            ffHpAfter   = hpAfter,
+            maxHp       = defender.maxHp,
+        });
+        Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+        CheckNetFreed(defender);
+    }
+
+    // --- Haste (Super) ---
+
+    // Dash que atravessa o defensor — dano baseado em Speed (sem arma/STR, fórmula
+    // speed × 1.5, ver CLAUDE.md), com +5% de chance de crítico exclusivo do Haste somado por
+    // cima de CritChance() normal. Diferente de Flash Flood, PODE ser esquivado/bloqueado
+    // normalmente (mesmas DodgeChance/BlockChance de qualquer hit) — só não passa por
+    // Counter/Reversal/Desarme, já que não é um golpe corpo a corpo comum, é um dash que
+    // atravessa o oponente. Não consome a arma em mão (currentWeaponData intocado).
+    private void SimulateHaste(PlayerState attacker, PlayerState defender)
+    {
+        attacker.hasteUsesRemaining--;
+
+        // Net: defensor enredado não pode esquivar/bloquear o dash também (mesmo gate de
+        // SimulateHit) — a rede impede evadir o próximo ataque, qualquer que seja.
+        if (!defender.netEnsnared && Roll(BlockChance(attacker, defender)))
+        {
+            Emit(new CombatEvent { type = CombatEventType.HasteAttack, playerIndex = attacker.index, targetIndex = defender.index, isBlocked = true });
+            return;
+        }
+        if (!defender.netEnsnared && Roll(DodgeChance(attacker, defender)))
+        {
+            Emit(new CombatEvent { type = CombatEventType.HasteAttack, playerIndex = attacker.index, targetIndex = defender.index, isDodged = true });
+            return;
+        }
+
+        bool  isCrit = Roll(CritChance(attacker) + 0.05f);
+        float dmg    = attacker.speed * 1.5f;
+        if (isCrit) dmg *= CritDamageMultiplier(attacker);
+        dmg = ApplyResistantCap(defender, dmg);
+        int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
+
+        defender.hp = ApplyDamage(defender, finalDamage);
+
+        Emit(new CombatEvent { type = CombatEventType.HasteAttack, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, newHp = defender.hp, maxHp = defender.maxHp });
+        Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+        CheckNetFreed(defender);
+    }
+
+    // --- Piledriver (Super) ---
+
+    // Agarra o defensor, pula com ele e cai por cima — dano baseado na STR do DEFENSOR, não
+    // do atacante (referência do My Brute: quanto mais forte/pesado o oponente, maior o
+    // impacto da queda). NUNCA passa por Roll(BlockChance)/Roll(DodgeChance) — o grab já
+    // aconteceu antes do pulo, não há janela pra reagir (diferente de Haste, que pode ser
+    // esquivado/bloqueado).
+    private void SimulatePiledriver(PlayerState attacker, PlayerState defender)
+    {
+        attacker.piledriverUsesRemaining--;
+
+        bool  isCrit = Roll(CritChance(attacker));
+        float dmg    = defender.str * 2.5f;
+        if (isCrit) dmg *= CritDamageMultiplier(attacker);
+        dmg = ApplyResistantCap(defender, dmg);
+        int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
+
+        defender.hp = ApplyDamage(defender, finalDamage);
+
+        Emit(new CombatEvent { type = CombatEventType.PiledriverAttack, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, newHp = defender.hp, maxHp = defender.maxHp });
+        Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+        CheckNetFreed(defender);
     }
 
     // --- Chance calculations (mirrors PlayerCombat methods) ---
@@ -998,6 +1235,19 @@ public class CombatSimulator
             newHp = 1;
         }
         return Mathf.Max(0, newHp);
+    }
+
+    // Net: qualquer hit de verdade solta o alvo enredado — chamado por cada call site de dano
+    // (SimulateHit, SimulateRetaliation, SimulateThrow, SimulateFlashFlood, SimulateHaste,
+    // SimulatePiledriver) DEPOIS de emitir o próprio evento de dano daquele hit, pra o NetFreed
+    // sempre vir na ordem certa na lista de eventos (rede só "quebra" depois do golpe acontecer
+    // visualmente, nunca antes). netEnsnaredPermanent (pets, Fase 3 — ainda não implementado)
+    // nunca libera, mesmo tomando dano.
+    private void CheckNetFreed(PlayerState target)
+    {
+        if (!target.netEnsnared || target.netEnsnaredPermanent) return;
+        target.netEnsnared = false;
+        Emit(new CombatEvent { type = CombatEventType.NetFreed, playerIndex = target.index });
     }
 
     private int CalcThrowDamage(PlayerState attacker, WeaponData data)

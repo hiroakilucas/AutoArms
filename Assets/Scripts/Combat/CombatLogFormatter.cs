@@ -107,6 +107,15 @@ public static class CombatLogFormatter
                     sb.AppendLine($"  {Name(e.playerIndex)} sabota {Name(e.targetIndex)}: destrói {e.weaponName} (-100 iniciativa)");
                     break;
 
+                case CombatEventType.FlashFlood:
+                {
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativa FLASH FLOOD contra {Name(e.targetIndex)}!");
+                    if (e.ffWeapons != null)
+                        for (int j = 0; j < e.ffWeapons.Count; j++)
+                            sb.AppendLine($"    arremessa {e.ffWeapons[j]}: {e.ffDamages[j]} dano (SEMPRE ACERTA) (HP: {e.ffHpAfter[j]}/{e.maxHp})");
+                    break;
+                }
+
                 case CombatEventType.CombatEnd:
                     sb.AppendLine($"========== VENCEDOR: {Name(e.playerIndex)} ==========");
                     break;
