@@ -49,6 +49,7 @@ public static class SkillAssetGenerator
         new SkillDef { fileName = "skill_ballet_shoes",       skillName = "Ballet Shoes",         description = "Pula para trás no início da luta",                          category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
         new SkillDef { fileName = "skill_resistant",          skillName = "Resistant",            description = "Nenhum hit isolado reduz mais que 25% da vida máxima",       category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
         new SkillDef { fileName = "skill_sticky_hands",       skillName = "Sticky Hands",         description = "-50% chance de ser desarmado, -50% chance de arremesso (próprio)", category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
+        new SkillDef { fileName = "skill_fast_metabolism",    skillName = "Fast Metabolism",      description = "Regenera 1% do HP máximo por turno; abaixo de 50% HP, +5% por turno até 10x sem levar dano. -50% hit speed, -5% crítico", category = SkillCategory.DefensePassive, activationType = SkillActivationType.Passive, usesPerFight = 1 },
 
         // StatBoost
         new SkillDef { fileName = "skill_vitality",           skillName = "Vitality",             description = "+18 HP permanente, +50% HP",                                category = SkillCategory.StatBoost,      activationType = SkillActivationType.Passive, usesPerFight = 1 },

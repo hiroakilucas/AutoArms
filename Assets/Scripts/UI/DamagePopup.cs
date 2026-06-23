@@ -271,14 +271,18 @@ public class DamagePopup : MonoBehaviour
 
     // Tragic Potion: popup verde de cura, "+<quantidade>" — fonte maior que o popup normal de
     // dano (fontSize 3.5f -> 6.5f, +3 pedido pelo usuário) pra se destacar dos popups de combate.
-    public static void SpawnHeal(Vector3 worldPos, int amount)
+    // fontSize default (6.5) é o popup "normal" de cura (Tragic Potion, pulso de Fast
+    // Metabolism); a regeneração passiva de Fast Metabolism passa um valor menor explícito
+    // (ver CombatPlayer.PlayFastMetabolismRegen) pra não competir visualmente com o popup do
+    // pulso, que deve parecer mais impactante.
+    public static void SpawnHeal(Vector3 worldPos, int amount, float fontSize = 6.5f)
     {
         var go = new GameObject("DamagePopup");
         go.transform.position = worldPos;
-        go.AddComponent<DamagePopup>().InitHeal(amount);
+        go.AddComponent<DamagePopup>().InitHeal(amount, fontSize);
     }
 
-    void InitHeal(int amount)
+    void InitHeal(int amount, float fontSize)
     {
         label = gameObject.AddComponent<TextMeshPro>();
         label.alignment      = TextAlignmentOptions.Center;
@@ -286,7 +290,7 @@ public class DamagePopup : MonoBehaviour
         label.sortingOrder   = 50;
         label.fontStyle      = FontStyles.Bold;
         label.text           = $"+{amount}";
-        label.fontSize       = 6.5f;
+        label.fontSize       = fontSize;
         baseColor            = new Color(0.2f, 0.9f, 0.2f);
         label.color          = baseColor;
         origin               = transform.position;

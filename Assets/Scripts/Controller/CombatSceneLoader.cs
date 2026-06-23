@@ -44,6 +44,10 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("Sprite do efeito de cura/partículas (Assets/Data/UI/SkillEffect/TragicPotion/healing.png).")]
     [SerializeField] private Sprite tragicPotionHealSprite;
 
+    [Header("Fast Metabolism")]
+    [Tooltip("Animator Controller da folha animada (Assets/Data/UI/SkillEffect/FastMetabolism/Leaf Shield_Frame_01.controller) — usado tanto na regeneração passiva (1 instância pequena) quanto no pulso de 50% (6 instâncias orbitando). Não precisa de prefab — CombatPlayer monta o GameObject (SpriteRenderer+Animator) em runtime.")]
+    [SerializeField] private RuntimeAnimatorController fastMetabolismController;
+
     private const string Player2ProfileFallbackPath =
         "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
@@ -172,11 +176,11 @@ public class CombatSceneLoader : MonoBehaviour
 
         if (useSimulator && player2Profile != null)
         {
-            // Pré-calcula a luta inteira ANTES do EntryFall (não depois, como antes) — só
-            // assim dá pra saber qual arma a Deity começa empunhando (Player1StartingWeapon/
-            // Player2StartingWeapon) a tempo de equipá-la visualmente antes da queda, em vez
-            // de depois. Não depende de nada que só existe após o EntryFall (transform/
-            // spawnPosition) — só lê os PlayerProfile.
+            // Pré-calcula a luta inteira ANTES do EntryFall — não depende de nada que só existe
+            // depois dele (transform/spawnPosition), só lê os PlayerProfile, e permite pintar os
+            // ícones sabotados pela Spy (abaixo) já antes da queda em cena. Personagens não
+            // nascem mais com arma equipada (era 40% de chance — EquipStartingWeaponIfNeeded,
+            // removido a pedido do usuário; todo mundo agora começa sempre desarmado).
             attackSequencer.player1Profile = profile;
 
             var simulator = new CombatSimulator();
@@ -188,14 +192,6 @@ public class CombatSceneLoader : MonoBehaviour
             // vermelhos no WeaponHUD de quem foi sabotado, mesmo antes de equipá-las.
             p1WeaponHUD?.SetSabotagedWeapons(simulator.Player1SabotagedWeapons);
             p2WeaponHUD?.SetSabotagedWeapons(simulator.Player2SabotagedWeapons);
-
-            // Deity: já cai em cena com uma arma na mão, sem disparar nenhuma animação de
-            // pickup (EquipSpecific é silencioso) — ver comentário em
-            // CombatSimulator.Player1StartingWeapon/Player2StartingWeapon.
-            if (handler != null && simulator.Player1StartingWeapon != null)
-                handler.EquipSpecific(simulator.Player1StartingWeapon);
-            if (p2Handler != null && simulator.Player2StartingWeapon != null)
-                p2Handler.EquipSpecific(simulator.Player2StartingWeapon);
         }
         else
         {
@@ -234,6 +230,7 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.bombPrefab = bombPrefab;
             combatPlayer.tragicPotionSprite = tragicPotionSprite;
             combatPlayer.tragicPotionHealSprite = tragicPotionHealSprite;
+            combatPlayer.fastMetabolismController = fastMetabolismController;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);
@@ -453,10 +450,11 @@ public class CombatSceneLoader : MonoBehaviour
 
         if (combat.HasSkill("Monk"))
         {
+            // Não guarda mais (era hitSpeed = 0f, removido — Monk ataca normalmente, igual a
+            // qualquer personagem) — só o bônus de counter e o malus de iniciativa permanecem.
             combat.counter    += 0.40f;
             combat.initiative -= 200;
-            combat.hitSpeed    = 0f;
-            combat.LogSkillCheck("Monk", true, $"counter +40%, initiative −200, hitSpeed = 0");
+            combat.LogSkillCheck("Monk", true, $"counter +40%, initiative −200");
         }
 
         if (combat.HasSkill("Martial Arts"))

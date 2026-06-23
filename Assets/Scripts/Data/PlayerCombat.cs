@@ -85,6 +85,9 @@ public class PlayerCombat : MonoBehaviour
     private Coroutine   netOscillateRoutine;
     private GameObject fierceBruteAura;
     private Coroutine   fierceBruteAuraPulseRoutine;
+    private GameObject monkAura;
+    private Coroutine   monkAuraPulseRoutine;
+    private Coroutine   monkAuraFlashRoutine;
     private static Sprite _glowSprite;
 
     // Chaining: chamado quando este personagem é estunado (CombatEventType.Stunned) — label
@@ -289,6 +292,88 @@ public class PlayerCombat : MonoBehaviour
         if (go != null) Destroy(go);
     }
 
+    // Skill Monk: aura laranja persistente durante a luta INTEIRA — diferente da aura da Fierce
+    // Brute (some no próximo hit), essa nunca é destruída/escondida; chamada uma única vez por
+    // CombatPlayer.PlayCombat (idempotente, no-op se já existir), não depende de nenhum evento
+    // específico. Mesmo sprite procedural (GetGlowSprite) e mesmo padrão de pulso de alpha via
+    // seno da Fierce Brute, só com cor/escala/faixa de alpha diferentes (referência visual
+    // pedida pelo usuário: personagem com energia ao redor, do print do jogo original).
+    public void ShowMonkAura()
+    {
+        if (monkAura != null) return;
+
+        monkAura = new GameObject("MonkAura");
+        monkAura.transform.SetParent(transform);
+        monkAura.transform.localPosition = Vector3.zero;
+        monkAura.transform.localScale    = Vector3.one * 1.8f; // calibrável
+
+        var sr = monkAura.AddComponent<SpriteRenderer>();
+        sr.sprite           = GetGlowSprite();
+        sr.color            = new Color(1f, 0.5f, 0f, 0.30f);
+        sr.sortingLayerName = "Characters";
+        sr.sortingOrder     = -1; // atrás de qualquer parte do corpo (todas usam ordem >= 0)
+
+        monkAuraPulseRoutine = StartCoroutine(MonkAuraPulseLoop());
+    }
+
+    // Pulso de alpha entre 0.20 e 0.40 via seno — mesma frequência (~3Hz) e mesmo padrão da
+    // Fierce Brute, só com a faixa de alpha própria do Monk.
+    private IEnumerator MonkAuraPulseLoop()
+    {
+        var sr = monkAura.GetComponent<SpriteRenderer>();
+        while (monkAura != null)
+        {
+            float wave = (Mathf.Sin(Time.time * 3f) + 1f) * 0.5f;
+            var   c    = sr.color;
+            c.a        = Mathf.Lerp(0.20f, 0.40f, wave);
+            sr.color   = c;
+            yield return null;
+        }
+    }
+
+    // Contra-ataque do Monk (CombatEventType.Counter com playerIndex = Monk, ver CombatPlayer):
+    // pisca a aura — spike de alpha até 0.8 em 0.05s, volta ao normal em 0.1s — sem destruir a
+    // aura nem o pulso contínuo, só pausa o pulso enquanto o flash roda e retoma depois.
+    public void FlashMonkAura()
+    {
+        if (monkAura == null) return;
+        if (monkAuraFlashRoutine != null) StopCoroutine(monkAuraFlashRoutine);
+        monkAuraFlashRoutine = StartCoroutine(MonkAuraFlashRoutine());
+    }
+
+    private IEnumerator MonkAuraFlashRoutine()
+    {
+        if (monkAuraPulseRoutine != null) { StopCoroutine(monkAuraPulseRoutine); monkAuraPulseRoutine = null; }
+
+        var sr = monkAura.GetComponent<SpriteRenderer>();
+        float startAlpha = sr.color.a;
+
+        const float upDuration = 0.05f;
+        float elapsed = 0f;
+        while (elapsed < upDuration && monkAura != null)
+        {
+            elapsed += Time.deltaTime;
+            var c = sr.color;
+            c.a = Mathf.Lerp(startAlpha, 0.8f, elapsed / upDuration);
+            sr.color = c;
+            yield return null;
+        }
+
+        const float downDuration = 0.1f;
+        elapsed = 0f;
+        while (elapsed < downDuration && monkAura != null)
+        {
+            elapsed += Time.deltaTime;
+            var c = sr.color;
+            c.a = Mathf.Lerp(0.8f, 0.30f, elapsed / downDuration);
+            sr.color = c;
+            yield return null;
+        }
+
+        if (monkAura != null)
+            monkAuraPulseRoutine = StartCoroutine(MonkAuraPulseLoop());
+    }
+
     // Círculo branco com fade radial (alpha caindo do centro pra borda, "blur" pobre) gerado uma
     // única vez e cacheado — evita depender de um asset de glow que não existe no projeto ainda.
     private static Sprite GetGlowSprite()
@@ -376,9 +461,7 @@ public class PlayerCombat : MonoBehaviour
         yield return animationController.PlayIdle(settings.idleDuration);
 
         // Throw verifica ANTES do melee. Se triggar: arremessa do lugar, sem Run+JumpBack.
-        // Monk (hitSpeed = 0) guarda em vez de atacar — arremessar também é um ataque, então
-        // também não acontece pra ele (mesma checagem de CombatSimulator.SimulateTurn).
-        if (hitSpeed > 0f && defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
+        if (defender != null && !defender.IsDead && weaponHandler.CurrentWeapon != null
             && Random.value < ThrowChance())
         {
             yield return ThrowRoutine();
@@ -549,11 +632,7 @@ public class PlayerCombat : MonoBehaviour
 
     private IEnumerator StrikeRoutine()
     {
-        // Monk (hitSpeed = 0) guarda em vez de atacar — não corre até o adversário, mesma
-        // checagem de CombatSimulator.SimulateTurn (HitRoutine já saía cedo sem golpear, mas
-        // ainda corria até o adversário antes disso).
-        if (hitSpeed > 0f)
-            yield return animationController.PlayRun(AttackPosition(), RuntimeRunSpeed, movement);
+        yield return animationController.PlayRun(AttackPosition(), RuntimeRunSpeed, movement);
         yield return HitRoutine();
     }
 
@@ -577,17 +656,6 @@ public class PlayerCombat : MonoBehaviour
             WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Heavy) ? "SlashingHeavy" :
             WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Fast)  ? "SlashingDagger" :
             "Slashing";
-
-        // Monk: guarda em vez de atacar (hitSpeed = 0) — checado ANTES do Ballet Shoes abaixo,
-        // mesma ordem de CombatSimulator.SimulateHit. Um hit que nunca aconteceu não deveria
-        // gastar o "esquiva o 1º golpe" do defensor nem fazer ele saltar pra esquivar de um
-        // ataque que o Monk nunca desferiu.
-        if (hitSpeed <= 0f)
-        {
-            LogSkillCheck("Monk", true, "guarding instead of attacking (hitSpeed = 0)");
-            yield return new WaitForSeconds(settings.slashingDuration);
-            yield break;
-        }
 
         // Ballet Shoes: primeiro golpe da luta automaticamente esquivado
         if (defender != null && defender.firstHitAvoided)
@@ -789,7 +857,7 @@ public class PlayerCombat : MonoBehaviour
     // Public/static so CombatPlayer (CombatSimulator replay) can reuse the same pendulum-fall
     // visual for Disarm/WeaponDrop events — mirrors how FlyWeapon was made public for ThrowWeapon.
     // Doesn't read any instance state, only target's, so it doesn't need a PlayerCombat instance to run on.
-    public static IEnumerator DropWeapon(PlayerCombat target, bool isDisarm = true)
+    public static IEnumerator DropWeapon(PlayerCombat target, bool isDisarm = true, bool isSabotage = false)
     {
         var data = target.weaponHandler.CurrentWeaponData;
         if (data?.inHandSprite == null) yield break;
@@ -801,7 +869,13 @@ public class PlayerCombat : MonoBehaviour
         target.weaponHandler.UnequipPermanent();
 
         Vector3 popupPos = target.transform.position + Vector3.up * 1.5f + Vector3.right * Random.Range(-0.3f, 0.3f);
-        if (isDisarm)
+        // isSabotage tem prioridade — Saboteur (1ª arma quebrada na hora, ver CombatPlayer's
+        // case SaboteurBreak) reusa a queda em pêndulo normal de DropWeapon, mas com o popup
+        // "SABOTAGE!" em vez de "DISARM!"/"DROP!", consistente com o popup já usado pela skill
+        // Sabotage (mesmo nome parecido, mecânica diferente — ver CLAUDE.md).
+        if (isSabotage)
+            DamagePopup.SpawnSabotage(popupPos);
+        else if (isDisarm)
             DamagePopup.SpawnDisarm(popupPos);
         else
             DamagePopup.SpawnDrop(popupPos);
@@ -812,7 +886,13 @@ public class PlayerCombat : MonoBehaviour
         var sr = fallen.AddComponent<SpriteRenderer>();
         sr.sprite           = data.inHandSprite;
         sr.sortingLayerName = "Default";
-        sr.sortingOrder     = 0;
+        // sortingOrder 1 (não 0) — "Colosseum arena" também está na layer Default, ordem 0, no
+        // mesmo Z (0) de qualquer personagem (Player1 e Player2). Empate de profundidade real
+        // entre os dois deixa a ordem de desenho indefinida — podia renderizar a arma atrás do
+        // fundo (invisível durante a queda inteira), reproduzido de forma consistente na posição
+        // do Player2 (bug real reportado pelo usuário, "drop do player2 não anima"). Mesma
+        // correção já aplicada em DropWeaponFromHud (Saboteur) por esse mesmo motivo.
+        sr.sortingOrder     = 1;
 
         float groundY   = target.transform.position.y - 1.5f;
         float velocityY = 0f;
@@ -928,7 +1008,7 @@ public class PlayerCombat : MonoBehaviour
         var sr = fallen.AddComponent<SpriteRenderer>();
         sr.sprite           = data.inHandSprite;
         sr.sortingLayerName = "Default";
-        sr.sortingOrder     = 0;
+        sr.sortingOrder     = 1; // mesmo motivo de DropWeapon — evita empate de profundidade com "Colosseum arena" (Default/0, Z=0)
 
         float groundY   = target.transform.position.y - 1.5f;
         float velocityY = 0f;
@@ -1093,8 +1173,8 @@ public class PlayerCombat : MonoBehaviour
     private IEnumerator ReturnToSpawn()
     {
         // Mesma checagem de CombatPlayer.ExecuteEvent (caso TurnEnd): se o personagem nunca
-        // saiu da própria zona de spawn neste turno (Monk guardando, hitSpeed = 0, nunca corre
-        // até o adversário em StrikeRoutine), não tem por que saltar pra um ponto aleatório novo.
+        // saiu da própria zona de spawn neste turno, não tem por que saltar pra um ponto
+        // aleatório novo.
         if (InSpawnZone(transform.position))
         {
             animationController.SetIdle(true);

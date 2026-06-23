@@ -46,10 +46,21 @@ public class PlayerState
     public bool fierceBruteActive;
     public int  bombUsesRemaining = 2;
     public int  tragicPotionUsesRemaining = 1;
-    public bool hasTakenFirstTurn;
+
+    // Fast Metabolism — regeneração passiva de 1%/turno (sem campos próprios, sempre ativa
+    // enquanto HasSkill for true) + burst de cura intensa (10x 5%, todas no mesmo turno) ao
+    // cruzar 50% HP.
+    public bool fastMetabolismPulseActive;
+    public int  fastMetabolismPulseCount;
+    public bool fastMetabolismTookDamage;
+
     public int  chainHitStreak;
     public int  stunnedActions;
     public bool netEnsnared;
+
+    // Saboteur (do oponente): true enquanto a 1ª arma desta luta ainda não foi quebrada — ver
+    // checagem em CombatSimulator.SimulateTurn, logo depois do bloco de Pegar Arma/Thief/Swap.
+    public bool saboteurPending;
 
     // Preparação pra skill Chef (ainda não implementada): Tragic Potion cura este status ao
     // ativar (ver CombatSimulator.TryActivateTragicPotion). Sem efeito real ainda — nenhum

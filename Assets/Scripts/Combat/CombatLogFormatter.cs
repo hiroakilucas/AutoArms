@@ -104,7 +104,11 @@ public static class CombatLogFormatter
                     break;
 
                 case CombatEventType.Saboteur:
-                    sb.AppendLine($"  {Name(e.playerIndex)} sabota {Name(e.targetIndex)}: destrói {e.weaponName} (-100 iniciativa)");
+                    sb.AppendLine($"  {Name(e.playerIndex)} sabota {Name(e.targetIndex)}: destrói {e.weaponName}");
+                    break;
+
+                case CombatEventType.SaboteurBreak:
+                    sb.AppendLine($"  {Name(e.targetIndex)} puxa {e.weaponName} e ela quebra na hora (Saboteur de {Name(e.playerIndex)})");
                     break;
 
                 case CombatEventType.FlashFlood:
@@ -168,6 +172,14 @@ public static class CombatLogFormatter
 
                 case CombatEventType.TragicPotionUse:
                     sb.AppendLine($"  {Name(e.playerIndex)} bebe TRAGIC POTION e recupera {e.healAmount} HP (HP: {e.newHp}/{e.maxHp})");
+                    break;
+
+                case CombatEventType.FastMetabolismRegen:
+                    sb.AppendLine($"  {Name(e.playerIndex)} regenera {e.healAmount} HP (Fast Metabolism, HP: {e.newHp})");
+                    break;
+
+                case CombatEventType.FastMetabolismPulse:
+                    sb.AppendLine($"  {Name(e.playerIndex)} pulso de Fast Metabolism cura {e.healAmount} HP ({e.pulseCount}/10, HP: {e.newHp})");
                     break;
 
                 case CombatEventType.CombatEnd:

@@ -41,6 +41,20 @@ public class CombatPlayer : MonoBehaviour
     [HideInInspector] public Sprite tragicPotionSprite;
     [HideInInspector] public Sprite tragicPotionHealSprite;
 
+    // Skill Fast Metabolism — mesmo motivo/padrão dos campos acima: wireado em
+    // CombatSceneLoader.fastMetabolismController e copiado pra aqui na criação. Um único
+    // RuntimeAnimatorController (não precisa de prefab — CombatPlayer monta o GameObject com
+    // SpriteRenderer+Animator em runtime), reusado tanto pela regeneração passiva (1 instância
+    // pequena) quanto pelas folhas orbitando do pulso (6 instâncias).
+    [HideInInspector] public RuntimeAnimatorController fastMetabolismController;
+
+    // Fast Metabolism — folhas orbitando do pulso de 50% HP, uma entrada por jogador (index 0/1),
+    // cada uma um array das 6 folhas (sem GameObject pai — RotateAround já opera em posição de
+    // mundo, não precisa de hierarquia). Null = sem pulso ativo agora. Ver
+    // SpawnFastMetabolismLeaves/FadeFastMetabolismLeaves.
+    private readonly GameObject[][] _fastMetabolismLeaves = new GameObject[2][];
+    private readonly Coroutine[]  _fastMetabolismOrbitRoutine = new Coroutine[2];
+
     // net1/net2.png vêm em resolução cheia (sem nenhum ajuste de escala por baixo, diferente de
     // armas que escalam pelo lossyScale do handBone). Escalas independentes — net1 (voo) e net2
     // (caída sobre o enredado) calibradas separadamente a pedido do usuário.
@@ -64,6 +78,15 @@ public class CombatPlayer : MonoBehaviour
         _events = events;
         _h1     = p1Combat.GetComponent<HealthSystem>();
         _h2     = p2Combat.GetComponent<HealthSystem>();
+
+        // Monk: aura laranja persistente durante a luta inteira (referência visual do jogo
+        // original — personagem com energia ao redor), independente de qualquer evento — só
+        // depende da skill estar equipada, então liga de uma vez aqui, antes do 1º evento, em
+        // vez de esperar o 1º TurnStart de cada um. Nunca destruída/escondida (ver
+        // PlayerCombat.ShowMonkAura) — só pisca rápido a cada contra-ataque (case Counter abaixo).
+        if (p1Combat != null && p1Combat.HasSkill("Monk")) p1Combat.ShowMonkAura();
+        if (p2Combat != null && p2Combat.HasSkill("Monk")) p2Combat.ShowMonkAura();
+
         StartCoroutine(PlayEvents());
     }
 
@@ -151,12 +174,25 @@ public class CombatPlayer : MonoBehaviour
                     }
                 }
                 DamagePopup.SpawnSabotage((defender?.transform.position ?? Vector3.zero) + Vector3.up * 1.5f);
-                // Pausa de 0.6s só no caso pré-fight (dá tempo de ler o popup antes da luta
-                // começar) — no caso mid-fight (skill Sabotage, isMidFight) a queda da arma já
-                // está rodando em paralelo via StartCoroutine acima; não precisa segurar o
-                // resto da luta esperando ela terminar, pedido pelo usuário.
-                if (!evt.isMidFight)
-                    yield return new WaitForSeconds(0.6f * t);
+                // Sem pausa — a queda da arma já roda em paralelo via StartCoroutine acima; não
+                // precisa segurar o resto da luta esperando ela terminar (skill Sabotage, único
+                // emissor restante deste evento, é sempre mid-fight — ver CombatEvent.Saboteur).
+                yield return null;
+                break;
+
+            // Saboteur (skill, distinta de Sabotage acima): a 1ª arma que a vítima conseguir
+            // empunhar de verdade nesta luta quebra na hora, 100% garantido — diferente do
+            // Saboteur/Sabotage acima, a arma JÁ está na mão (acabou de ser puxada pelo
+            // PickupWeapon/Thief que vem imediatamente antes na lista de eventos), então a
+            // queda usa o pêndulo normal de DropWeapon (a partir da mão), não o
+            // DropWeaponFromHud (a partir do ícone na WeaponHUD). Hurt fire-and-forget em
+            // paralelo com a queda — a vítima reage no mesmo instante em que a arma quebra.
+            case CombatEventType.SaboteurBreak:
+                if (defender != null)
+                {
+                    StartCoroutine(defender.animationController.PlayHurt((defender.settings?.hurtDuration ?? 0.07f) * t));
+                    yield return StartCoroutine(PlayerCombat.DropWeapon(defender, isDisarm: false, isSabotage: true));
+                }
                 break;
 
             case CombatEventType.TurnStart:
@@ -701,6 +737,46 @@ public class CombatPlayer : MonoBehaviour
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
+            case CombatEventType.FastMetabolismRegen:
+                // Passiva: cura 1% do HP máximo TODO turno — fire-and-forget (não pode atrasar
+                // o ritmo do combate, já que acontece em todo turno do personagem). Aplica a
+                // cura/popup já, sem esperar a animaçãozinha terminar.
+                if (attacker != null)
+                {
+                    StartCoroutine(PlayFastMetabolismRegen(attacker, t));
+                    ApplyHealthDelta(evt.playerIndex, evt.newHp);
+                    DamagePopup.SpawnHeal(attacker.transform.position + Vector3.up * 1.5f, evt.healAmount, fontSize: 4f);
+                }
+                yield return null;
+                break;
+
+            case CombatEventType.FastMetabolismPulse:
+                // Burst de cura intensa abaixo de 50% HP — as 10 curas de 5% chegam todas em
+                // sequência no mesmo turno (CombatSimulator), não mais uma por turno. Na 1ª cura
+                // (pulseCount == 1) spawna as folhas orbitando; a cada cura, popup verde (tamanho
+                // normal, maior que o da regeneração passiva) + flash verde no personagem; ao
+                // chegar em 10 curas, já desfaz a aura (esgotado). Este case agora BLOQUEIA (não
+                // é mais fire-and-forget) com um pequeno delay entre cada cura — pedido do
+                // usuário: cada +5 precisa aparecer individualmente, e o personagem fica parado
+                // (nenhum outro evento do turno, ex: RunToDefender, começa a tocar) até o burst
+                // inteiro terminar. Interrupção por dano não tem evento próprio — tratada
+                // reativamente em ApplyHealthDelta, que desfaz a aura no instante em que o
+                // personagem leva qualquer dano.
+                if (attacker != null)
+                {
+                    if (evt.pulseCount == 1)
+                        SpawnFastMetabolismLeaves(attacker, evt.playerIndex);
+
+                    ApplyHealthDelta(evt.playerIndex, evt.newHp);
+                    DamagePopup.SpawnHeal(attacker.transform.position + Vector3.up * 1.5f, evt.healAmount);
+                    StartCoroutine(FlashCharacterGreen(attacker, 0.2f));
+
+                    if (evt.pulseCount >= 10)
+                        FadeFastMetabolismLeaves(evt.playerIndex);
+                }
+                yield return new WaitForSeconds(0.3f * t);
+                break;
+
             case CombatEventType.Hit:
                 if (defender != null)
                 {
@@ -801,7 +877,13 @@ public class CombatPlayer : MonoBehaviour
                     Vector3 retPopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
                     if (evt.type == CombatEventType.Counter)
+                    {
                         DamagePopup.SpawnCounter(retPopupPos, evt.damage, evt.isCrit);
+                        // Monk: pisca a aura a cada contra-ataque (FlashMonkAura já é no-op se
+                        // este personagem não tiver a skill/aura — Sixth Sense também alimenta
+                        // counter e pode chegar até aqui sem nenhum efeito visual extra).
+                        attacker?.FlashMonkAura();
+                    }
                     else
                         DamagePopup.SpawnReversal(retPopupPos, evt.damage, evt.isCrit);
 
@@ -1055,18 +1137,10 @@ public class CombatPlayer : MonoBehaviour
                 // Return attacker to spawn (jump-back) — mirrors ReturnToSpawn.
                 // RandomSpawnPos sorteia um ponto NOVO a cada chamada (não a posição original
                 // do personagem) — só faz sentido pular pra lá se o atacante de fato saiu da
-                // própria zona de spawn neste turno (correu até o adversário). Monk (guarda,
-                // hitSpeed = 0) nunca corre até o adversário (RunToDefender é pulado em
-                // CombatSimulator), então o guard `attacker.hitSpeed > 0f` cobre o caso comum dele
-                // já estar dentro da zona — mas isso só por si só não bastava: Monk pode ser
-                // empurrado por knockback PRA FORA da zona enquanto defende nos turnos do
-                // adversário (toma hit, bloqueia, etc.), e como ele nunca corre de volta sozinho,
-                // o turno seguinte DELE ainda o achava fora da zona e disparava um jump-back pra
-                // um ponto aleatório — um "pulinho" sem nenhuma ação visível no turno (bug real
-                // reportado pelo usuário). Por isso o guard agora é incondicional por hitSpeed,
-                // não só pela zona: Monk nunca jump-back no próprio TurnEnd, ponto final — ele é
-                // um guarda estacionário, não decide se reposicionar sozinho.
-                if (attacker != null && attacker.hitSpeed > 0f && !InSpawnZone(attacker.transform.position, attacker.isPlayer1))
+                // própria zona de spawn neste turno (correu até o adversário). Monk corre e
+                // ataca normalmente agora (não guarda mais — ver CombatSimulator.ApplySkillStats),
+                // então cai no mesmo caminho de qualquer outro personagem, sem guard especial.
+                if (attacker != null && !InSpawnZone(attacker.transform.position, attacker.isPlayer1))
                 {
                     float jsDur = attacker.settings?.jumpStartDuration ?? 0.02f;
                     float jh    = attacker.settings?.jumpHeight ?? 2f;
@@ -1128,7 +1202,16 @@ public class CombatPlayer : MonoBehaviour
         var hs = targetIndex == 0 ? _h1 : _h2;
         if (hs == null) return;
         int delta = hs.CurrentHealth - newHp;
-        if (delta > 0) hs.TakeDamage(delta);
+        if (delta > 0)
+        {
+            hs.TakeDamage(delta);
+            // Fast Metabolism: qualquer dano interrompe o pulso de cura (ver CombatSimulator.
+            // ApplyDamage/SimulateTurn) — sem evento próprio pra esse desfecho, então a aura de
+            // folhas é desfeita aqui, no único ponto que já centraliza toda perda de HP do
+            // jogo, em vez de duplicar a checagem em cada case de dano (Hit/Counter/Reversal/
+            // Bomb/Haste/Piledriver/Throw). No-op se este jogador não tiver a aura ativa.
+            FadeFastMetabolismLeaves(targetIndex);
+        }
         else if (delta < 0) hs.Heal(-delta);
     }
 
@@ -1164,7 +1247,7 @@ public class CombatPlayer : MonoBehaviour
 
     // Trigger de swing por prioridade Heavy > Fast > default — uma arma só toca uma animação,
     // ainda que tenha múltiplas tags (ex: Heavy|Blunt entra em SlashingHeavy; Sharp|Fast em
-    // SlashingDagger). attacker null (ex: Monk guardando) cai no default "Slashing".
+    // SlashingDagger). attacker null cai no default "Slashing".
     private static string SwingTrigger(PlayerCombat attacker)
     {
         var data = attacker?.weaponHandler.CurrentWeaponData;
@@ -1174,8 +1257,8 @@ public class CombatPlayer : MonoBehaviour
     }
 
     // Bodybuilder: +40% velocidade de swing, só enquanto empunha arma Heavy — puramente visual
-    // (CombatSimulator não usa hitSpeed pra nada além do guard do Monk, então o bônus precisa
-    // ser aplicado aqui na reprodução, não no cálculo de chances/dano).
+    // (CombatSimulator não usa PlayerState.hitSpeed pra escalar nenhuma animação, então o bônus
+    // precisa ser aplicado aqui na reprodução, não no cálculo de chances/dano).
     private static float SwingSpeedMultiplier(PlayerCombat attacker)
     {
         if (attacker == null) return 1f;
@@ -1548,6 +1631,150 @@ public class CombatPlayer : MonoBehaviour
             yield return null;
         }
         Destroy(particle);
+    }
+
+    // Fast Metabolism — regeneração passiva (1% do HP máximo, todo turno): animação LEVE e
+    // rápida, fire-and-forget (chamada sem yield em ExecuteEvent — não pode atrasar o ritmo do
+    // combate, já que acontece em todo turno do personagem). Sprite pequeno sobe suavemente e
+    // desaparece — só reforço visual, a cura/popup já são aplicados no case antes desta coroutine
+    // terminar.
+    private IEnumerator PlayFastMetabolismRegen(PlayerCombat character, float t)
+    {
+        if (fastMetabolismController == null || character == null) yield break;
+
+        var go = new GameObject("FastMetabolismRegen");
+        go.transform.position   = character.transform.position;
+        go.transform.localScale = Vector3.one * 0.5f;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sortingLayerName = "Characters";
+        sr.sortingOrder     = 25;
+        var anim = go.AddComponent<Animator>();
+        anim.runtimeAnimatorController = fastMetabolismController;
+
+        Vector3 startPos = go.transform.position;
+        Vector3 endPos   = startPos + Vector3.up * 0.8f;
+        const float duration  = 0.4f;
+        const float fadeStart = duration - 0.2f;
+        Color baseColor = sr.color;
+        float elapsed = 0f;
+        while (elapsed < duration * t)
+        {
+            elapsed += Time.deltaTime;
+            float p = elapsed / (duration * t);
+            go.transform.position = Vector3.Lerp(startPos, endPos, p);
+            float fadeP = elapsed > fadeStart * t ? (elapsed - fadeStart * t) / (0.2f * t) : 0f;
+            sr.color = new Color(baseColor.r, baseColor.g, baseColor.b, 1f - Mathf.Clamp01(fadeP));
+            yield return null;
+        }
+        Destroy(go);
+    }
+
+    // Fast Metabolism — folhas orbitando do pulso de 50% HP: 6 instâncias em posições radiais
+    // (60° entre cada uma), cada uma com o mesmo Animator/controller da regeneração passiva.
+    // Guardadas em _fastMetabolismLeaves[playerIndex] (null = sem pulso ativo) e giradas
+    // continuamente por OrbitFastMetabolismLeaves enquanto existirem. Idempotente — não spawna
+    // de novo se já houver uma aura ativa pra esse jogador.
+    private void SpawnFastMetabolismLeaves(PlayerCombat character, int playerIndex)
+    {
+        if (fastMetabolismController == null || character == null) return;
+        if (_fastMetabolismLeaves[playerIndex] != null) return;
+
+        const int leafCount = 6;
+        const float radius  = 1f;
+        var leaves = new GameObject[leafCount];
+        for (int i = 0; i < leafCount; i++)
+        {
+            float angle    = (360f / leafCount) * i * Mathf.Deg2Rad;
+            Vector3 offset = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * radius;
+
+            var leaf = new GameObject($"FastMetabolismLeaf{i}");
+            leaf.transform.position = character.transform.position + offset;
+            var sr = leaf.AddComponent<SpriteRenderer>();
+            sr.sortingLayerName = "Characters";
+            sr.sortingOrder     = 25;
+            var anim = leaf.AddComponent<Animator>();
+            anim.runtimeAnimatorController = fastMetabolismController;
+            leaves[i] = leaf;
+        }
+
+        _fastMetabolismLeaves[playerIndex] = leaves;
+        _fastMetabolismOrbitRoutine[playerIndex] = StartCoroutine(OrbitFastMetabolismLeaves(character, leaves));
+    }
+
+    // Gira cada folha em torno da posição ATUAL do personagem (RotateAround lida com o
+    // personagem se movendo — knockback, jump-back — ao reler transform.position todo frame,
+    // em vez de orbitar um ponto fixo capturado no spawn). Roda indefinidamente até a coroutine
+    // ser parada de fora (FadeFastMetabolismLeaves) ou todas as folhas serem destruídas.
+    private IEnumerator OrbitFastMetabolismLeaves(PlayerCombat character, GameObject[] leaves)
+    {
+        while (character != null)
+        {
+            bool anyAlive = false;
+            foreach (var leaf in leaves)
+            {
+                if (leaf == null) continue;
+                anyAlive = true;
+                leaf.transform.RotateAround(character.transform.position, Vector3.forward, 60f * Time.deltaTime);
+            }
+            if (!anyAlive) yield break;
+            yield return null;
+        }
+    }
+
+    // Encerra a aura de folhas do jogador (pulso esgotado em 10 curas OU interrompido por dano,
+    // ver ApplyHealthDelta) — para a coroutine de órbita e faz fade out (reusa
+    // FadeOutAndDestroyGhost, já usado pelo ghost trail da Fierce Brute) em cada folha. No-op se
+    // não houver aura ativa pra esse jogador (chamado incondicionalmente em todo dano sofrido).
+    private void FadeFastMetabolismLeaves(int playerIndex)
+    {
+        var leaves = _fastMetabolismLeaves[playerIndex];
+        if (leaves == null) return;
+        _fastMetabolismLeaves[playerIndex] = null;
+
+        if (_fastMetabolismOrbitRoutine[playerIndex] != null)
+        {
+            StopCoroutine(_fastMetabolismOrbitRoutine[playerIndex]);
+            _fastMetabolismOrbitRoutine[playerIndex] = null;
+        }
+
+        foreach (var leaf in leaves)
+            if (leaf != null) StartCoroutine(FadeOutAndDestroyGhost(leaf, 0.3f));
+    }
+
+    // Fast Metabolism — flash verde suave no personagem a cada cura do pulso: cor original →
+    // verde → cor original (que já é branco/sem tint na maioria dos renderers, igual à
+    // descrição "verde → branco" do pedido original). GetComponentsInChildren direto (em vez de
+    // PlayerCombat.bodyRenderers, privado) — mesma técnica já usada em SpawnGhostTrail.
+    private IEnumerator FlashCharacterGreen(PlayerCombat character, float duration)
+    {
+        if (character == null) yield break;
+        var renderers = character.GetComponentsInChildren<SpriteRenderer>(true);
+        var original = new Color[renderers.Length];
+        for (int i = 0; i < renderers.Length; i++)
+            original[i] = renderers[i].color;
+
+        Color flashColor = new Color(0.3f, 1f, 0.3f);
+        float half = duration * 0.5f;
+        float elapsed = 0f;
+        while (elapsed < half)
+        {
+            elapsed += Time.deltaTime;
+            float p = elapsed / half;
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] != null) renderers[i].color = Color.Lerp(original[i], flashColor, p);
+            yield return null;
+        }
+        elapsed = 0f;
+        while (elapsed < half)
+        {
+            elapsed += Time.deltaTime;
+            float p = elapsed / half;
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] != null) renderers[i].color = Color.Lerp(flashColor, original[i], p);
+            yield return null;
+        }
+        for (int i = 0; i < renderers.Length; i++)
+            if (renderers[i] != null) renderers[i].color = original[i];
     }
 
     private static Vector2 RandomSpawnPos(bool isPlayer1)

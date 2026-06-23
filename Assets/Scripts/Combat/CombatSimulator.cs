@@ -10,12 +10,6 @@ public class CombatSimulator
     PlayerState       _p1, _p2;
     List<CombatEvent> _events;
 
-    // Lido por CombatSceneLoader ANTES do EntryFall, pra equipar visualmente (sem trigger de
-    // animação) a mesma arma que o EquipStartingWeaponIfNeeded já sorteou na simulação —
-    // "cai em cena já com a arma", em vez de cair desarmado e só equipar depois.
-    public WeaponData Player1StartingWeapon { get; private set; }
-    public WeaponData Player2StartingWeapon { get; private set; }
-
     // Lido por CombatSceneLoader depois de Simulate() pra pintar de vermelho os ícones
     // sabotados no WeaponHUD da vítima (ver Spy abaixo) — nomes, não referências, porque o
     // WeaponHUD lê do PlayerLoadout visual (profile.weaponLoadout.weapons original), que nunca
@@ -51,15 +45,12 @@ public class CombatSimulator
 
         // Spy: sabota a metade (arredondado pra baixo) das armas do loadout do OPONENTE — já
         // depois do Saboteur acima, então opera sobre o loadout já reduzido. Antes de qualquer
-        // coisa acontecer na luta — inclusive antes do sorteio de arma inicial
-        // (EquipStartingWeaponIfNeeded) abaixo, que já deve poder sortear uma arma sabotada.
+        // coisa acontecer na luta.
         Player2SabotagedWeapons = ApplySpySabotage(spy: _p1, victim: _p2);
         Player1SabotagedWeapons = ApplySpySabotage(spy: _p2, victim: _p1);
 
-        EquipStartingWeaponIfNeeded(_p1);
-        EquipStartingWeaponIfNeeded(_p2);
-        Player1StartingWeapon = _p1.currentWeaponData;
-        Player2StartingWeapon = _p2.currentWeaponData;
+        // Personagens não nascem mais armados (era 40% de chance — EquipStartingWeaponIfNeeded,
+        // removido a pedido do usuário) — todo mundo começa a luta desarmado, sempre.
 
         ApplySkillStats(_p1);
         ApplySkillStats(_p2);
@@ -117,24 +108,18 @@ public class CombatSimulator
         return sabotaged;
     }
 
-    // Saboteur (LaBrute): destrói permanentemente 1 arma aleatória do loadout do OPONENTE e dá
-    // -100 initiative nele, antes de qualquer turno — vantagem de agir primeiro (quem age
-    // primeiro compara initiative, ver Speed System). Sem efeito se a vítima não tiver arma
-    // nenhuma no loadout (RemoveAt não tem o que remover). Diferente de Spy, aqui não há clone
-    // nenhum — a arma simplesmente sai do loadout (RemoveAt), igual a um WeaponDrop/Disarm
-    // qualquer, então não precisa de nenhum cuidado especial com o asset original.
+    // Saboteur (LaBrute, redefinida pelo usuário — antes destruía 1 arma aleatória do loadout
+    // ANTES da luta e dava -100 initiative; agora não destrói nada de antemão): marca
+    // `victim.saboteurPending = true` — a 1ª arma que a vítima conseguir empunhar de fato
+    // durante a luta (via pickup normal OU roubo via Thief, ver checagem em SimulateTurn logo
+    // depois do bloco de Pegar Arma/Thief/Swap) quebra na hora, com 100% de certeza, sem
+    // nenhum Roll envolvido. Sem efeito até a vítima de fato puxar uma arma — se ela nunca
+    // empunhar nenhuma na luta inteira (raro, mas possível), a skill simplesmente não tem
+    // efeito visível algum.
     private void ApplySaboteur(PlayerState saboteur, PlayerState victim)
     {
         if (!saboteur.HasSkill("Saboteur")) return;
-        if (victim.weaponLoadout.Count == 0) return;
-
-        int idx = _rng.Next(victim.weaponLoadout.Count);
-        var removed = victim.weaponLoadout[idx];
-        victim.weaponLoadout.RemoveAt(idx);
-        victim.initiative -= 100;
-
-        Debug.Log($"[Saboteur] Arma destruída: {removed.weaponName} | initiative do oponente -100.");
-        Emit(new CombatEvent { type = CombatEventType.Saboteur, playerIndex = saboteur.index, targetIndex = victim.index, weaponName = removed.weaponName });
+        victim.saboteurPending = true;
     }
 
     // --- State building ---
@@ -183,15 +168,6 @@ public class CombatSimulator
             Debug.Log($"[WeaponLoadout] P{s.index + 1} {s.name}: arma={w.weaponName} damage={w.damage} " +
                       $"types=[{types}] hitSpeed={w.hitSpeed} critChanceBonus={w.critChanceBonus} comboBonus={w.comboBonus}");
         }
-    }
-
-    // 40% de chance de qualquer um dos dois jogadores já começar a luta com uma arma
-    // aleatória do loadout equipada, em vez de sempre desarmado — independe de skill, vale
-    // pros dois lados igual. Ver comentário em Player1StartingWeapon/Player2StartingWeapon.
-    private void EquipStartingWeaponIfNeeded(PlayerState s)
-    {
-        if (s.weaponLoadout.Count > 0 && Roll(0.40f))
-            s.currentWeaponData = s.weaponLoadout[_rng.Next(s.weaponLoadout.Count)];
     }
 
     private void ApplySkillStats(PlayerState s)
@@ -286,7 +262,10 @@ public class CombatSimulator
         if (s.HasSkill("Counter Attack"))      { s.blockBonus += 0.10f; s.reversalAfterBlock += 0.90f; }
         if (s.HasSkill("Sixth Sense"))         { s.counter += 0.10f; }
         if (s.HasSkill("Hostility"))            { s.reversal += 0.30f; }
-        if (s.HasSkill("Monk"))                { s.counter += 0.40f; s.initiative -= 200; s.hitSpeed = 0f; }
+        // Monk: NÃO guarda mais (era hitSpeed = 0f, removido — Monk ataca normalmente, igual a
+        // qualquer personagem) — só o bônus de counter e o malus de iniciativa permanecem,
+        // redefinido pelo usuário.
+        if (s.HasSkill("Monk"))                { s.counter += 0.40f; s.initiative -= 200; }
         if (s.HasSkill("Martial Arts"))         { s.martialArts = true; }
         if (s.HasSkill("Shock"))                { s.disarmChanceBonus += 0.50f; }
         if (s.HasSkill("Weapon Master"))        { s.weaponsMaster = true; }
@@ -298,6 +277,13 @@ public class CombatSimulator
         // lido depois do bloco de hpPct/strPct/agiPct/spdPct, então usa o STR final do
         // personagem, não o base do profile).
         if (s.HasSkill("Fierce Brute"))         { s.fierceBruteUsesRemaining = 1 + Mathf.FloorToInt(s.str / 30f); }
+        // Fast Metabolism: penalidades fixas do My Brute original ("-50% Hit speed, -5%
+        // Critical chance") — a regeneração/pulso em si não depende de nenhum campo aqui, ver
+        // SimulateTurn/ApplyDamage. hitSpeed não tem mais nenhum guard (`> 0f`) no simulador
+        // desde que Monk parou de zerá-lo — sem efeito nenhum no caminho ativo hoje (o
+        // simulador não usa hitSpeed pra escalar nenhuma animação; só o caminho legado,
+        // `PlayerCombat.HitRoutine`, multiplica `slashSpeed` por ele).
+        if (s.HasSkill("Fast Metabolism"))      { s.hitSpeed -= 0.50f; s.criticalChance -= 0.05f; }
 
         // Aplicado por último, depois de Untouchable/Ballet Shoes/Lead Skeleton já terem somado
         // ou subtraído evasion — garante que Deity zere o total mesmo que outra skill já tenha
@@ -383,8 +369,6 @@ public class CombatSimulator
         // Chaining: turno consumido por estar estunado — pula a ação inteira (sem Thief/
         // pickup/swap/throw/melee), só decrementa o contador e emite StunSkip pra
         // CombatPlayer encerrar o loop de Hurt + remover a label (ver PlayerCombat.HideStunLabel).
-        // Checado antes até do isFirstTurn abaixo — um turno pulado por stun não é a "primeira
-        // ação real" do personagem pra fins de Troca de Arma.
         if (attacker.stunnedActions > 0)
         {
             attacker.stunnedActions--;
@@ -393,21 +377,15 @@ public class CombatSimulator
             return;
         }
 
-        // Primeiro turno de verdade deste atacante na luta (independente de round/ações extra
-        // por Speed) — usado só pra bloquear Troca de Arma no item 2b abaixo, ver lá o motivo.
-        bool isFirstTurn = !attacker.hasTakenFirstTurn;
-        attacker.hasTakenFirstTurn = true;
-
         // 0. Flash Flood (Super, 1x por luta): 17% de chance por ação, exige >= 3 armas no
         // weaponLoadout e o uso ainda disponível. weaponLoadout inclui a arma em mão enquanto
         // equipada (nunca é removida da lista só por estar empunhada — ver BuildState/
         // pickup/swap), então essa mesma contagem >= 3 cobre os dois cenários: armado (mão +
         // 2 outras) ou desarmado (3 quaisquer do loadout) — ver SimulateFlashFlood pra como a
-        // arma em mão é sempre incluída quando armado. hitSpeed > 0 — Monk (guarda, nunca
-        // ataca) também não pode disparar isso, mesma checagem de Throw/Melee abaixo. Checado
-        // ANTES de Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno (sem
-        // mais nada acontecendo neste mesmo turno).
-        if (attacker.hitSpeed > 0f && attacker.HasSkill("Flash Flood") && attacker.flashFloodUsesRemaining > 0
+        // arma em mão é sempre incluída quando armado. Checado ANTES de Thief/pickup/swap/
+        // throw normal/melee — consome a ação inteira do turno (sem mais nada acontecendo
+        // neste mesmo turno).
+        if (attacker.HasSkill("Flash Flood") && attacker.flashFloodUsesRemaining > 0
             && attacker.weaponLoadout.Count >= 3 && Roll(0.17f))
         {
             SimulateFlashFlood(attacker, defender);
@@ -417,9 +395,8 @@ public class CombatSimulator
 
         // 0b. Haste (Super, 1x por luta): 23% de chance por turno quando disponível. Não exige
         // arma nenhuma (dano vem só de Speed, ver SimulateHaste) — diferente de Flash Flood.
-        // Mesma checagem de hitSpeed > 0 (Monk nunca dispara nenhuma Super). Checado ANTES de
-        // Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno.
-        if (attacker.hitSpeed > 0f && attacker.HasSkill("Haste") && attacker.hasteUsesRemaining > 0 && Roll(0.23f))
+        // Checado ANTES de Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno.
+        if (attacker.HasSkill("Haste") && attacker.hasteUsesRemaining > 0 && Roll(0.23f))
         {
             SimulateHaste(attacker, defender);
             Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
@@ -430,12 +407,62 @@ public class CombatSimulator
         // (valor fixo do jogo original). NUNCA pode ser esquivado nem bloqueado — ignora
         // DodgeChance/BlockChance inteiramente (o atacante já agarrou o defensor antes de
         // pular; não há janela pra reagir depois do grab). Dano escala com a STR do
-        // DEFENSOR, não do atacante — ver SimulatePiledriver. Mesmo guard de hitSpeed > 0.
-        if (attacker.hitSpeed > 0f && attacker.HasSkill("Piledriver") && attacker.piledriverUsesRemaining > 0 && Roll(0.17f))
+        // DEFENSOR, não do atacante — ver SimulatePiledriver.
+        if (attacker.HasSkill("Piledriver") && attacker.piledriverUsesRemaining > 0 && Roll(0.17f))
         {
             SimulatePiledriver(attacker, defender);
             Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
             return;
+        }
+
+        // 0c-bis. Fast Metabolism: regeneração passiva de 1% do HP máximo TODO turno do
+        // personagem (sem rolar chance — não é uma ação de ataque, roda mesmo num round em que
+        // ele não chegue a atacar de verdade) + pulso de cura intensa abaixo de 50% HP —
+        // redefinido pelo usuário: as 10 curas de 5% não são mais distribuídas uma por turno,
+        // acontecem todas DE UMA VEZ (burst) no 1º turno do personagem em que o pulso estiver
+        // ativo e ele não tiver sofrido dano (ver ApplyDamage pra como o pulso é ativado/marcado
+        // pra interromper). Checado ANTES do loop de Supers embaralhado (0d) — nunca consome o
+        // turno (Thief/pickup/throw/melee do mesmo turno continuam normais depois), mesma
+        // posição de antes. Nota: como isso fica DEPOIS de Flash Flood/Haste/Piledriver (0/0b/
+        // 0c, que retornam antes se ativarem), um personagem com Fast Metabolism + uma dessas
+        // Supers não regenera/burst no turno em que a Super consome a ação.
+        if (attacker.HasSkill("Fast Metabolism"))
+        {
+            // Captura ANTES de resetar — representa "sofreu dano desde a última checagem dele",
+            // setado por ApplyDamage (mesma regra do My Brute: "if they don't take damage") —
+            // exceto no próprio hit que ativa o pulso (ver ApplyDamage), que não conta como
+            // interrupção de si mesmo.
+            bool tookDamageSinceLastTurn = attacker.fastMetabolismTookDamage;
+            attacker.fastMetabolismTookDamage = false;
+
+            if (attacker.fastMetabolismPulseActive)
+            {
+                if (tookDamageSinceLastTurn)
+                {
+                    attacker.fastMetabolismPulseActive = false; // interrompido por dano antes do burst acontecer
+                }
+                else
+                {
+                    // Burst: as 10 curas de 5% acontecem todas neste turno, em sequência —
+                    // CombatPlayer pausa o personagem (parado) durante toda a sequência visual
+                    // (ver case FastMetabolismPulse).
+                    for (int i = 0; i < 10; i++)
+                    {
+                        int heal2 = Mathf.Max(1, Mathf.RoundToInt(attacker.maxHp * 0.05f));
+                        attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal2);
+                        attacker.fastMetabolismPulseCount++;
+                        Emit(new CombatEvent { type = CombatEventType.FastMetabolismPulse, playerIndex = attacker.index, healAmount = heal2, newHp = attacker.hp, pulseCount = attacker.fastMetabolismPulseCount });
+                    }
+                    attacker.fastMetabolismPulseActive = false; // esgotado — já fez as 10 de uma vez
+                }
+            }
+
+            // Regeneração de 1% — incondicional, e colocada DEPOIS do burst de propósito: quando
+            // o burst acontece neste turno, o usuário pediu que a cura de 1% normal aconteça só
+            // depois da animação do burst terminar, "em seguida", não antes.
+            int heal1 = Mathf.Max(1, Mathf.RoundToInt(attacker.maxHp * 0.01f));
+            attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal1);
+            Emit(new CombatEvent { type = CombatEventType.FastMetabolismRegen, playerIndex = attacker.index, healAmount = heal1, newHp = attacker.hp });
         }
 
         // 0d. Supers checados em ORDEM ALEATÓRIA (Net, Fierce Brute, Bomb, Tragic Potion, futuros): a lista de
@@ -445,44 +472,32 @@ public class CombatSimulator
         // imobiliza o oponente e Bomb explode em seguida, causando dano e quebrando a rede).
         // Era uma checagem fixa Net → Fierce Brute (nessa ordem); generalizado pra um loop sobre
         // delegates pra acomodar Bomb (e futuras Supers) sem duplicar a lógica de embaralhamento
-        // a cada uma nova. Só Net consome o turno inteiro (sinalizado pelo retorno `true` do
-        // delegate) — Fierce Brute e Bomb sempre caem direto pro fluxo normal (Thief/pickup/
-        // throw/melee) do mesmo turno, então a checagem de "consumiu o turno" só acontece DEPOIS
-        // do loop inteiro rodar, nunca interrompendo Supers ainda não checados na mesma lista.
-        // Mesmo guard de hitSpeed > 0 de sempre (Monk nunca dispara nenhuma Super).
-        if (attacker.hitSpeed > 0f)
+        // a cada uma nova. Net e Bomb consomem o turno inteiro (sinalizado pelo retorno `true`
+        // do delegate, ver TryActivateBomb) — Fierce Brute e Tragic Potion sempre caem direto pro
+        // fluxo normal (Thief/pickup/throw/melee) do mesmo turno, então a checagem de "consumiu
+        // o turno" só acontece DEPOIS do loop inteiro rodar, nunca interrompendo Supers ainda não
+        // checados na mesma lista (ex: Net imobiliza e Bomb ainda explode no mesmo turno, em
+        // qualquer ordem sorteada, antes do `if (turnConsumed)` abaixo encerrar o turno).
+        var supers = new List<System.Func<bool>>();
+        if (attacker.HasSkill("Net") && attacker.netUsesRemaining > 0)
+            supers.Add(() => TryActivateNet(attacker, defender));
+        if (attacker.HasSkill("Fierce Brute") && attacker.fierceBruteUsesRemaining > 0)
+            supers.Add(() => { TryActivateFierceBrute(attacker); return false; });
+        if (attacker.HasSkill("Bomb") && attacker.bombUsesRemaining > 0)
+            supers.Add(() => TryActivateBomb(attacker, defender));
+        if (attacker.HasSkill("Tragic Potion") && attacker.tragicPotionUsesRemaining > 0)
+            supers.Add(() => { TryActivateTragicPotion(attacker); return false; });
+        // futuros Supers entram aqui
+
+        ShuffleList(supers);
+        bool turnConsumed = false;
+        foreach (var trySuper in supers)
+            if (trySuper()) turnConsumed = true;
+
+        if (turnConsumed)
         {
-            var supers = new List<System.Func<bool>>();
-            if (attacker.HasSkill("Net") && attacker.netUsesRemaining > 0)
-                supers.Add(() => TryActivateNet(attacker, defender));
-            if (attacker.HasSkill("Fierce Brute") && attacker.fierceBruteUsesRemaining > 0)
-                supers.Add(() => { TryActivateFierceBrute(attacker); return false; });
-            if (attacker.HasSkill("Bomb") && attacker.bombUsesRemaining > 0)
-                supers.Add(() => { TryActivateBomb(attacker, defender); return false; });
-            if (attacker.HasSkill("Tragic Potion") && attacker.tragicPotionUsesRemaining > 0)
-                supers.Add(() => { TryActivateTragicPotion(attacker); return false; });
-            // futuros Supers entram aqui
-
-            ShuffleList(supers);
-            bool turnConsumed = false;
-            foreach (var trySuper in supers)
-                if (trySuper()) turnConsumed = true;
-
-            if (turnConsumed)
-            {
-                Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
-                return;
-            }
-
-            // Bomb pode matar o defensor sem consumir o turno (diferente de Net/Piledriver/Haste/
-            // Flash Flood, que sempre terminam o turno ao ativar) — sem essa checagem, o turno
-            // continuaria pro fluxo normal (Thief/pickup/throw/melee) contra um alvo já morto até
-            // o loop de round notar isAlive == false na próxima ação. Encerra aqui em vez disso.
-            if (!defender.isAlive)
-            {
-                Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
-                return;
-            }
+            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            return;
         }
 
         // 1. Thief: rouba a arma do oponente se eu estiver desarmado e ele armado — 44% por
@@ -515,10 +530,10 @@ public class CombatSimulator
         // todo mundo (não é skill, pedido pelo usuário como ação independente de Hideaway). Joga
         // a arma atual no chão e ela some do loadout/HUB pra sempre (igual a WeaponDrop — não dá
         // pra sacar de novo) e puxa uma nova arma aleatória do loadout (evita repetir a mesma, se
-        // houver outra opção). !isFirstTurn: quem já nasce armado (EquipStartingWeaponIfNeeded,
-        // 40% antes da luta começar) não pode trocar logo no 1º turno — só teve a arma há um
-        // instante, ainda nem atacou com ela (pedido pelo usuário).
-        else if (!isFirstTurn && !stoleWeapon && attacker.currentWeaponData != null && attacker.weaponLoadout.Count > 1 && Roll(0.40f))
+        // houver outra opção). Como ninguém mais nasce armado (EquipStartingWeaponIfNeeded
+        // removido), este `else if` só pode mesmo disparar a partir do 2º turno em diante de
+        // quem já pegou arma antes (o 1º turno de todo mundo cai sempre no `if` acima, unarmed).
+        else if (!stoleWeapon && attacker.currentWeaponData != null && attacker.weaponLoadout.Count > 1 && Roll(0.40f))
         {
             var oldWeapon = attacker.currentWeaponData;
             int idx = _rng.Next(attacker.weaponLoadout.Count);
@@ -532,18 +547,33 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = newWeapon.weaponName });
         }
 
+        // Saboteur (do oponente): a 1ª arma que esta vítima conseguir empunhar de verdade nesta
+        // luta — via roubo (item 1/Thief) OU pickup normal (item 2) — quebra na hora, com 100%
+        // de certeza, sem nenhum Roll envolvido (diferente de Sabotage, que rola 50% por hit
+        // acertado). Uma única checagem aqui cobre os dois jeitos de ficar armado de fato: item
+        // 2b/swap nunca dispara enquanto `saboteurPending` ainda for true (exige já estar
+        // armado, e a 1ª arma sempre quebra antes disso virar possível). A arma quebrada sai do
+        // loadout pra sempre, igual a um Disarm garantido.
+        if (attacker.saboteurPending && attacker.currentWeaponData != null)
+        {
+            var broken = attacker.currentWeaponData;
+            attacker.weaponLoadout.Remove(broken);
+            attacker.currentWeaponData = null;
+            attacker.saboteurPending = false;
+            Emit(new CombatEvent { type = CombatEventType.SaboteurBreak, playerIndex = defender.index, targetIndex = attacker.index, weaponName = broken.weaponName });
+        }
+
         // 3. Check throw before melee — Hideaway dá 50% fixo (ver ThrowChance), Sticky Hands
-        // multiplica essa chance (qualquer origem) por (1 - stickyHands), e Monk (hitSpeed = 0)
-        // guarda em vez de atacar — arremessar é um ataque como outro qualquer, então também
-        // não acontece pra ele (senão ele jogava a arma e corria o resto do turno normalmente,
-        // contradizendo o "guarda em vez de atacar" — bug real reportado pelo usuário).
-        if (attacker.hitSpeed > 0f && attacker.currentWeaponData != null && Roll(ThrowChance(attacker)))
+        // multiplica essa chance (qualquer origem) por (1 - stickyHands).
+        if (attacker.currentWeaponData != null && Roll(ThrowChance(attacker)))
         {
             // Fierce Brute escopado só a CalcDamage/melee (ver SimulateHit) — se o turno virou
-            // arremesso em vez de melee, o buff simplesmente se perde aqui (sem dobro, sem
-            // crítico bônus) em vez de carregar pro turno seguinte, o que quebraria a semântica
-            // de "ataque do MESMO TURNO que ativou" e poderia dobrar um hit bem mais tarde sem
-            // relação com a ativação original.
+            // arremesso em vez de melee, o buff se perde aqui (sem dobro, sem crítico bônus),
+            // já que o arremesso É a ação de ataque deste turno (consome o buff sem aplicá-lo,
+            // mesma lógica de "uso gasto, sem reembolso" do hit melee normal). Diferente de Net/
+            // Bomb consumindo o turno ANTES desse ponto (item 0d acima) — aí o personagem nunca
+            // chega a agir de verdade, então o buff persiste pro turno seguinte (ver
+            // TryActivateFierceBrute) — aqui ele chega a agir (arremessar), só não com o bônus.
             attacker.fierceBruteActive = false;
             SimulateThrow(attacker, defender);
             Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
@@ -551,9 +581,7 @@ public class CombatSimulator
         }
 
         // 4. Melee
-        // Monk (hitSpeed = 0): guarda em vez de atacar — não corre até o adversário.
-        if (attacker.hitSpeed > 0f)
-            Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index });
+        Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index });
         bool interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: false, out bool _);
         SimulateComboLoop(attacker, defender, interrupted);
 
@@ -605,11 +633,7 @@ public class CombatSimulator
     // Iron Head derrubando a arma do atacante) — false em qualquer outro desfecho (incluindo
     // Dodge/Block/Reversal, que não interrompem). damageDealt (out): true só quando o dano
     // normal de fato foi aplicado ao defensor — usado por Determination (ver
-    // SimulateHitWithDetermination acima) pra saber quando NÃO tentar de novo. No guard do Monk
-    // abaixo, setamos damageDealt = true mesmo sem dano real — esse guard não representa uma
-    // tentativa de golpe que falhou, é a ausência completa de ataque (Monk guarda), então não
-    // deveria nunca disparar um retry de Determination (evitaria ficar girando indefinidamente
-    // num personagem com hitSpeed = 0).
+    // SimulateHitWithDetermination acima) pra saber quando NÃO tentar de novo.
     private bool SimulateHit(PlayerState attacker, PlayerState defender, bool isCombo, out bool damageDealt)
     {
         damageDealt = false;
@@ -621,15 +645,6 @@ public class CombatSimulator
         // abaixo e a doc original: "se o hit falhar por qualquer motivo, o buff é consumido
         // mesmo assim").
         bool fierceBruteThisHit = !isCombo && attacker.fierceBruteActive;
-
-        // Monk: guards instead of attacking — checado ANTES do Ballet Shoes abaixo. Um hit que
-        // nunca aconteceu (Monk não ataca) não deveria gastar o "esquiva o 1º golpe" do
-        // defensor nem emitir um evento Dodge — sem essa ordem, CombatPlayer reposicionava e
-        // fazia Monk correr+golpear visualmente (RepositionIfNeeded do evento Dodge) num turno
-        // em que ele deveria ficar parado, e o jump-back de TurnEnd disparava depois só por
-        // causa desse deslocamento indevido (bug real reportado pelo usuário: "saltos quando
-        // não deveria se mexer").
-        if (attacker.hitSpeed <= 0f) { damageDealt = true; return false; }
 
         // Ballet Shoes: first hit of the fight auto-dodged
         if (!isCombo && defender.firstHitAvoided)
@@ -783,8 +798,9 @@ public class CombatSimulator
         // DOURADO (a que está na mão dele agora) nunca é elegível — pedido pelo usuário, a
         // skill não deve influenciar o que o oponente já está empunhando, só o resto do HUD.
         // Reusa o mesmo CombatEventType.Saboteur (e a mesma queda visual em pêndulo do ícone
-        // até o chão) já usado pela skill Saboteur pré-luta — só a origem muda (aqui é por
-        // hit, durante o combate, em vez de uma vez só antes do 1º turno).
+        // até o chão) — único emissor restante desse tipo de evento, já que a skill Saboteur
+        // (mecânica distinta, ver ApplySaboteur/SaboteurBreak acima) passou a quebrar a 1ª arma
+        // puxada em vez de destruir uma do HUD antes da luta.
         if (attacker.HasSkill("Sabotage"))
         {
             var sabotagePool = new List<WeaponData>();
@@ -795,7 +811,7 @@ public class CombatSimulator
             {
                 var destroyed = sabotagePool[_rng.Next(sabotagePool.Count)];
                 defender.weaponLoadout.Remove(destroyed);
-                Emit(new CombatEvent { type = CombatEventType.Saboteur, playerIndex = attacker.index, targetIndex = defender.index, weaponName = destroyed.weaponName, isMidFight = true });
+                Emit(new CombatEvent { type = CombatEventType.Saboteur, playerIndex = attacker.index, targetIndex = defender.index, weaponName = destroyed.weaponName });
             }
         }
 
@@ -1110,8 +1126,16 @@ public class CombatSimulator
         return true;
     }
 
-    // Fierce Brute: só seta o buff (consumido no próximo hit melee do mesmo turno, ver
-    // SimulateHit) — nunca consome o turno por conta própria.
+    // Fierce Brute: só seta o buff — nunca consome o turno por conta própria. Normalmente
+    // consumido ainda no MESMO turno, pela 1ª ação real dele (melee, ver SimulateHit, ou
+    // arremesso, que zera o buff sem aplicar — ver branch de Throw acima). Mas se Net ou Bomb
+    // também ativarem nesse turno (mesmo loop embaralhado "0d") e consumirem o turno antes do
+    // personagem chegar a agir de verdade (Thief/pickup/throw/melee nunca são alcançados), o
+    // buff persiste pendente pro turno seguinte (ghost trail continua visível) — comportamento
+    // observado pelo usuário no My Brute eternaltwin ("ativa Fierce Brute, joga uma bomba em
+    // seguida, passa o round, e fica com o ghost trail até o próximo round"). Antes disso ser
+    // corrigido, Bomb nunca consumia o turno (caía direto pro fluxo normal no mesmo turno), então
+    // esse cenário nem existia — ver TryActivateBomb.
     private void TryActivateFierceBrute(PlayerState attacker)
     {
         if (attacker.fierceBruteUsesRemaining <= 0 || !Roll(0.33f)) return;
@@ -1127,11 +1151,13 @@ public class CombatSimulator
     // esquivado/bloqueado (sem Roll de Dodge/Block — explosão em área, ninguém escapa dela),
     // SEM crítico, SEM STR do atacante, e o dano NÃO é reduzido por armadura (dano bruto direto
     // ao HP — ainda passa por ApplyDamage, então Survival/Chaining continuam funcionando
-    // normalmente). Nunca consome o turno — Fierce Brute, outras Supers ainda não checadas no
-    // mesmo loop embaralhado, e o fluxo normal (Thief/pickup/throw/melee) continuam depois.
-    private void TryActivateBomb(PlayerState attacker, PlayerState defender)
+    // normalmente). **Consome o turno inteiro** quando ativa (retorna `true`) — comportamento
+    // observado pelo usuário no My Brute eternaltwin: a bomba é a própria ação do turno, igual
+    // a Net/Piledriver/Haste/Flash Flood (era `false`/nunca consumia antes, deixando o fluxo
+    // normal — Thief/pickup/throw/melee — continuar no mesmo turno; redefinido pelo usuário).
+    private bool TryActivateBomb(PlayerState attacker, PlayerState defender)
     {
-        if (attacker.bombUsesRemaining <= 0 || !Roll(0.17f)) return;
+        if (attacker.bombUsesRemaining <= 0 || !Roll(0.17f)) return false;
 
         attacker.bombUsesRemaining--;
         int rawDamage = _rng.Next(15, 26); // Next(min, max) é max-exclusivo: sorteia 15..25 inclusive
@@ -1180,6 +1206,8 @@ public class CombatSimulator
 
         for (int i = 0; i < targetIndexes.Count; i++)
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = targetIndexes[i], newHp = targetHp[i], maxHp = targets[i].maxHp });
+
+        return true;
     }
 
     // Tragic Potion (Super, 1x por luta): só pode rolar quando o HP atual já caiu abaixo de 60%
@@ -1430,7 +1458,26 @@ public class CombatSimulator
             target.survivalUsed = true;
             newHp = 1;
         }
-        return Mathf.Max(0, newHp);
+        int finalHp = Mathf.Max(0, newHp);
+
+        // Fast Metabolism: marca que sofreu dano — interrompe o burst de cura (10x 5%, todas no
+        // mesmo turno) antes dele rodar pela 1ª vez (ver SimulateTurn, item "0c-bis"). Ativa o
+        // burst (fastMetabolismPulseActive) na primeira vez que o HP cruza 50% do máximo pra
+        // baixo — `fastMetabolismPulseCount == 0` garante que só ativa uma vez por luta, mesmo
+        // que o HP volte a subir e caia de novo abaixo de 50% depois. O PRÓPRIO hit que ativa o
+        // burst não conta como "sofreu dano" pra fins de interrupção (`crossedThreshold`) — sem
+        // essa exceção, o burst seria cancelado na 1ª checagem por causa do hit que o ativou, e
+        // nunca chegaria a disparar de verdade.
+        if (target.HasSkill("Fast Metabolism"))
+        {
+            bool crossedThreshold = finalHp < target.maxHp * 0.5f && !target.fastMetabolismPulseActive && target.fastMetabolismPulseCount == 0;
+            if (crossedThreshold)
+                target.fastMetabolismPulseActive = true;
+            else
+                target.fastMetabolismTookDamage = true;
+        }
+
+        return finalHp;
     }
 
     // Net: qualquer hit de verdade solta o alvo enredado — chamado por cada call site de dano
