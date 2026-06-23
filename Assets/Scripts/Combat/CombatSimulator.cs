@@ -438,34 +438,49 @@ public class CombatSimulator
             return;
         }
 
-        // 0d. Net (Super, 1x por luta): 50% de chance por turno quando disponível (valor fixo
-        // do jogo original, "Usage Rate: 50%"). NÃO causa dano — puro controle. SEMPRE ACERTA,
-        // nem checa BlockChance/DodgeChance (rede arremessada em área, sem como esquivar) —
-        // mesmo padrão de "ignora dodge/block" do Flash Flood, mas aqui não há resultado
-        // nenhum a errar. Marca defender.netEnsnared = true (ver topo deste método e
-        // SimulateHit/SimulateRetaliation/SimulateThrow/Simulate*Attack pros pontos onde o
-        // status bloqueia esquiva/bloqueio/counter-attack e onde é removido ao sofrer hit).
-        if (attacker.hitSpeed > 0f && attacker.HasSkill("Net") && attacker.netUsesRemaining > 0 && Roll(0.50f))
+        // 0d. Supers checados em ORDEM ALEATÓRIA (Net, Fierce Brute, Bomb, futuros): a lista de
+        // Supers disponíveis do atacante é embaralhada a cada turno (mesmo _rng do simulador,
+        // determinístico por seed) e cada um é checado em sequência — todos que passarem no
+        // próprio roll de chance ativam no MESMO turno (ex: Net e Bomb podem ambos ativar — Net
+        // imobiliza o oponente e Bomb explode em seguida, causando dano e quebrando a rede).
+        // Era uma checagem fixa Net → Fierce Brute (nessa ordem); generalizado pra um loop sobre
+        // delegates pra acomodar Bomb (e futuras Supers) sem duplicar a lógica de embaralhamento
+        // a cada uma nova. Só Net consome o turno inteiro (sinalizado pelo retorno `true` do
+        // delegate) — Fierce Brute e Bomb sempre caem direto pro fluxo normal (Thief/pickup/
+        // throw/melee) do mesmo turno, então a checagem de "consumiu o turno" só acontece DEPOIS
+        // do loop inteiro rodar, nunca interrompendo Supers ainda não checados na mesma lista.
+        // Mesmo guard de hitSpeed > 0 de sempre (Monk nunca dispara nenhuma Super).
+        if (attacker.hitSpeed > 0f)
         {
-            attacker.netUsesRemaining--;
-            defender.netEnsnared = true;
-            Emit(new CombatEvent { type = CombatEventType.NetThrow, playerIndex = attacker.index, targetIndex = defender.index });
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
-            return;
-        }
+            var supers = new List<System.Func<bool>>();
+            if (attacker.HasSkill("Net") && attacker.netUsesRemaining > 0)
+                supers.Add(() => TryActivateNet(attacker, defender));
+            if (attacker.HasSkill("Fierce Brute") && attacker.fierceBruteUsesRemaining > 0)
+                supers.Add(() => { TryActivateFierceBrute(attacker); return false; });
+            if (attacker.HasSkill("Bomb") && attacker.bombUsesRemaining > 0)
+                supers.Add(() => { TryActivateBomb(attacker, defender); return false; });
+            // futuros Supers entram aqui
 
-        // 0e. Fierce Brute (Super, usos escaláveis com STR — ver ApplySkillStats): 33% de chance
-        // por turno quando disponível. Diferente das outras Supers acima, NÃO consome a ação
-        // inteira do turno — só seta o buff e cai direto pro fluxo normal (Thief/pickup/throw/
-        // melee), porque o efeito É justamente dobrar o dano do hit normal que vem a seguir
-        // neste mesmo turno (ver CalcChance/CritChance e o consumo do buff em SimulateHit).
-        // Mesmo guard de hitSpeed > 0 (Monk nunca dispara nenhuma Super, incluído aqui por
-        // consistência mesmo sem texto explícito do usuário sobre isso).
-        if (attacker.hitSpeed > 0f && attacker.HasSkill("Fierce Brute") && attacker.fierceBruteUsesRemaining > 0 && Roll(0.33f))
-        {
-            attacker.fierceBruteUsesRemaining--;
-            attacker.fierceBruteActive = true;
-            Emit(new CombatEvent { type = CombatEventType.FierceBruteActivated, playerIndex = attacker.index });
+            ShuffleList(supers);
+            bool turnConsumed = false;
+            foreach (var trySuper in supers)
+                if (trySuper()) turnConsumed = true;
+
+            if (turnConsumed)
+            {
+                Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+                return;
+            }
+
+            // Bomb pode matar o defensor sem consumir o turno (diferente de Net/Piledriver/Haste/
+            // Flash Flood, que sempre terminam o turno ao ativar) — sem essa checagem, o turno
+            // continuaria pro fluxo normal (Thief/pickup/throw/melee) contra um alvo já morto até
+            // o loop de round notar isAlive == false na próxima ação. Encerra aqui em vez disso.
+            if (!defender.isAlive)
+            {
+                Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+                return;
+            }
         }
 
         // 1. Thief: rouba a arma do oponente se eu estiver desarmado e ele armado — 44% por
@@ -1077,6 +1092,115 @@ public class CombatSimulator
         Emit(new CombatEvent { type = CombatEventType.PiledriverAttack, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamage, isCrit = isCrit, newHp = defender.hp, maxHp = defender.maxHp });
         Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
         CheckNetFreed(defender);
+    }
+
+    // --- Net / Fierce Brute / Bomb (Supers checados em ordem aleatória, ver SimulateTurn) ---
+
+    // Net: SEMPRE acerta (sem dano, sem Roll de Block/Dodge) — retorna true porque consome o
+    // turno inteiro do atacante (única das três que faz isso; ver SimulateTurn).
+    private bool TryActivateNet(PlayerState attacker, PlayerState defender)
+    {
+        if (attacker.netUsesRemaining <= 0 || !Roll(0.50f)) return false;
+
+        attacker.netUsesRemaining--;
+        defender.netEnsnared = true;
+        Emit(new CombatEvent { type = CombatEventType.NetThrow, playerIndex = attacker.index, targetIndex = defender.index });
+        return true;
+    }
+
+    // Fierce Brute: só seta o buff (consumido no próximo hit melee do mesmo turno, ver
+    // SimulateHit) — nunca consome o turno por conta própria.
+    private void TryActivateFierceBrute(PlayerState attacker)
+    {
+        if (attacker.fierceBruteUsesRemaining <= 0 || !Roll(0.33f)) return;
+
+        attacker.fierceBruteUsesRemaining--;
+        attacker.fierceBruteActive = true;
+        Emit(new CombatEvent { type = CombatEventType.FierceBruteActivated, playerIndex = attacker.index });
+    }
+
+    // Bomb (Super, 2x por luta): 17% de chance por turno. Explosão em área que atinge TODOS os
+    // alvos do lado inimigo (ver GetEnemyTargets) com o MESMO dano sorteado — entre 15 e 25
+    // inclusive (My Brute: "Between 15 and 25 damage inflicted on all your opponents"). NUNCA
+    // esquivado/bloqueado (sem Roll de Dodge/Block — explosão em área, ninguém escapa dela),
+    // SEM crítico, SEM STR do atacante, e o dano NÃO é reduzido por armadura (dano bruto direto
+    // ao HP — ainda passa por ApplyDamage, então Survival/Chaining continuam funcionando
+    // normalmente). Nunca consome o turno — Fierce Brute, outras Supers ainda não checadas no
+    // mesmo loop embaralhado, e o fluxo normal (Thief/pickup/throw/melee) continuam depois.
+    private void TryActivateBomb(PlayerState attacker, PlayerState defender)
+    {
+        if (attacker.bombUsesRemaining <= 0 || !Roll(0.17f)) return;
+
+        attacker.bombUsesRemaining--;
+        int rawDamage = _rng.Next(15, 26); // Next(min, max) é max-exclusivo: sorteia 15..25 inclusive
+
+        var targets       = GetEnemyTargets(attacker);
+        var targetIndexes = new List<int>();
+        var targetDamages = new List<int>();
+        var targetHp      = new List<int>();
+        var netFreed      = new List<int>();
+
+        foreach (var target in targets)
+        {
+            target.hp = ApplyDamage(target, rawDamage);
+            targetIndexes.Add(target.index);
+            targetDamages.Add(rawDamage);
+            targetHp.Add(target.hp);
+
+            // Quebra a rede de qualquer alvo enredado (oponente, pets/backup futuros) — sem
+            // emitir um CombatEventType.NetFreed separado: a info já vai embutida no próprio
+            // BombThrow (netFreedTargets), pra CombatPlayer tocar os fragmentos de rede já
+            // sincronizados com o impacto da explosão, em vez de um evento solto depois.
+            if (target.netEnsnared && !target.netEnsnaredPermanent)
+            {
+                target.netEnsnared = false;
+                netFreed.Add(target.index);
+            }
+        }
+
+        Emit(new CombatEvent
+        {
+            // targetIndex = defender (1º alvo de GetEnemyTargets) — usado por CombatPlayer só
+            // pra saber em direção a quem a bomba voa visualmente (ver case BombThrow); o dano
+            // real por alvo já vem nas listas paralelas abaixo, que cobrem todos os alvos.
+            // Sem isso, targetIndex ficava no default 0 — quando o próprio atacante já era o
+            // índice 0 (P1), CombatPlayer resolvia "defender" como o próprio atacante e a bomba
+            // parecia voar pra ele mesmo (bug real reportado pelo usuário).
+            type              = CombatEventType.BombThrow,
+            playerIndex       = attacker.index,
+            targetIndex       = defender.index,
+            damage            = rawDamage,
+            bombTargets       = targetIndexes,
+            bombTargetDamages = targetDamages,
+            bombTargetHp      = targetHp,
+            netFreedTargets   = netFreed,
+        });
+
+        for (int i = 0; i < targetIndexes.Count; i++)
+            Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = targetIndexes[i], newHp = targetHp[i], maxHp = targets[i].maxHp });
+    }
+
+    // Alvos do lado inimigo do atacante — hoje só o defensor (1v1). Preparado pra Fase 3 (pets)
+    // e pra uma futura skill "Backup" (chama um aliado): quando existirem, adicionar aqui o pet
+    // do defensor / o backup dele à lista, sem precisar tocar em quem já chama este método
+    // (ex: TryActivateBomb).
+    private List<PlayerState> GetEnemyTargets(PlayerState attacker)
+    {
+        var defender = attacker == _p1 ? _p2 : _p1;
+        return new List<PlayerState> { defender };
+    }
+
+    // Embaralha a lista in-place (Fisher-Yates) usando o mesmo _rng do simulador — determinístico
+    // por seed, igual a qualquer outro sorteio do arquivo (ApplySpySabotage, SimulateFlashFlood).
+    private void ShuffleList<T>(List<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = _rng.Next(i + 1);
+            var tmp = list[i];
+            list[i] = list[j];
+            list[j] = tmp;
+        }
     }
 
     // --- Chance calculations (mirrors PlayerCombat methods) ---

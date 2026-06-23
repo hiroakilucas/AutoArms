@@ -34,6 +34,10 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("Sprite da rede caída/oscilando sobre o enredado (Assets/Data/UI/SkillEffect/Net/net2.png).")]
     [SerializeField] private Sprite netLandedSprite;
 
+    [Header("Bomb")]
+    [Tooltip("Prefab da bomba (Assets/Data/UI/SkillEffect/Bomb/Bomb.prefab) — GameObject com SpriteRenderer (sprite \"bomb\") + Animator (controller Explosion_1, já criado pelo usuário). Usado tanto na fase de voo (sprite estático) quanto na explosão (2ª instância, Animator religado).")]
+    [SerializeField] private GameObject bombPrefab;
+
     private const string Player2ProfileFallbackPath =
         "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
@@ -221,6 +225,7 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.piledriverEffectPrefab = piledriverEffectPrefab;
             combatPlayer.netFlyingSprite = netFlyingSprite;
             combatPlayer.netLandedSprite = netLandedSprite;
+            combatPlayer.bombPrefab = bombPrefab;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);

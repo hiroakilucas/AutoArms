@@ -44,6 +44,7 @@ public class PlayerState
     public int  netUsesRemaining = 1;
     public int  fierceBruteUsesRemaining = 1;
     public bool fierceBruteActive;
+    public int  bombUsesRemaining = 2;
     public bool hasTakenFirstTurn;
     public int  chainHitStreak;
     public int  stunnedActions;

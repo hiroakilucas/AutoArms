@@ -116,6 +116,56 @@ public static class CombatLogFormatter
                     break;
                 }
 
+                case CombatEventType.HasteAttack:
+                    if (e.isDodged)
+                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE — {Name(e.targetIndex)} esquiva do dash");
+                    else if (e.isBlocked)
+                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE — {Name(e.targetIndex)} bloqueia o dash");
+                    else
+                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE e acerta {Name(e.targetIndex)}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newHp}/{e.maxHp})");
+                    break;
+
+                case CombatEventType.PiledriverAttack:
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativa PILEDRIVER e acerta {Name(e.targetIndex)}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newHp}/{e.maxHp})");
+                    break;
+
+                case CombatEventType.NetThrow:
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativa NET e enreda {Name(e.targetIndex)}");
+                    break;
+
+                case CombatEventType.NetEnsnaredSkip:
+                    sb.AppendLine($"  {Name(e.playerIndex)} está enredado pela rede e perde a ação");
+                    break;
+
+                case CombatEventType.NetFreed:
+                    sb.AppendLine($"  {Name(e.playerIndex)} se solta da rede");
+                    break;
+
+                case CombatEventType.FierceBruteActivated:
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativa FIERCE BRUTE (próximo golpe dobrado)");
+                    break;
+
+                case CombatEventType.BombThrow:
+                {
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativa BOMB!");
+                    if (e.bombTargets != null)
+                        for (int j = 0; j < e.bombTargets.Count; j++)
+                        {
+                            int targetIdx = e.bombTargets[j];
+                            int maxHp = 0;
+                            if (i + 1 < events.Count
+                                && events[i + 1].type == CombatEventType.HealthChanged
+                                && events[i + 1].playerIndex == targetIdx)
+                            {
+                                maxHp = events[i + 1].maxHp;
+                                i++; // consome o HealthChanged paralelo deste alvo
+                            }
+                            string netTag = (e.netFreedTargets != null && e.netFreedTargets.Contains(targetIdx)) ? " (rede quebrada)" : "";
+                            sb.AppendLine($"    explosão acerta {Name(targetIdx)}: {e.bombTargetDamages[j]} dano (IGNORA DODGE/BLOCK/ARMOR){netTag} (HP: {e.bombTargetHp[j]}/{maxHp})");
+                        }
+                    break;
+                }
+
                 case CombatEventType.CombatEnd:
                     sb.AppendLine($"========== VENCEDOR: {Name(e.playerIndex)} ==========");
                     break;

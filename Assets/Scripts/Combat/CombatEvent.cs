@@ -30,6 +30,7 @@ public enum CombatEventType
     NetEnsnaredSkip, // playerIndex = ensnared player whose action is being skipped this turn (still netEnsnared — distinct from StunSkip, which represents a temporary Chaining stun that always ends after exactly 1 skipped action; Net keeps skipping every turn until NetFreed).
     NetFreed,        // playerIndex = player who just broke free of the net (received a hit while netEnsnared — see CombatSimulator.ApplyDamage/SimulateThrow/SimulateRetaliation/Simulate*Attack call sites).
     FierceBruteActivated, // playerIndex = attacker who just activated the buff (fierceBruteActive = true) — doesn't end the turn, falls through to Thief/pickup/throw/melee normally; the buff doubles damage (and +10% crit) on the next melee hit this same turn (see Hit.isFierceBrute below), consumed either way (hit lands or not).
+    BombThrow,       // playerIndex = attacker. Super: explosão em área que atinge TODOS os alvos do lado inimigo (bombTargets — hoje só o defensor, ver CombatSimulator.GetEnemyTargets) com o mesmo dano sorteado (damage, 15-25). NUNCA esquivado/bloqueado, sem crítico, sem STR do atacante, dano NÃO reduzido por armadura. Não consome o turno. netFreedTargets lista quem teve a rede (Net) quebrada pela explosão.
     TurnEnd,         // playerIndex = acting player (attacker returns to spawn)
     CombatEnd,       // playerIndex = winner
 }
@@ -56,4 +57,14 @@ public class CombatEvent
     public List<string> ffWeapons;
     public List<int>    ffDamages;
     public List<int>    ffHpAfter;
+
+    // Bomb only — bombTargets/bombTargetDamages/bombTargetHp são paralelas, uma entrada por
+    // alvo atingido pela explosão (damage acima já carrega o valor sorteado, igual pra todos —
+    // bombTargetDamages existe separado pra já deixar espaço pra dano variar por alvo no
+    // futuro, ex: pets com resistência própria). netFreedTargets é a sublista de playerIndex
+    // que tiveram CombatSimulator.PlayerState.netEnsnared quebrado por esta explosão.
+    public List<int> bombTargets;
+    public List<int> bombTargetDamages;
+    public List<int> bombTargetHp;
+    public List<int> netFreedTargets;
 }

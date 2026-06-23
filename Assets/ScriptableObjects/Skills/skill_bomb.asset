@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_bomb
   m_EditorClassIdentifier: 
   skillName: Bomb
-  description: "Explos\xE3o de dano alto (1x por luta)"
-  icon: {fileID: 0}
+  description: "17% por turno: explos\xE3o em \xE1rea, 15-25 de dano em todos os
+    alvos inimigos, ignora dodge/block/armor (2x por luta)"
+  icon: {fileID: 21300000, guid: e9d61799201f36848ae7b75580c0154c, type: 3}
   category: 4
   activationType: 1
-  usesPerFight: 1
+  usesPerFight: 2

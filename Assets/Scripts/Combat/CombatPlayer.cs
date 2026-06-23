@@ -25,11 +25,25 @@ public class CombatPlayer : MonoBehaviour
     [HideInInspector] public Sprite netFlyingSprite;
     [HideInInspector] public Sprite netLandedSprite;
 
+    // Skill Bomb — mesmo motivo/padrão de piledriverEffectPrefab/netFlyingSprite acima:
+    // wireado em CombatSceneLoader.bombPrefab e copiado pra aqui na criação. Um único prefab
+    // combinando SpriteRenderer (sprite "bomb", usado durante o voo) + Animator (controller da
+    // explosão, BombExplosion.anim/Explosion_1.controller, já criados pelo usuário) — ver
+    // case BombThrow abaixo pra como o Animator é mantido desligado durante o voo (senão a
+    // explosão, único estado do controller, tocaria imediatamente ao instanciar) e religado só
+    // na 2ª instância, no momento do impacto.
+    [HideInInspector] public GameObject bombPrefab;
+
     // net1/net2.png vêm em resolução cheia (sem nenhum ajuste de escala por baixo, diferente de
     // armas que escalam pelo lossyScale do handBone). Escalas independentes — net1 (voo) e net2
     // (caída sobre o enredado) calibradas separadamente a pedido do usuário.
     private const float Net1FlyingScale = 0.75f;
     private const float Net2LandedScale = 2f;
+
+    // Bomb: escala da explosão no impacto (deve "dominar a tela", pedido pelo usuário) e
+    // duração do voo em pêndulo até o defensor.
+    private const float BombExplosionScale = 2.5f;
+    private const float BombFlightDuration = 0.5f;
 
     private List<CombatEvent> _events;
     private float             _playbackSpeed = 1f;
@@ -536,58 +550,9 @@ public class CombatPlayer : MonoBehaviour
 
             case CombatEventType.NetFreed:
                 // Quem foi libertado vem em evt.playerIndex (igual ao StunSkip — "attacker" é
-                // só o nome da variável local, não o papel real no evento). ReleaseNet() para
-                // os loops de face/oscilação e devolve o próprio GameObject da rede pra essa
-                // sequência de libertação animar antes de destruir.
+                // só o nome da variável local, não o papel real no evento).
                 if (attacker != null)
-                {
-                    var net2 = attacker.ReleaseNet();
-                    if (net2 != null)
-                    {
-                        var net2Renderer = net2.GetComponent<SpriteRenderer>();
-                        Vector3 net2BaseScale = net2.transform.localScale;
-
-                        // Scale up rápido (~1.3x, ~0.1s) antes de estourar.
-                        const float scaleUpDuration = 0.1f;
-                        float scaleElapsed = 0f;
-                        while (scaleElapsed < scaleUpDuration * t)
-                        {
-                            scaleElapsed += Time.deltaTime;
-                            net2.transform.localScale = Vector3.Lerp(net2BaseScale, net2BaseScale * 1.3f, scaleElapsed / (scaleUpDuration * t));
-                            yield return null;
-                        }
-
-                        // 5 fragmentos de mini-net distribuídos radialmente (0°, 72°, 144°,
-                        // 216°, 288°), reaproveitando o mesmo sprite de net2 em escala ~0.25x —
-                        // sem asset novo, pedido pelo usuário.
-                        if (net2Renderer != null && net2Renderer.sprite != null)
-                        {
-                            Vector3 burstPos    = net2.transform.position;
-                            Vector3 fragScale   = net2BaseScale * 0.25f;
-                            string  sortLayer   = net2Renderer.sortingLayerName;
-                            int     sortOrder   = net2Renderer.sortingOrder;
-                            Sprite  fragSprite  = net2Renderer.sprite;
-
-                            for (int i = 0; i < 5; i++)
-                            {
-                                float angle = (360f / 5f) * i * Mathf.Deg2Rad;
-                                Vector3 dir = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
-
-                                var frag = new GameObject("NetFragment");
-                                frag.transform.position   = burstPos;
-                                frag.transform.localScale = fragScale;
-                                var fr = frag.AddComponent<SpriteRenderer>();
-                                fr.sprite           = fragSprite;
-                                fr.sortingLayerName = sortLayer;
-                                fr.sortingOrder     = sortOrder;
-                                StartCoroutine(NetFragmentFade(frag, dir, t));
-                            }
-                        }
-
-                        Destroy(net2);
-                    }
-                }
-                yield return null;
+                    yield return StartCoroutine(PlayNetBreakEffect(attacker, t));
                 break;
 
             case CombatEventType.FierceBruteActivated:
@@ -615,6 +580,106 @@ public class CombatPlayer : MonoBehaviour
                     // isFierceBrute) ou até falhar por dodge/block/counter/reversal/arremesso
                     // (ver CombatSimulator.SimulateHit/SimulateTurn).
                     attacker.ShowFierceBruteAura();
+                }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
+            case CombatEventType.BombThrow:
+                // Super "Bomb": arremesso em pêndulo (arco parabólico, mesma base de FlyWeapon)
+                // até o defensor, seguido de explosão em área que atinge todos os alvos do lado
+                // inimigo (evt.bombTargets — hoje só o defensor, ver CombatSimulator.
+                // GetEnemyTargets). NUNCA esquivado/bloqueado, sem knockback individual — o
+                // simulador já resolveu o resultado, aqui só toca a animação e aplica os dados.
+                if (attacker != null && defender != null && evt.bombTargets != null && evt.bombTargets.Count > 0)
+                {
+                    Vector3 launchPos = attacker.weaponHandler.handBone != null
+                        ? attacker.weaponHandler.handBone.position
+                        : attacker.transform.position + Vector3.up * 0.5f;
+                    Vector3 impactPos = defender.transform.position;
+
+                    attacker.animationController.SetIdle(false);
+                    attacker.GetComponent<Animator>()?.SetTrigger("Throwing");
+
+                    // Fase 1 — Arremesso em pêndulo: arco parabólico (bump de seno, mesma curva
+                    // de FlyWeapon) + rotação contínua manual de 200°/s — diferente dos 540°/s
+                    // fixos de FlyWeapon, então não dá pra reusar o helper direto; loop próprio.
+                    if (bombPrefab != null)
+                    {
+                        var bomb = Instantiate(bombPrefab, launchPos, Quaternion.identity);
+                        // Desliga o Animator antes do 1º frame rodar — o controller já criado
+                        // pelo usuário tem um único estado (a própria explosão), que tocaria
+                        // imediatamente ao instanciar e sobrescreveria o sprite estático "bomb"
+                        // usado durante o voo. Religado só na 2ª instância, no impacto (abaixo).
+                        var bombAnimator = bomb.GetComponent<Animator>();
+                        if (bombAnimator != null) bombAnimator.enabled = false;
+
+                        const float arcHeight = 0.6f;
+                        float elapsed = 0f;
+                        while (elapsed < BombFlightDuration * t)
+                        {
+                            float p = elapsed / (BombFlightDuration * t);
+                            Vector3 pos = Vector3.Lerp(launchPos, impactPos, p);
+                            pos.y += arcHeight * Mathf.Sin(p * Mathf.PI);
+                            bomb.transform.position = pos;
+                            bomb.transform.Rotate(0f, 0f, 200f * Time.deltaTime);
+                            elapsed += Time.deltaTime;
+                            yield return null;
+                        }
+                        Destroy(bomb);
+                    }
+                    else
+                    {
+                        yield return new WaitForSeconds(BombFlightDuration * t);
+                    }
+                    attacker.animationController.SetIdle(true);
+
+                    // Fase 2 — Impacto + Explosão: 2ª instância do mesmo prefab, centrada no
+                    // defensor, escala grande ("deve dominar a tela") e sorting layer Characters
+                    // (na frente de tudo durante a explosão). Animator religado aqui — único
+                    // estado do controller já é a explosão, toca direto ao ligar.
+                    if (bombPrefab != null)
+                    {
+                        var fx = Instantiate(bombPrefab, impactPos, Quaternion.identity);
+                        fx.transform.localScale = Vector3.one * BombExplosionScale;
+                        var fxAnimator = fx.GetComponent<Animator>();
+                        if (fxAnimator != null) fxAnimator.enabled = true;
+                        var fxRenderer = fx.GetComponent<SpriteRenderer>();
+                        if (fxRenderer != null)
+                        {
+                            fxRenderer.sortingLayerName = "Characters";
+                            fxRenderer.sortingOrder     = 30;
+                        }
+                        if (fx.GetComponent<AnimationAutoDestroy>() == null)
+                            fx.AddComponent<AnimationAutoDestroy>();
+                    }
+
+                    // Screen flash único pra explosão inteira (não um por alvo) — sinaliza o
+                    // impacto em área sem empilhar vários flashes sobrepostos quando houver
+                    // múltiplos alvos no futuro (pets/backup).
+                    StartCoroutine(FlashScreenWhite(0.15f, 0.3f));
+
+                    for (int i = 0; i < evt.bombTargets.Count; i++)
+                    {
+                        int targetIndex  = evt.bombTargets[i];
+                        var targetCombat = GetCombat(targetIndex);
+                        if (targetCombat == null) continue;
+
+                        ApplyHealthDelta(targetIndex, evt.bombTargetHp[i]);
+
+                        Vector3 popupPos = targetCombat.transform.position + Vector3.up * 1.5f
+                            + Vector3.right * Random.Range(-0.3f, 0.3f);
+                        DamagePopup.Spawn(popupPos, evt.bombTargetDamages[i], isCrit: false);
+
+                        StartCoroutine(targetCombat.animationController.PlayHurt((attacker.settings?.hurtDuration ?? 0.07f) * t));
+
+                        // Net quebrada pela explosão: mesmos fragmentos voadores de NetFreed,
+                        // fire-and-forget — sincronizado com o impacto, sem esperar um evento
+                        // NetFreed separado mais adiante na lista.
+                        if (evt.netFreedTargets != null && evt.netFreedTargets.Contains(targetIndex))
+                            StartCoroutine(PlayNetBreakEffect(targetCombat, t));
+                    }
+
+                    yield return new WaitForSeconds(0.6f * t);
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -1104,6 +1169,60 @@ public class CombatPlayer : MonoBehaviour
         return ((Vector2)defender.transform.position - (Vector2)attacker.transform.position).normalized;
     }
 
+    // Skill Net (libertação) — extraído do case NetFreed pra também ser reusado pela skill Bomb
+    // (explosão que quebra a rede de qualquer alvo atingido, ver case BombThrow e
+    // evt.netFreedTargets): ReleaseNet() para os loops de face/oscilação do personagem e
+    // devolve o próprio GameObject da rede; aqui ela faz scale-up rápido e estoura em 5
+    // fragmentos antes de ser destruída. No-op se o personagem não estiver com a rede ativa.
+    private IEnumerator PlayNetBreakEffect(PlayerCombat character, float t)
+    {
+        if (character == null) yield break;
+        var net2 = character.ReleaseNet();
+        if (net2 == null) yield break;
+
+        var net2Renderer = net2.GetComponent<SpriteRenderer>();
+        Vector3 net2BaseScale = net2.transform.localScale;
+
+        // Scale up rápido (~1.3x, ~0.1s) antes de estourar.
+        const float scaleUpDuration = 0.1f;
+        float scaleElapsed = 0f;
+        while (scaleElapsed < scaleUpDuration * t)
+        {
+            scaleElapsed += Time.deltaTime;
+            net2.transform.localScale = Vector3.Lerp(net2BaseScale, net2BaseScale * 1.3f, scaleElapsed / (scaleUpDuration * t));
+            yield return null;
+        }
+
+        // 5 fragmentos de mini-net distribuídos radialmente (0°, 72°, 144°, 216°, 288°),
+        // reaproveitando o mesmo sprite de net2 em escala ~0.25x — sem asset novo, pedido pelo
+        // usuário.
+        if (net2Renderer != null && net2Renderer.sprite != null)
+        {
+            Vector3 burstPos   = net2.transform.position;
+            Vector3 fragScale  = net2BaseScale * 0.25f;
+            string  sortLayer  = net2Renderer.sortingLayerName;
+            int     sortOrder  = net2Renderer.sortingOrder;
+            Sprite  fragSprite = net2Renderer.sprite;
+
+            for (int i = 0; i < 5; i++)
+            {
+                float angle = (360f / 5f) * i * Mathf.Deg2Rad;
+                Vector3 dir = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+
+                var frag = new GameObject("NetFragment");
+                frag.transform.position   = burstPos;
+                frag.transform.localScale = fragScale;
+                var fr = frag.AddComponent<SpriteRenderer>();
+                fr.sprite           = fragSprite;
+                fr.sortingLayerName = sortLayer;
+                fr.sortingOrder     = sortOrder;
+                StartCoroutine(NetFragmentFade(frag, dir, t));
+            }
+        }
+
+        Destroy(net2);
+    }
+
     // Skill Net (libertação): fragmento radial de mini-net — voa na direção dir a ~3 unid/s e
     // desaparece (fade alpha 1→0) ao longo de ~0.35s, destruindo-se no fim.
     private IEnumerator NetFragmentFade(GameObject frag, Vector3 dir, float t)
@@ -1231,10 +1350,11 @@ public class CombatPlayer : MonoBehaviour
         if (go != null) Destroy(go);
     }
 
-    // Skill Fierce Brute — flash branco de tela inteira no momento do hit que consome o buff:
-    // Canvas/Image temporários criados e destruídos na hora (sem nenhuma referência wireada),
-    // alpha 0 → 0.4 → 0 em `duration` segundos no total.
-    private IEnumerator FlashScreenWhite(float duration)
+    // Flash branco de tela inteira — Canvas/Image temporários criados e destruídos na hora (sem
+    // nenhuma referência wireada), alpha 0 → peakAlpha → 0 em `duration` segundos no total.
+    // Originalmente só da skill Fierce Brute (peakAlpha 0.4, default abaixo, mantém o mesmo
+    // visual de antes); reusado pela skill Bomb com peakAlpha 0.3 (impacto em área, mais sutil).
+    private IEnumerator FlashScreenWhite(float duration, float peakAlpha = 0.4f)
     {
         var canvasGo = new GameObject("FierceBruteFlash");
         var canvas = canvasGo.AddComponent<Canvas>();
@@ -1257,14 +1377,14 @@ public class CombatPlayer : MonoBehaviour
         while (elapsed < half)
         {
             elapsed += Time.deltaTime;
-            img.color = new Color(1f, 1f, 1f, Mathf.Lerp(0f, 0.4f, elapsed / half));
+            img.color = new Color(1f, 1f, 1f, Mathf.Lerp(0f, peakAlpha, elapsed / half));
             yield return null;
         }
         elapsed = 0f;
         while (elapsed < half)
         {
             elapsed += Time.deltaTime;
-            img.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.4f, 0f, elapsed / half));
+            img.color = new Color(1f, 1f, 1f, Mathf.Lerp(peakAlpha, 0f, elapsed / half));
             yield return null;
         }
         Destroy(canvasGo);
