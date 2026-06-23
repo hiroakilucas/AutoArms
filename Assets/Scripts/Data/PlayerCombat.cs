@@ -88,6 +88,8 @@ public class PlayerCombat : MonoBehaviour
     private GameObject monkAura;
     private Coroutine   monkAuraPulseRoutine;
     private Coroutine   monkAuraFlashRoutine;
+    private GameObject poisonAura;
+    private Coroutine   poisonAuraPulseRoutine;
     private static Sprite _glowSprite;
 
     // Chaining: chamado quando este personagem é estunado (CombatEventType.Stunned) — label
@@ -372,6 +374,56 @@ public class PlayerCombat : MonoBehaviour
 
         if (monkAura != null)
             monkAuraPulseRoutine = StartCoroutine(MonkAuraPulseLoop());
+    }
+
+    // Skill Chef: aura verde persistente no defensor enquanto `poisoned` (CombatSimulator.
+    // PlayerState.poisoned) estiver true — chamada pelo CombatPlayer (case ChefPizzaThrow, ao
+    // chegar a pizza) e destruída de novo quando o veneno é curado (case TragicPotionUse) ou a
+    // luta acaba. Mesmo sprite procedural (GetGlowSprite) e mesmo padrão de pulso de alpha via
+    // seno da Fierce Brute/Monk, só com cor/faixa de alpha próprias do veneno.
+    public void ShowPoisonAura()
+    {
+        if (poisonAura != null) return;
+
+        poisonAura = new GameObject("PoisonAura");
+        poisonAura.transform.SetParent(transform);
+        poisonAura.transform.localPosition = Vector3.zero;
+        poisonAura.transform.localScale    = Vector3.one * 1.8f; // calibrável
+
+        var sr = poisonAura.AddComponent<SpriteRenderer>();
+        sr.sprite           = GetGlowSprite();
+        sr.color            = new Color(0f, 0.8f, 0.2f, 0.25f);
+        sr.sortingLayerName = "Characters";
+        sr.sortingOrder     = -1; // atrás de qualquer parte do corpo (todas usam ordem >= 0)
+
+        poisonAuraPulseRoutine = StartCoroutine(PoisonAuraPulseLoop());
+    }
+
+    // Pulso de alpha entre 0.15 e 0.35 via seno — mesmo padrão/frequência (~3Hz) da Fierce
+    // Brute/Monk, só com a faixa de alpha própria do veneno.
+    private IEnumerator PoisonAuraPulseLoop()
+    {
+        var sr = poisonAura.GetComponent<SpriteRenderer>();
+        while (poisonAura != null)
+        {
+            float wave = (Mathf.Sin(Time.time * 3f) + 1f) * 0.5f;
+            var   c    = sr.color;
+            c.a        = Mathf.Lerp(0.15f, 0.35f, wave);
+            sr.color   = c;
+            yield return null;
+        }
+    }
+
+    // Destrói a aura com fade (chamado ao curar o veneno — Tragic Potion — ou ao final da
+    // luta). No-op se a aura não existir (mesmo padrão de HideFierceBruteAura), então pode ser
+    // chamado incondicionalmente em qualquer TragicPotionUse sem checar antes se o personagem
+    // de fato estava envenenado.
+    public void HidePoisonAura(float fadeDuration = 0.3f)
+    {
+        if (poisonAura == null) return;
+        if (poisonAuraPulseRoutine != null) { StopCoroutine(poisonAuraPulseRoutine); poisonAuraPulseRoutine = null; }
+        StartCoroutine(FadeOutAndDestroy(poisonAura, fadeDuration));
+        poisonAura = null;
     }
 
     // Círculo branco com fade radial (alpha caindo do centro pra borda, "blur" pobre) gerado uma
@@ -1112,6 +1164,99 @@ public class PlayerCombat : MonoBehaviour
         thief.transform.localScale = thiefScale; // volta a virar pra direção original antes de saltar de volta
 
         yield return thief.movement.JumpTo(thiefStart, jumpSpeed, jumpHeight);
+    }
+
+    // Visual da skill Vampirism: MESMA estrutura de StealWeapon acima (salto nas costas,
+    // bounce 4x, vira pra mesma direção do defensor, "pisca" via Face 01/03, salto de volta) —
+    // só muda o que acontece durante o bounce (efeito "vampirism" saindo do corpo do defensor
+    // em direção à boca do atacante, em vez de só roubar a arma) e a direção do offset de
+    // montagem (espelhada — ver abaixo). Dano/cura já foram resolvidos pelo CombatSimulator;
+    // esta coroutine só cobre a aproximação/mordida visual. `onBiteComplete` é invocado bem
+    // entre o fim do 4º bounce e o salto de volta — CombatPlayer usa esse gancho pra aplicar
+    // HP/popups (ApplyHealthDelta centraliza isso, ver CombatPlayer.cs) sem que este método
+    // precise conhecer HealthSystem/DamagePopup diretamente.
+    public static IEnumerator VampirismRoutine(PlayerCombat attacker, PlayerCombat defender,
+                                                RuntimeAnimatorController effectController,
+                                                float t, System.Action onBiteComplete)
+    {
+        float jumpHeight = attacker.settings != null ? attacker.settings.jumpHeight : 2f;
+        float jumpSpeed  = attacker.RuntimeRunSpeed;
+
+        Vector3 attackerStart = attacker.transform.position;
+
+        // Offset lateral OPOSTO ao do Thief (StealWeapon usa +0.3 pra P1/-0.3 pra P2) — o
+        // atacante sobe nas costas do defensor pelo lado contrário, senão a mordida acontece
+        // de frente em vez de por trás (verificado empiricamente com P1 à esquerda/P2 à direita).
+        Vector3 mountOffset = new Vector3(attacker.isPlayer1 ? -0.3f : 0.3f, 0.6f, 0f);
+        Vector3 mountPos    = defender.transform.position + mountOffset;
+
+        SetBodyLayer(attacker.bodyRenderers, "Characters");
+        SetBodyLayer(defender.bodyRenderers, "Characters2");
+        yield return attacker.movement.JumpTo(mountPos, jumpSpeed, jumpHeight);
+
+        // Diferente do Thief, o atacante NÃO vira pra direção do defensor aqui — virar deixava
+        // ele de costas/encarando errado durante a mordida (bug reportado pelo usuário). Mantém
+        // a própria direção original o tempo todo.
+
+        // Efeito "vampirism" (Assets/Data/UI/SkillEffect/Vampirism/, flipbook de 6 frames já em
+        // loop no próprio .anim — partículas pequenas 1→2→3, fluxo maior 4→5→6) nasce no CORPO
+        // do defensor (não na mão — é de onde o sangue sai) e é movido manualmente em direção à
+        // boca do atacante durante o bounce.
+        GameObject effect = null;
+        if (effectController != null)
+        {
+            effect = new GameObject("VampirismEffect");
+            effect.transform.position = defender.transform.position;
+            var effectRenderer = effect.AddComponent<SpriteRenderer>();
+            effectRenderer.sortingLayerName = "Characters";
+            effectRenderer.sortingOrder     = 25;
+            var effectAnimator = effect.AddComponent<Animator>();
+            effectAnimator.runtimeAnimatorController = effectController;
+        }
+
+        Vector3 defenderBase = defender.transform.position;
+        Vector3 mouthPos     = attacker.transform.position + Vector3.up * 0.8f;
+        bool hasFace = defender.faceRenderer != null && defender.faceSprites != null && defender.faceSprites.Length > 2;
+        const float bounceDistance = 0.18f;
+        const float bounceDuration = 0.18f;
+        for (int i = 0; i < 4; i++)
+        {
+            if (hasFace) defender.faceRenderer.sprite = defender.faceSprites[2]; // Face 03
+            float elapsed = 0f;
+            while (elapsed < bounceDuration * t)
+            {
+                float p = elapsed / (bounceDuration * t);
+                float k = Mathf.Sin(p * Mathf.PI) * bounceDistance;
+                attacker.transform.position = mountPos     + Vector3.right * k;
+                defender.transform.position = defenderBase + Vector3.right * k * 0.5f;
+
+                // Corpo do defensor -> boca do atacante, durante os 2 primeiros ciclos (i<2) —
+                // depois disso o sangue já foi "absorvido"; o efeito só continua tocando o
+                // flipbook em loop perto da boca até o 4º bounce terminar.
+                if (effect != null)
+                {
+                    float moveP = Mathf.Clamp01((i + p) / 2f);
+                    effect.transform.position = Vector3.Lerp(defenderBase, mouthPos, moveP);
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            if (hasFace) defender.faceRenderer.sprite = defender.faceSprites[0]; // Face 01
+        }
+        attacker.transform.position = mountPos;
+        defender.transform.position = defenderBase;
+
+        if (effect != null) Destroy(effect);
+
+        // Aplica dano/cura/popups (CombatPlayer.ApplyHealthDelta) ANTES do salto de volta — a
+        // mordida já terminou, só falta restaurar a pose e voltar pro spawn.
+        onBiteComplete?.Invoke();
+
+        SetBodyLayer(attacker.bodyRenderers, attacker.defaultSortingLayer);
+        SetBodyLayer(defender.bodyRenderers, defender.defaultSortingLayer);
+
+        yield return attacker.movement.JumpTo(attackerStart, jumpSpeed, jumpHeight);
     }
 
     // Public so CombatPlayer (CombatSimulator replay) can reuse the same projectile arc

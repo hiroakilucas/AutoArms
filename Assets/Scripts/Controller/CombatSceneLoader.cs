@@ -48,6 +48,14 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("Animator Controller da folha animada (Assets/Data/UI/SkillEffect/FastMetabolism/Leaf Shield_Frame_01.controller) — usado tanto na regeneração passiva (1 instância pequena) quanto no pulso de 50% (6 instâncias orbitando). Não precisa de prefab — CombatPlayer monta o GameObject (SpriteRenderer+Animator) em runtime.")]
     [SerializeField] private RuntimeAnimatorController fastMetabolismController;
 
+    [Header("Vampirism")]
+    [Tooltip("Animator Controller do efeito de sangue (Assets/Data/UI/SkillEffect/Vampirism/1.controller, flipbook de 6 frames já em loop) — usado durante o bounce da mordida, do corpo do defensor até a boca do atacante. Não precisa de prefab — PlayerCombat.VampirismRoutine monta o GameObject (SpriteRenderer+Animator) em runtime, mesmo padrão do Fast Metabolism.")]
+    [SerializeField] private RuntimeAnimatorController vampirismEffectController;
+
+    [Header("Chef")]
+    [Tooltip("Prefab da pizza (Assets/Data/UI/SkillEffect/Chef/ChefPizzaPrefab.prefab, gerado por Tools > AutoArms > Generate Chef Effect Prefab) — GameObject com SpriteRenderer (sprite \"chef\") + Animator (controller da explosão verde). Usado tanto na fase de voo (sprite estático) quanto na explosão (2ª instância, Animator religado), mesmo padrão do Bomb Prefab.")]
+    [SerializeField] private GameObject chefPizzaPrefab;
+
     private const string Player2ProfileFallbackPath =
         "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
@@ -231,6 +239,8 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.tragicPotionSprite = tragicPotionSprite;
             combatPlayer.tragicPotionHealSprite = tragicPotionHealSprite;
             combatPlayer.fastMetabolismController = fastMetabolismController;
+            combatPlayer.vampirismEffectController = vampirismEffectController;
+            combatPlayer.chefPizzaPrefab = chefPizzaPrefab;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);

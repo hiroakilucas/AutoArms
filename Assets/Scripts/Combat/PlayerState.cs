@@ -46,6 +46,7 @@ public class PlayerState
     public bool fierceBruteActive;
     public int  bombUsesRemaining = 2;
     public int  tragicPotionUsesRemaining = 1;
+    public int  vampirismUsesRemaining = 1;
 
     // Fast Metabolism — regeneração passiva de 1%/turno (sem campos próprios, sempre ativa
     // enquanto HasSkill for true) + burst de cura intensa (10x 5%, todas no mesmo turno) ao
@@ -62,10 +63,14 @@ public class PlayerState
     // checagem em CombatSimulator.SimulateTurn, logo depois do bloco de Pegar Arma/Thief/Swap.
     public bool saboteurPending;
 
-    // Preparação pra skill Chef (ainda não implementada): Tragic Potion cura este status ao
-    // ativar (ver CombatSimulator.TryActivateTragicPotion). Sem efeito real ainda — nenhum
-    // código seta poisoned = true até Chef existir.
+    // Chef: pizza envenenada lançada na 1ª ação do dono da skill (1x por luta,
+    // chefPizzaThrown) — marca o ADVERSÁRIO como poisoned = true e calcula
+    // poisonDamagePerTurn (1% do maxHp DELE, arredondado pra cima) no momento do lançamento,
+    // já que o defensor só é conhecido em runtime (ver CombatSimulator.SimulateTurn). Tragic
+    // Potion cura (poisoned = false) ao ativar — ver TryActivateTragicPotion.
     public bool poisoned;
+    public int  poisonDamagePerTurn;
+    public bool chefPizzaThrown;
 
     // Pets (Fase 3, roadmap — ainda não implementados): quando o alvo enredado for um pet,
     // este campo é setado true em vez de netEnsnared sozinho, e SimulateTurn deve tratar isso

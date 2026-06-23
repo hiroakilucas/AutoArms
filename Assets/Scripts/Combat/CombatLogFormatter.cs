@@ -182,6 +182,18 @@ public static class CombatLogFormatter
                     sb.AppendLine($"  {Name(e.playerIndex)} pulso de Fast Metabolism cura {e.healAmount} HP ({e.pulseCount}/10, HP: {e.newHp})");
                     break;
 
+                case CombatEventType.ChefPizzaThrow:
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativa CHEF e arremessa uma pizza envenenada em {Name(e.targetIndex)}");
+                    break;
+
+                case CombatEventType.PoisonDamage:
+                    sb.AppendLine($"  {Name(e.playerIndex)} sofre {e.damage} dano de veneno (Chef, HP: {e.newHp})");
+                    break;
+
+                case CombatEventType.VampirismAttack:
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativa VAMPIRISM e morde {Name(e.targetIndex)} (mordida garantida): {e.damage} dano (HP: {e.newDefenderHp}) e cura {e.healAmount} HP (HP: {e.newAttackerHp})");
+                    break;
+
                 case CombatEventType.CombatEnd:
                     sb.AppendLine($"========== VENCEDOR: {Name(e.playerIndex)} ==========");
                     break;

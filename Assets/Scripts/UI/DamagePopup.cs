@@ -296,6 +296,30 @@ public class DamagePopup : MonoBehaviour
         origin               = transform.position;
     }
 
+    // Skill Chef — dano do veneno aplicado no fim do turno do envenenado. Mesmo padrão de
+    // SpawnHeal (texto simples, sem prefixo "+"/"-", já que é dano negativo de qualquer forma —
+    // mesma convenção do popup normal/Spawn), mas verde escuro pra diferenciar de um hit comum.
+    public static void SpawnPoison(Vector3 worldPos, int amount)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitPoison(amount);
+    }
+
+    void InitPoison(int amount)
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = amount.ToString();
+        label.fontSize       = 3.5f;
+        baseColor            = new Color(0.1f, 0.7f, 0.1f, 1f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void Update()
     {
         elapsed += Time.deltaTime;

@@ -48,6 +48,26 @@ public class CombatPlayer : MonoBehaviour
     // pequena) quanto pelas folhas orbitando do pulso (6 instâncias).
     [HideInInspector] public RuntimeAnimatorController fastMetabolismController;
 
+    // Skill Vampirism — mesmo motivo/padrão de fastMetabolismController acima: wireado em
+    // CombatSceneLoader.vampirismEffectController e copiado pra aqui na criação. Um único
+    // RuntimeAnimatorController (1.controller, flipbook de 6 frames já em loop) — sem
+    // prefab, PlayerCombat.VampirismRoutine monta o GameObject (SpriteRenderer+Animator) em
+    // runtime, mesmo padrão das folhas do Fast Metabolism.
+    [HideInInspector] public RuntimeAnimatorController vampirismEffectController;
+
+    // Skill Chef — mesmo motivo/padrão de bombPrefab acima: wireado em
+    // CombatSceneLoader.chefPizzaPrefab e copiado pra aqui na criação. Um único prefab
+    // combinando SpriteRenderer (sprite "chef", usado durante o voo) + Animator (controller da
+    // explosão verde, ChefExplosion.anim/Explosion_1.controller, gerados por Tools → AutoArms →
+    // Generate Chef Effect Prefab) — mesmo Animator-desligado-durante-o-voo do Bomb.
+    [HideInInspector] public GameObject chefPizzaPrefab;
+
+    // Chef: escala única, pedida pelo usuário pra ficar pequena/discreta ("simular que está
+    // envenenado") — usada tanto na pizza durante o voo quanto na explosão verde do tick do
+    // veneno (PoisonDamage). Nada a ver com a explosão da Bomb (2.5, "domina a tela") — são
+    // skills/efeitos diferentes, não relacionados.
+    private const float ChefPizzaScale = 0.3f;
+
     // Fast Metabolism — folhas orbitando do pulso de 50% HP, uma entrada por jogador (index 0/1),
     // cada uma um array das 6 folhas (sem GameObject pai — RotateAround já opera em posição de
     // mundo, não precisa de hierarquia). Null = sem pulso ativo agora. Ver
@@ -733,7 +753,13 @@ public class CombatPlayer : MonoBehaviour
                 // aqui só toca a sequência visual (pegar/beber a poção, partículas de cura,
                 // popup verde) e sincroniza a barra de vida.
                 if (attacker != null)
+                {
                     yield return StartCoroutine(PlayTragicPotion(attacker, evt, t));
+                    // Cura o veneno do Chef (CombatSimulator.TryActivateTragicPotion já zera
+                    // poisoned = false) — no-op se este personagem nunca esteve envenenado
+                    // (HidePoisonAura só age se a aura existir).
+                    attacker.HidePoisonAura(0.3f);
+                }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
@@ -775,6 +801,124 @@ public class CombatPlayer : MonoBehaviour
                         FadeFastMetabolismLeaves(evt.playerIndex);
                 }
                 yield return new WaitForSeconds(0.3f * t);
+                break;
+
+            case CombatEventType.VampirismAttack:
+                // Super "Vampirism": mordida garantida (nunca esquivada/bloqueada) — o
+                // simulador já resolveu dano/cura (evt.damage/evt.healAmount); PlayerCombat.
+                // VampirismRoutine cobre o visual inteiro (salto nas costas, bounce, efeito
+                // corpo→boca, salto de volta), mesma estrutura de StealWeapon/Thief. O dano ao
+                // defensor e a cura do atacante são aplicados via ApplyHealthDelta (centraliza
+                // Survival-safety/Fast Metabolism, ver helper) dentro do callback onBiteComplete,
+                // entre o fim do bounce e o salto de volta.
+                if (attacker != null && defender != null)
+                {
+                    yield return StartCoroutine(PlayerCombat.VampirismRoutine(attacker, defender, vampirismEffectController, t, () =>
+                    {
+                        ApplyHealthDelta(evt.targetIndex, evt.newDefenderHp);
+                        DamagePopup.Spawn(defender.transform.position + Vector3.up * 1.5f, evt.damage, isCrit: false);
+
+                        ApplyHealthDelta(evt.playerIndex, evt.newAttackerHp);
+                        DamagePopup.SpawnHeal(attacker.transform.position + Vector3.up * 1.5f, evt.healAmount);
+                    }));
+                }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
+            case CombatEventType.ChefPizzaThrow:
+                // Passivo de combate "Chef": pizza envenenada lançada uma única vez, na 1ª ação
+                // do dono da skill — SEMPRE acerta (sem swing/reposicionamento condicionado a
+                // dodge/block, mesmo padrão de Net/Bomb). Só a Fase 1 (voo, base idêntica ao
+                // Bomb) acontece aqui — a pizza some ao chegar SEM explodir (pedido do usuário:
+                // a explosão/dano não é mais no momento do lançamento, ver case PoisonDamage
+                // abaixo, onde ela tica de fato no fim de cada turno futuro do envenenado). Aqui
+                // só aplica PlayHurt (reação a ter sido atingido pela pizza) e liga a aura verde
+                // persistente.
+                if (attacker != null && defender != null)
+                {
+                    Vector3 launchPos = attacker.weaponHandler.handBone != null
+                        ? attacker.weaponHandler.handBone.position
+                        : attacker.transform.position + Vector3.up * 0.5f;
+                    Vector3 impactPos = defender.transform.position;
+
+                    attacker.animationController.SetIdle(false);
+                    attacker.GetComponent<Animator>()?.SetTrigger("Throwing");
+
+                    if (chefPizzaPrefab != null)
+                    {
+                        var pizza = Instantiate(chefPizzaPrefab, launchPos, Quaternion.identity);
+                        pizza.transform.localScale = Vector3.one * ChefPizzaScale;
+                        // Mesmo motivo do Bomb: o Animator do prefab já tocaria a explosão
+                        // imediatamente ao instanciar (único estado do controller), sobrescrevendo
+                        // o sprite estático "chef" usado durante o voo — fica desligado aqui (a
+                        // pizza nunca explode no lançamento, só some — ver comentário acima).
+                        var pizzaAnimator = pizza.GetComponent<Animator>();
+                        if (pizzaAnimator != null) pizzaAnimator.enabled = false;
+
+                        const float arcHeight     = 0.6f;
+                        const float flightDuration = 0.5f;
+                        float elapsed = 0f;
+                        while (elapsed < flightDuration * t)
+                        {
+                            float p = elapsed / (flightDuration * t);
+                            Vector3 pos = Vector3.Lerp(launchPos, impactPos, p);
+                            pos.y += arcHeight * Mathf.Sin(p * Mathf.PI);
+                            pizza.transform.position = pos;
+                            pizza.transform.Rotate(0f, 0f, 300f * Time.deltaTime);
+                            elapsed += Time.deltaTime;
+                            yield return null;
+                        }
+                        Destroy(pizza);
+                    }
+                    else
+                    {
+                        yield return new WaitForSeconds(0.5f * t);
+                    }
+
+                    StartCoroutine(defender.animationController.PlayHurt((attacker.settings?.hurtDuration ?? 0.07f) * t));
+                    defender.ShowPoisonAura();
+
+                    attacker.animationController.SetIdle(true);
+                }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
+            case CombatEventType.PoisonDamage:
+                // Veneno da skill Chef — pedido do usuário: a explosão (chef.anim) só toca
+                // DEPOIS que o envenenado já pulou de volta pro ponto de partida (TurnEnd, agora
+                // emitido ANTES deste evento — ver CombatSimulator.EmitTurnEnd) — nunca enquanto
+                // ele ainda está na posição em que agiu. Diferente do resto da skill (fire-and-
+                // forget, mesmo padrão da regeneração passiva do Fast Metabolism), este case é
+                // BLOQUEANTE — espera a explosão terminar de tocar antes de liberar a próxima
+                // ação da lista de eventos (pedido explícito do usuário).
+                if (attacker != null)
+                {
+                    float poisonFxDuration = 1f;
+                    if (chefPizzaPrefab != null)
+                    {
+                        var fx = Instantiate(chefPizzaPrefab, attacker.transform.position, Quaternion.identity);
+                        fx.transform.localScale = Vector3.one * ChefPizzaScale;
+                        var fxAnimator = fx.GetComponent<Animator>();
+                        if (fxAnimator != null) fxAnimator.enabled = true;
+                        var fxRenderer = fx.GetComponent<SpriteRenderer>();
+                        if (fxRenderer != null)
+                        {
+                            fxRenderer.sortingLayerName = "Characters";
+                            fxRenderer.sortingOrder     = 20;
+                        }
+                        if (fx.GetComponent<AnimationAutoDestroy>() == null)
+                            fx.AddComponent<AnimationAutoDestroy>();
+
+                        var fxClips = fxAnimator != null ? fxAnimator.runtimeAnimatorController?.animationClips : null;
+                        if (fxClips != null && fxClips.Length > 0) poisonFxDuration = fxClips[0].length;
+                    }
+
+                    StartCoroutine(FlashCharacterGreen(attacker, 0.15f));
+                    ApplyHealthDelta(evt.playerIndex, evt.newHp);
+                    DamagePopup.SpawnPoison(attacker.transform.position + Vector3.up * 1.5f, evt.damage);
+
+                    yield return new WaitForSeconds(poisonFxDuration * t);
+                }
                 break;
 
             case CombatEventType.Hit:

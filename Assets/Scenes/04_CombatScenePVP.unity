@@ -782,6 +782,8 @@ MonoBehaviour:
   tragicPotionSprite: {fileID: 21300000, guid: 120b4d1decc2cbd499bb55f785f69113, type: 3}
   tragicPotionHealSprite: {fileID: 21300000, guid: d86ddd2d6be30bf4e8ccdc28e383b818, type: 3}
   fastMetabolismController: {fileID: 9100000, guid: 6954878f82258454aa7b00ea03605ab9, type: 2}
+  vampirismEffectController: {fileID: 9100000, guid: 40160fb26abe36b47bd62325622e8de1, type: 2}
+  chefPizzaPrefab: {fileID: 7151401749815861614, guid: 41f6c7be1bf97cf4698fa683938d2837, type: 3}
 --- !u!4 &1332891506
 Transform:
   m_ObjectHideFlags: 0

@@ -362,7 +362,7 @@ public class CombatSimulator
         if (attacker.netEnsnared)
         {
             Emit(new CombatEvent { type = CombatEventType.NetEnsnaredSkip, playerIndex = attacker.index });
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
             return;
         }
 
@@ -373,7 +373,7 @@ public class CombatSimulator
         {
             attacker.stunnedActions--;
             Emit(new CombatEvent { type = CombatEventType.StunSkip, playerIndex = attacker.index });
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
             return;
         }
 
@@ -389,7 +389,7 @@ public class CombatSimulator
             && attacker.weaponLoadout.Count >= 3 && Roll(0.17f))
         {
             SimulateFlashFlood(attacker, defender);
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
             return;
         }
 
@@ -399,7 +399,7 @@ public class CombatSimulator
         if (attacker.HasSkill("Haste") && attacker.hasteUsesRemaining > 0 && Roll(0.23f))
         {
             SimulateHaste(attacker, defender);
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
             return;
         }
 
@@ -411,7 +411,7 @@ public class CombatSimulator
         if (attacker.HasSkill("Piledriver") && attacker.piledriverUsesRemaining > 0 && Roll(0.17f))
         {
             SimulatePiledriver(attacker, defender);
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
             return;
         }
 
@@ -465,7 +465,24 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.FastMetabolismRegen, playerIndex = attacker.index, healAmount = heal1, newHp = attacker.hp });
         }
 
-        // 0d. Supers checados em ORDEM ALEATÓRIA (Net, Fierce Brute, Bomb, Tragic Potion, futuros): a lista de
+        // Chef (Passivo de combate, NÃO é Super — não entra no loop embaralhado abaixo): na 1ª
+        // ação do dono da skill nesta luta (chefPizzaThrown), lança a pizza envenenada no
+        // defensor — SEMPRE acerta (sem Roll de Dodge/Block, mesmo padrão de Net/Piledriver/
+        // Bomb) e NÃO consome o turno (Thief/pickup/throw/melee continuam normais depois,
+        // mesmo padrão de Fierce Brute/Tragic Potion). poisonDamagePerTurn é calculado aqui, não
+        // em ApplySkillStats, porque o defensor só é conhecido em runtime; o veneno não tem
+        // duração — dura até o fim da luta ou até curar (Tragic Potion, ver
+        // TryActivateTragicPotion) — e tica no fim de TODO turno do defensor a partir de agora
+        // (ver EmitTurnEnd).
+        if (attacker.HasSkill("Chef") && !attacker.chefPizzaThrown)
+        {
+            attacker.chefPizzaThrown = true;
+            defender.poisoned = true;
+            defender.poisonDamagePerTurn = Mathf.Max(1, Mathf.CeilToInt(defender.maxHp * 0.01f));
+            Emit(new CombatEvent { type = CombatEventType.ChefPizzaThrow, playerIndex = attacker.index, targetIndex = defender.index });
+        }
+
+        // 0d. Supers checados em ORDEM ALEATÓRIA (Net, Fierce Brute, Bomb, Tragic Potion, Vampirism, futuros): a lista de
         // Supers disponíveis do atacante é embaralhada a cada turno (mesmo _rng do simulador,
         // determinístico por seed) e cada um é checado em sequência — todos que passarem no
         // próprio roll de chance ativam no MESMO turno (ex: Net e Bomb podem ambos ativar — Net
@@ -487,6 +504,8 @@ public class CombatSimulator
             supers.Add(() => TryActivateBomb(attacker, defender));
         if (attacker.HasSkill("Tragic Potion") && attacker.tragicPotionUsesRemaining > 0)
             supers.Add(() => { TryActivateTragicPotion(attacker); return false; });
+        if (attacker.HasSkill("Vampirism") && attacker.vampirismUsesRemaining > 0)
+            supers.Add(() => TryActivateVampirism(attacker, defender));
         // futuros Supers entram aqui
 
         ShuffleList(supers);
@@ -496,7 +515,7 @@ public class CombatSimulator
 
         if (turnConsumed)
         {
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
             return;
         }
 
@@ -576,7 +595,7 @@ public class CombatSimulator
             // TryActivateFierceBrute) — aqui ele chega a agir (arremessar), só não com o bônus.
             attacker.fierceBruteActive = false;
             SimulateThrow(attacker, defender);
-            Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
             return;
         }
 
@@ -585,7 +604,24 @@ public class CombatSimulator
         bool interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: false, out bool _);
         SimulateComboLoop(attacker, defender, interrupted);
 
+        EmitTurnEnd(attacker);
+    }
+
+    // Funil único pra todo TurnEnd de SimulateTurn (skip por Net/Stun, qualquer Super, throw,
+    // melee) — skill Chef: o veneno tica no fim de TODO turno de quem estiver `poisoned`,
+    // independente do que aconteceu nesse turno (até de um turno inteiro pulado), até curar
+    // (Tragic Potion) ou a luta acabar. Emitido DEPOIS do próprio TurnEnd (pedido do usuário) —
+    // a explosão do veneno só toca depois do personagem já ter pulado de volta pro ponto de
+    // partida (spawn), nunca enquanto ele ainda está na posição em que agiu.
+    private void EmitTurnEnd(PlayerState attacker)
+    {
         Emit(new CombatEvent { type = CombatEventType.TurnEnd, playerIndex = attacker.index });
+        if (attacker.poisoned)
+        {
+            int poisonDamage = attacker.poisonDamagePerTurn;
+            attacker.hp = ApplyDamage(attacker, poisonDamage);
+            Emit(new CombatEvent { type = CombatEventType.PoisonDamage, playerIndex = attacker.index, damage = poisonDamage, newHp = attacker.hp });
+        }
     }
 
     // Combo loop (mirrors AttackRoutine's while loop). Each consecutive extra hit decays the
@@ -1112,7 +1148,7 @@ public class CombatSimulator
         CheckNetFreed(defender);
     }
 
-    // --- Net / Fierce Brute / Bomb / Tragic Potion (Supers checados em ordem aleatória, ver SimulateTurn) ---
+    // --- Net / Fierce Brute / Bomb / Tragic Potion / Vampirism (Supers checados em ordem aleatória, ver SimulateTurn) ---
 
     // Net: SEMPRE acerta (sem dano, sem Roll de Block/Dodge) — retorna true porque consome o
     // turno inteiro do atacante (única das três que faz isso; ver SimulateTurn).
@@ -1230,6 +1266,49 @@ public class CombatSimulator
         attacker.poisoned = false;
 
         Emit(new CombatEvent { type = CombatEventType.TragicPotionUse, playerIndex = attacker.index, healAmount = heal, newHp = attacker.hp, maxHp = attacker.maxHp });
+    }
+
+    // Vampirism (Super, 1x por luta): só pode rolar quando o atacante está com HP < 50% do
+    // máximo (pedido pelo usuário — mesmo padrão de pré-condição de HP da Tragic Potion,
+    // que usa 60%). Quando essa condição é satisfeita, 33% de chance por turno. Mordida
+    // garantida — NUNCA pode ser esquivada ou bloqueada (sem Roll de Dodge/Block, mesmo
+    // padrão de Net/Piledriver/Bomb). Causa 25% do HP que falta pro atacante (missingHp,
+    // não o HP atual nem o máximo) como dano ao defensor, e cura o atacante na MESMA
+    // quantidade do dano causado — mínimo de 1 nos dois (cobre o caso de HP cheio, onde
+    // missingHp = 0 e a mordida ainda ativa com efeito mínimo — na prática nunca acontece
+    // mais, já que a checagem de HP < 50% acima garante missingHp > 0). Consome o turno
+    // inteiro quando ativa (retorna true) — mesma lógica de Bomb: a mordida É a própria
+    // ação do turno, não um efeito que cai por cima e deixa Thief/pickup/throw/melee
+    // continuarem.
+    private bool TryActivateVampirism(PlayerState attacker, PlayerState defender)
+    {
+        if (attacker.vampirismUsesRemaining <= 0) return false;
+        if (attacker.hp >= attacker.maxHp * 0.50f) return false;
+        if (!Roll(0.33f)) return false;
+
+        attacker.vampirismUsesRemaining--;
+
+        int missingHp = attacker.maxHp - attacker.hp;
+        int damage    = Mathf.Max(1, Mathf.RoundToInt(missingHp * 0.25f));
+        int heal      = damage;
+
+        defender.hp = ApplyDamage(defender, damage);
+        attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal);
+
+        Emit(new CombatEvent
+        {
+            type          = CombatEventType.VampirismAttack,
+            playerIndex   = attacker.index,
+            targetIndex   = defender.index,
+            damage        = damage,
+            healAmount    = heal,
+            newDefenderHp = defender.hp,
+            newAttackerHp = attacker.hp,
+        });
+        Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+        Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = attacker.index, newHp = attacker.hp, maxHp = attacker.maxHp });
+        CheckNetFreed(defender);
+        return true;
     }
 
     // Alvos do lado inimigo do atacante — hoje só o defensor (1v1). Preparado pra Fase 3 (pets)

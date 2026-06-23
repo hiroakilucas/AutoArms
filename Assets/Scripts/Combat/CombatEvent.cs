@@ -35,6 +35,9 @@ public enum CombatEventType
     TragicPotionUse, // playerIndex = quem bebeu. Super: auto-cura quando hp < 60% do maxHp — healAmount (entre 25% e 50% do maxHp), newHp/maxHp pra sincronizar a barra de vida. Não ataca ninguém, não interage com dodge/block/counter/reversal. Não consome o turno (mesmo padrão de Fierce Brute/Bomb — cai direto pro fluxo normal do turno).
     FastMetabolismRegen, // playerIndex = quem regenerou. Passiva: cura 1% do HP máximo TODO turno (healAmount, newHp) — sem condição de HP, sem chance, nunca consome o turno.
     FastMetabolismPulse, // playerIndex = quem curou. Pulso ativado a primeira vez que o HP cruza 50% do máximo: no PRÓXIMO turno do personagem (se não tiver sofrido dano nesse intervalo), cura 5% do HP máximo (healAmount, newHp) 10 vezes EM SEQUÊNCIA, todas no mesmo turno (burst) — não mais uma por turno. pulseCount = nº desta cura do burst (1 a 10), sempre 1..10 completo na mesma ativação; interrompido (sem evento próprio, cancela o burst inteiro) se sofrer dano antes do burst começar.
+    VampirismAttack, // playerIndex = atacante (vampiro), targetIndex = defensor mordido. Super: mordida garantida (NUNCA esquivada/bloqueada) que causa 25% do HP que falta pro atacante (mínimo 1) como dano ao defensor (damage, newDefenderHp) e cura o atacante na mesma quantidade (healAmount, newAttackerHp) — 1x por luta. Consome o turno inteiro, mesmo padrão de Net/Piledriver/Bomb (a mordida É a própria ação do turno).
+    ChefPizzaThrow,  // playerIndex = dono da skill Chef, targetIndex = defensor que come a pizza. Passivo de combate: lançado uma única vez, na 1ª ação do dono da skill (chefPizzaThrown) — SEMPRE acerta (sem Roll de Dodge/Block). Marca defensor.poisoned = true; não consome o turno, não causa dano por si só (o veneno tica a cada PoisonDamage, ver abaixo).
+    PoisonDamage,    // playerIndex = quem sofre o veneno (não necessariamente quem tem Chef — é o lado envenenado). Emitido no FIM de TODO turno de quem estiver poisoned (mesmo turnos pulados por Net/Stun), até curar (Tragic Potion) ou a luta acabar. damage = 1% do próprio HP máximo (arredondado pra cima, mínimo 1, calculado uma vez no ChefPizzaThrow), newHp = HP após o tick.
     TurnEnd,         // playerIndex = acting player (attacker returns to spawn)
     CombatEnd,       // playerIndex = winner
 }
@@ -54,8 +57,10 @@ public class CombatEvent
     public int   newHp;
     public int   maxHp;
     public int   extraActions;
-    public int   healAmount; // TragicPotionUse/FastMetabolismRegen/FastMetabolismPulse — quantidade curada
+    public int   healAmount; // TragicPotionUse/FastMetabolismRegen/FastMetabolismPulse/VampirismAttack — quantidade curada
     public int   pulseCount; // FastMetabolismPulse only — nº desta cura do pulso (1 a 10)
+    public int   newDefenderHp; // VampirismAttack only — HP do defensor mordido após o dano
+    public int   newAttackerHp; // VampirismAttack only — HP do atacante (vampiro) após a cura
     public string weaponName;
 
     // Flash Flood only — parallel lists, one entry per weapon thrown (see CombatEventType.FlashFlood).
