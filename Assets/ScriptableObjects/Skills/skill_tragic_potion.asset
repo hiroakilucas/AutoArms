@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_tragic_potion
   m_EditorClassIdentifier: 
   skillName: Tragic Potion
-  description: Recupera HP (1x por luta)
-  icon: {fileID: 0}
+  description: "Quando HP < 60%: 50% por turno de curar entre 25% e 50% do HP m\xE1ximo
+    (1x por luta)"
+  icon: {fileID: 21300000, guid: 71bf454985f6b6e46b2a4ebc690a6936, type: 3}
   category: 4
   activationType: 1
   usesPerFight: 1

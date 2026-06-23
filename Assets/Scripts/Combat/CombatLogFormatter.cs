@@ -166,6 +166,10 @@ public static class CombatLogFormatter
                     break;
                 }
 
+                case CombatEventType.TragicPotionUse:
+                    sb.AppendLine($"  {Name(e.playerIndex)} bebe TRAGIC POTION e recupera {e.healAmount} HP (HP: {e.newHp}/{e.maxHp})");
+                    break;
+
                 case CombatEventType.CombatEnd:
                     sb.AppendLine($"========== VENCEDOR: {Name(e.playerIndex)} ==========");
                     break;

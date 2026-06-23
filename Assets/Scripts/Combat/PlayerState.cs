@@ -45,10 +45,16 @@ public class PlayerState
     public int  fierceBruteUsesRemaining = 1;
     public bool fierceBruteActive;
     public int  bombUsesRemaining = 2;
+    public int  tragicPotionUsesRemaining = 1;
     public bool hasTakenFirstTurn;
     public int  chainHitStreak;
     public int  stunnedActions;
     public bool netEnsnared;
+
+    // Preparação pra skill Chef (ainda não implementada): Tragic Potion cura este status ao
+    // ativar (ver CombatSimulator.TryActivateTragicPotion). Sem efeito real ainda — nenhum
+    // código seta poisoned = true até Chef existir.
+    public bool poisoned;
 
     // Pets (Fase 3, roadmap — ainda não implementados): quando o alvo enredado for um pet,
     // este campo é setado true em vez de netEnsnared sozinho, e SimulateTurn deve tratar isso

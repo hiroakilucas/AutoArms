@@ -31,6 +31,7 @@ public enum CombatEventType
     NetFreed,        // playerIndex = player who just broke free of the net (received a hit while netEnsnared — see CombatSimulator.ApplyDamage/SimulateThrow/SimulateRetaliation/Simulate*Attack call sites).
     FierceBruteActivated, // playerIndex = attacker who just activated the buff (fierceBruteActive = true) — doesn't end the turn, falls through to Thief/pickup/throw/melee normally; the buff doubles damage (and +10% crit) on the next melee hit this same turn (see Hit.isFierceBrute below), consumed either way (hit lands or not).
     BombThrow,       // playerIndex = attacker. Super: explosão em área que atinge TODOS os alvos do lado inimigo (bombTargets — hoje só o defensor, ver CombatSimulator.GetEnemyTargets) com o mesmo dano sorteado (damage, 15-25). NUNCA esquivado/bloqueado, sem crítico, sem STR do atacante, dano NÃO reduzido por armadura. Não consome o turno. netFreedTargets lista quem teve a rede (Net) quebrada pela explosão.
+    TragicPotionUse, // playerIndex = quem bebeu. Super: auto-cura quando hp < 60% do maxHp — healAmount (entre 25% e 50% do maxHp), newHp/maxHp pra sincronizar a barra de vida. Não ataca ninguém, não interage com dodge/block/counter/reversal. Não consome o turno (mesmo padrão de Fierce Brute/Bomb — cai direto pro fluxo normal do turno).
     TurnEnd,         // playerIndex = acting player (attacker returns to spawn)
     CombatEnd,       // playerIndex = winner
 }
@@ -51,6 +52,7 @@ public class CombatEvent
     public int   newHp;
     public int   maxHp;
     public int   extraActions;
+    public int   healAmount; // TragicPotionUse only — quantidade curada (entre 25% e 50% do maxHp)
     public string weaponName;
 
     // Flash Flood only — parallel lists, one entry per weapon thrown (see CombatEventType.FlashFlood).

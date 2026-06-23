@@ -269,6 +269,29 @@ public class DamagePopup : MonoBehaviour
         origin               = transform.position;
     }
 
+    // Tragic Potion: popup verde de cura, "+<quantidade>" — fonte maior que o popup normal de
+    // dano (fontSize 3.5f -> 6.5f, +3 pedido pelo usuário) pra se destacar dos popups de combate.
+    public static void SpawnHeal(Vector3 worldPos, int amount)
+    {
+        var go = new GameObject("DamagePopup");
+        go.transform.position = worldPos;
+        go.AddComponent<DamagePopup>().InitHeal(amount);
+    }
+
+    void InitHeal(int amount)
+    {
+        label = gameObject.AddComponent<TextMeshPro>();
+        label.alignment      = TextAlignmentOptions.Center;
+        label.sortingLayerID = SortingLayer.NameToID("Characters");
+        label.sortingOrder   = 50;
+        label.fontStyle      = FontStyles.Bold;
+        label.text           = $"+{amount}";
+        label.fontSize       = 6.5f;
+        baseColor            = new Color(0.2f, 0.9f, 0.2f);
+        label.color          = baseColor;
+        origin               = transform.position;
+    }
+
     void Update()
     {
         elapsed += Time.deltaTime;

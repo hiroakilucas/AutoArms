@@ -34,6 +34,13 @@ public class CombatPlayer : MonoBehaviour
     // na 2ª instância, no momento do impacto.
     [HideInInspector] public GameObject bombPrefab;
 
+    // Skill Tragic Potion — mesmo motivo/padrão de netFlyingSprite/netLandedSprite acima:
+    // wireados em CombatSceneLoader (tragicPotionSprite/tragicPotionHealSprite) e copiados pra
+    // aqui na criação. potion = frasco (fase de pegar/beber); healSprite = partículas de cura
+    // subindo (fase de efeito).
+    [HideInInspector] public Sprite tragicPotionSprite;
+    [HideInInspector] public Sprite tragicPotionHealSprite;
+
     // net1/net2.png vêm em resolução cheia (sem nenhum ajuste de escala por baixo, diferente de
     // armas que escalam pelo lossyScale do handBone). Escalas independentes — net1 (voo) e net2
     // (caída sobre o enredado) calibradas separadamente a pedido do usuário.
@@ -684,6 +691,16 @@ public class CombatPlayer : MonoBehaviour
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
+            case CombatEventType.TragicPotionUse:
+                // Super "Tragic Potion": auto-cura, não ataca ninguém — não rola Dodge/Block/
+                // Counter/Reversal, e o simulador já resolveu o resultado (evt.healAmount/newHp);
+                // aqui só toca a sequência visual (pegar/beber a poção, partículas de cura,
+                // popup verde) e sincroniza a barra de vida.
+                if (attacker != null)
+                    yield return StartCoroutine(PlayTragicPotion(attacker, evt, t));
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+
             case CombatEventType.Hit:
                 if (defender != null)
                 {
@@ -1100,16 +1117,19 @@ public class CombatPlayer : MonoBehaviour
 
     private void ApplyHealthChanged(CombatEvent evt) => ApplyHealthDelta(evt.playerIndex, evt.newHp);
 
-    // Compartilhado por Hit/Counter/Reversal/HealthChanged — sempre sincroniza a HealthSystem
-    // pro newHp já resolvido pelo simulador (que já leva Survival em conta), em vez de aplicar
-    // o dano bruto do evento direto. TakeDamage só entende dano relativo (subtração), então o
-    // delta é calculado aqui antes de chamar.
+    // Compartilhado por Hit/Counter/Reversal/HealthChanged/TragicPotionUse — sempre sincroniza a
+    // HealthSystem pro newHp já resolvido pelo simulador (que já leva Survival em conta), em vez
+    // de aplicar o dano bruto do evento direto. TakeDamage/Heal só entendem valor relativo
+    // (soma/subtração), então o delta é calculado aqui antes de chamar. delta > 0 é dano
+    // (newHp menor que o atual); delta < 0 é cura (newHp maior — caso novo, introduzido pela
+    // Tragic Potion, nenhum call site anterior produzia esse sinal).
     private void ApplyHealthDelta(int targetIndex, int newHp)
     {
         var hs = targetIndex == 0 ? _h1 : _h2;
         if (hs == null) return;
         int delta = hs.CurrentHealth - newHp;
         if (delta > 0) hs.TakeDamage(delta);
+        else if (delta < 0) hs.Heal(-delta);
     }
 
     private void TriggerCombatEnd(CombatEvent evt)
@@ -1388,6 +1408,146 @@ public class CombatPlayer : MonoBehaviour
             yield return null;
         }
         Destroy(canvasGo);
+    }
+
+    // Skill Tragic Potion — sequência de fases pedida pelo usuário: (1) pega o frasco na mão
+    // LIVRE (offHandBone — a espada fica no handBone normal) e leva até a boca em arco (EaseOut
+    // quad, mesmo padrão de CharacterPanel.cs), Animator pausado nesse intervalo pra não competir
+    // com a animação de Idle/Run; (2) na boca, inclina o frasco simulando o gesto de beber e
+    // mantém ali (drinkHold) ANTES de destruir — pedido explícito do usuário pra a poção não
+    // desaparecer antes da cura visualmente acontecer; só então o frasco é destruído e o Animator
+    // retomado; (3) partículas de cura sobem ao redor do personagem (fire-and-forget); (4) popup
+    // verde "+N"; (5) sincroniza a barra de vida — ApplyHealthDelta (mesmo helper de Hit/Counter/
+    // Reversal/Bomb) produz delta < 0 aqui (cura, ver HealthSystem.Heal), caso novo que nenhum
+    // call site anterior gerava.
+    private IEnumerator PlayTragicPotion(PlayerCombat character, CombatEvent evt, float t)
+    {
+        var anim = character.GetComponent<Animator>();
+        if (anim != null) anim.speed = 0f;
+
+        if (tragicPotionSprite != null)
+        {
+            // offHandBone = braço sem espada (mesmo bone usado pelo escudo da skill Shield,
+            // ver WeaponHandler.EquipShield) — handBone normal fica ocupado pela arma equipada.
+            var offHandBone = character.weaponHandler.offHandBone;
+            Vector3 startPos = offHandBone != null ? offHandBone.position : character.transform.position + Vector3.up * 0.5f;
+
+            // Posição da boca: Y baixado de 1.0 pra 0.38 (-0.62, estava alto demais — "tomando
+            // pelo pescoço" e cobrindo a face) e um novo offset horizontal de +0.38 "pra frente"
+            // (na direção que o personagem está virado, mesmo sinal de `localScale.x` usado na
+            // inclinação abaixo) — sem isso a poção ficava alinhada com o centro do corpo em vez
+            // de na frente do rosto. Mirror automático pro Player2 (vira pra esquerda).
+            float forwardSign = Mathf.Sign(character.transform.localScale.x);
+            Vector3 mouthPos = character.transform.position + new Vector3(0.38f * forwardSign, 0.38f, 0f);
+
+            var potion = new GameObject("TragicPotion");
+            potion.transform.position   = startPos;
+            potion.transform.localScale = Vector3.one * 0.5f; // metade do tamanho original, pedido pelo usuário
+            var potionRenderer = potion.AddComponent<SpriteRenderer>();
+            potionRenderer.sprite           = tragicPotionSprite;
+            potionRenderer.sortingLayerName = "Weapons";
+
+            // Fase 1 — sobe da mão livre até a boca.
+            const float liftDuration = 0.4f;
+            float elapsed = 0f;
+            while (elapsed < liftDuration * t)
+            {
+                elapsed += Time.deltaTime;
+                float p    = Mathf.Clamp01(elapsed / (liftDuration * t));
+                float ease = 1f - (1f - p) * (1f - p); // EaseOut quad
+                potion.transform.position = Vector3.Lerp(startPos, mouthPos, ease);
+                yield return null;
+            }
+            potion.transform.position = mouthPos;
+
+            // Fase 2 — bebe: inclina o frasco (gesto de virar o frasco na boca) e mantém
+            // inclinado por `drinkHold` ANTES de destruir, pra a poção continuar visível durante
+            // o "beber" em vez de só sumir instantaneamente ao tocar a boca. Direção da
+            // inclinação é sempre OPOSTA à direção que o personagem está virado (mesmo gesto de
+            // tombar a cabeça/garrafa pra trás ao beber) — usa o mesmo sinal de
+            // `localScale.x` do flip de direção já usado no projeto (ver NetVisual/StunLabel em
+            // PlayerCombat.cs): Player1 vira pra direita (`localScale.x` positivo) então o
+            // frasco tomba pra ESQUERDA (+50°, pedido explícito do usuário); Player2 vira pra
+            // esquerda (`localScale.x` negativo, ver Medieval Warrior Girl na cena) então tomba
+            // pra direita (-50°), espelhado.
+            const float tiltDuration = 0.15f;
+            const float drinkHold    = 0.35f;
+            Quaternion fromRot = potion.transform.rotation;
+            Quaternion tiltRot = Quaternion.Euler(0f, 0f, 50f * forwardSign); // mesmo sinal do offset "pra frente" acima
+            elapsed = 0f;
+            while (elapsed < tiltDuration * t)
+            {
+                elapsed += Time.deltaTime;
+                potion.transform.rotation = Quaternion.Lerp(fromRot, tiltRot, elapsed / (tiltDuration * t));
+                yield return null;
+            }
+            yield return new WaitForSeconds(drinkHold * t);
+
+            Destroy(potion);
+        }
+        if (anim != null) anim.speed = 1f;
+
+        // Pausa extra depois de beber, antes da animação de cura (partículas/popup/barra de
+        // vida) — pedido pelo usuário pra a cura não começar colada no fim do gesto de beber.
+        yield return new WaitForSeconds(0.25f * t);
+
+        if (tragicPotionHealSprite != null)
+        {
+            int count = Random.Range(5, 8); // 5–7 inclusive
+            for (int i = 0; i < count; i++)
+                StartCoroutine(SpawnHealParticle(character, t, i * 0.08f * t));
+        }
+
+        Vector3 popupPos = character.transform.position + Vector3.up * 1.5f;
+        DamagePopup.SpawnHeal(popupPos, evt.healAmount);
+        ApplyHealthDelta(evt.playerIndex, evt.newHp);
+    }
+
+    // Tragic Potion (fase 3, uma partícula): pop-in de escala (0.3 -> 0.6 em 0.15s), sobe 1.5
+    // unidades ao longo de 0.6s com fade out nos últimos 0.3s do movimento. delay escalona o
+    // início de cada partícula (uma StartCoroutine por instância, chamadas em paralelo) pra dar
+    // efeito de fluxo contínuo subindo em vez de todas nascerem no mesmo frame.
+    private IEnumerator SpawnHealParticle(PlayerCombat character, float t, float delay)
+    {
+        if (delay > 0f) yield return new WaitForSeconds(delay);
+        if (character == null) yield break;
+
+        Vector3 startPos = character.transform.position + new Vector3(Random.Range(-0.5f, 0.5f), -0.5f, 0f);
+        var particle = new GameObject("TragicPotionHeal");
+        particle.transform.position   = startPos;
+        particle.transform.localScale = Vector3.one * 0.3f;
+        var sr = particle.AddComponent<SpriteRenderer>();
+        sr.sprite           = tragicPotionHealSprite;
+        sr.sortingLayerName = "Characters";
+        sr.sortingOrder     = 30;
+        Color baseColor = sr.color;
+
+        const float popDuration  = 0.15f;
+        const float moveDuration = 0.6f;
+        const float fadeDuration = 0.3f;
+
+        float elapsed = 0f;
+        while (elapsed < popDuration * t)
+        {
+            elapsed += Time.deltaTime;
+            particle.transform.localScale = Vector3.one * Mathf.Lerp(0.3f, 0.6f, elapsed / (popDuration * t));
+            yield return null;
+        }
+        particle.transform.localScale = Vector3.one * 0.6f;
+
+        elapsed = 0f;
+        float fadeStart = (moveDuration - fadeDuration) * t;
+        while (elapsed < moveDuration * t)
+        {
+            elapsed += Time.deltaTime;
+            float p = elapsed / (moveDuration * t);
+            particle.transform.position = startPos + Vector3.up * (1.5f * p);
+
+            float alpha = elapsed > fadeStart ? Mathf.Lerp(1f, 0f, (elapsed - fadeStart) / (fadeDuration * t)) : 1f;
+            sr.color = new Color(baseColor.r, baseColor.g, baseColor.b, alpha);
+            yield return null;
+        }
+        Destroy(particle);
     }
 
     private static Vector2 RandomSpawnPos(bool isPlayer1)

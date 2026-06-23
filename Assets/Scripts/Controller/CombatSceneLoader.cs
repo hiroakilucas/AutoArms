@@ -38,6 +38,12 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("Prefab da bomba (Assets/Data/UI/SkillEffect/Bomb/Bomb.prefab) — GameObject com SpriteRenderer (sprite \"bomb\") + Animator (controller Explosion_1, já criado pelo usuário). Usado tanto na fase de voo (sprite estático) quanto na explosão (2ª instância, Animator religado).")]
     [SerializeField] private GameObject bombPrefab;
 
+    [Header("Tragic Potion")]
+    [Tooltip("Sprite do frasco da poção (Assets/Data/UI/SkillEffect/TragicPotion/potion.png).")]
+    [SerializeField] private Sprite tragicPotionSprite;
+    [Tooltip("Sprite do efeito de cura/partículas (Assets/Data/UI/SkillEffect/TragicPotion/healing.png).")]
+    [SerializeField] private Sprite tragicPotionHealSprite;
+
     private const string Player2ProfileFallbackPath =
         "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
@@ -226,6 +232,8 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.netFlyingSprite = netFlyingSprite;
             combatPlayer.netLandedSprite = netLandedSprite;
             combatPlayer.bombPrefab = bombPrefab;
+            combatPlayer.tragicPotionSprite = tragicPotionSprite;
+            combatPlayer.tragicPotionHealSprite = tragicPotionHealSprite;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);

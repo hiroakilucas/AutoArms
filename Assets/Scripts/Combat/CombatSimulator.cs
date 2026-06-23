@@ -438,7 +438,7 @@ public class CombatSimulator
             return;
         }
 
-        // 0d. Supers checados em ORDEM ALEATÓRIA (Net, Fierce Brute, Bomb, futuros): a lista de
+        // 0d. Supers checados em ORDEM ALEATÓRIA (Net, Fierce Brute, Bomb, Tragic Potion, futuros): a lista de
         // Supers disponíveis do atacante é embaralhada a cada turno (mesmo _rng do simulador,
         // determinístico por seed) e cada um é checado em sequência — todos que passarem no
         // próprio roll de chance ativam no MESMO turno (ex: Net e Bomb podem ambos ativar — Net
@@ -459,6 +459,8 @@ public class CombatSimulator
                 supers.Add(() => { TryActivateFierceBrute(attacker); return false; });
             if (attacker.HasSkill("Bomb") && attacker.bombUsesRemaining > 0)
                 supers.Add(() => { TryActivateBomb(attacker, defender); return false; });
+            if (attacker.HasSkill("Tragic Potion") && attacker.tragicPotionUsesRemaining > 0)
+                supers.Add(() => { TryActivateTragicPotion(attacker); return false; });
             // futuros Supers entram aqui
 
             ShuffleList(supers);
@@ -1094,7 +1096,7 @@ public class CombatSimulator
         CheckNetFreed(defender);
     }
 
-    // --- Net / Fierce Brute / Bomb (Supers checados em ordem aleatória, ver SimulateTurn) ---
+    // --- Net / Fierce Brute / Bomb / Tragic Potion (Supers checados em ordem aleatória, ver SimulateTurn) ---
 
     // Net: SEMPRE acerta (sem dano, sem Roll de Block/Dodge) — retorna true porque consome o
     // turno inteiro do atacante (única das três que faz isso; ver SimulateTurn).
@@ -1178,6 +1180,28 @@ public class CombatSimulator
 
         for (int i = 0; i < targetIndexes.Count; i++)
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = targetIndexes[i], newHp = targetHp[i], maxHp = targets[i].maxHp });
+    }
+
+    // Tragic Potion (Super, 1x por luta): só pode rolar quando o HP atual já caiu abaixo de 60%
+    // do máximo (My Brute: bebe a poção quando já tá levando a pior — não ativa estando acima
+    // disso). 50% de chance por turno quando essa condição é satisfeita. Cura entre 25% e 50%
+    // (sorteado) do HP MÁXIMO, nunca passando dele. Auto-uso — não ataca ninguém, não rola
+    // Dodge/Block/Counter/Reversal, e nunca consome o turno (mesmo padrão de Fierce Brute/Bomb,
+    // cai direto pro fluxo normal — Thief/pickup/throw/melee — do mesmo turno). Também cura o
+    // veneno do Chef (skill ainda não implementada, ver PlayerState.poisoned).
+    private void TryActivateTragicPotion(PlayerState attacker)
+    {
+        if (attacker.tragicPotionUsesRemaining <= 0) return;
+        if (attacker.hp >= attacker.maxHp * 0.60f) return;
+        if (!Roll(0.50f)) return;
+
+        attacker.tragicPotionUsesRemaining--;
+        float healPct = 0.25f + (float)_rng.NextDouble() * 0.25f; // 25%–50% do HP máximo
+        int heal = Mathf.RoundToInt(healPct * attacker.maxHp);
+        attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal);
+        attacker.poisoned = false;
+
+        Emit(new CombatEvent { type = CombatEventType.TragicPotionUse, playerIndex = attacker.index, healAmount = heal, newHp = attacker.hp, maxHp = attacker.maxHp });
     }
 
     // Alvos do lado inimigo do atacante — hoje só o defensor (1v1). Preparado pra Fase 3 (pets)

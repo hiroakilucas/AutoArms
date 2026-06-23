@@ -779,6 +779,8 @@ MonoBehaviour:
   netFlyingSprite: {fileID: 21300000, guid: dc7fda0a3cc05f348bd70634c4abf146, type: 3}
   netLandedSprite: {fileID: 21300000, guid: 447749ab3346b6b40a280fb00b482de9, type: 3}
   bombPrefab: {fileID: 7687706938480997525, guid: c11cff548c132a84495e002bfd5a298e, type: 3}
+  tragicPotionSprite: {fileID: 21300000, guid: 120b4d1decc2cbd499bb55f785f69113, type: 3}
+  tragicPotionHealSprite: {fileID: 21300000, guid: d86ddd2d6be30bf4e8ccdc28e383b818, type: 3}
 --- !u!4 &1332891506
 Transform:
   m_ObjectHideFlags: 0

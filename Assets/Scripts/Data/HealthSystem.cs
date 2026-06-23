@@ -25,6 +25,15 @@ public class HealthSystem : MonoBehaviour
         if (IsDead) OnDeath?.Invoke();
     }
 
+    // Usado pela skill Tragic Potion (CombatPlayer.ApplyHealthDelta) — clampa em MaxHealth,
+    // diferente de TakeDamage(-amount) que deixaria CurrentHealth passar do máximo sem limite.
+    public void Heal(int amount)
+    {
+        if (IsDead) return;
+        CurrentHealth = Mathf.Min(MaxHealth, CurrentHealth + amount);
+        OnHealthChanged?.Invoke(CurrentHealth, MaxHealth);
+    }
+
     // Used by CombatPlayer to sync HP to pre-calculated simulator values.
     public void SetHealth(int current, int max)
     {
