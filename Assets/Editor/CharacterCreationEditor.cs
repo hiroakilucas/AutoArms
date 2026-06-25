@@ -43,6 +43,13 @@ public static class CharacterCreationEditor
 
             profile.skills.Clear();
 
+            // Pets (Fase 3) — ganhos só por level-up (CombatResultPanel.ApplyBonus), igual a
+            // skills/armas; sem isso, o reset zerava level/HP/STR/AGI/SPD mas o profile
+            // continuava com os pets antigos (e o profile.maxHealth já recém-resetado pra
+            // s.maxHealth, sem o custo de HP deles descontado de novo — descontaria 2x numa
+            // próxima escolha se o pet não fosse removido daqui).
+            profile.pets.Clear();
+
             // Cada profile tem seu próprio WeaponLoadout (não é mais compartilhado entre
             // personagens) — resetar aqui não afeta os outros.
             if (profile.weaponLoadout != null)
@@ -53,7 +60,7 @@ public static class CharacterCreationEditor
 
             EditorUtility.SetDirty(profile);
             Debug.Log($"[Debug] Profile {profile.profileName} resetado para Level 1 " +
-                      $"(HP={s.maxHealth} STR={s.str} AGI={s.agility} SPD={s.speed}, skills e armas resetadas)");
+                      $"(HP={s.maxHealth} STR={s.str} AGI={s.agility} SPD={s.speed}, skills, armas e pets resetados)");
         }
 
         AssetDatabase.SaveAssets();

@@ -82,6 +82,9 @@ public class AttackSequencer : MonoBehaviour
     public void OnCombatEnd(PlayerCombat winner)
     {
         PlayerCombat.CleanupFallenWeapons();
+        // Pets caídos NÃO são destruídos (preparação pra Tamer) — só limpa a lista estática
+        // de rastreamento entre lutas, mesmo padrão de CleanupFallenWeapons.
+        PetCombatController.CleanupDeadPets();
 
         if (player1Profile == null) return;
 

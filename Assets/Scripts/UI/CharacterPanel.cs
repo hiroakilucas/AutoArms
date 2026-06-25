@@ -17,6 +17,13 @@ public class CharacterPanel : MonoBehaviour
     private TMP_Text _unarmedDmgVal, _weaponSharpVal, _daggerDmgVal, _swordDmgVal, _heavyDmgVal, _heavyDexVal, _heavyHitSpeedVal;
     private TMP_Text      _battlesText, _winRateText;
 
+    // Pets — seção dinâmica no fim da aba Stats, só aparece quando o personagem tem pelo menos
+    // 1 pet (ganho via level-up, categoria Pet — ver CombatResultPanel.ApplyBonus). Reconstruída
+    // a cada RefreshAll (mesmo padrão de RefreshSkills/RefreshArmas), já que profile.pets varia
+    // de personagem pra personagem e pode mudar entre aberturas do painel.
+    private Transform _statsContent;
+    private readonly List<GameObject> _petRows = new List<GameObject>();
+
     // Skills tab
     private Transform _skillsGrid;
     private TMP_Text  _skillsEmpty;
@@ -285,6 +292,10 @@ public class CharacterPanel : MonoBehaviour
         MakeRow(content, "winRow", out _winRateText);
         _winRateText.fontSize = 16; _winRateText.color = Color.white;
 
+        // Seção de Pets é construída dinamicamente em RefreshPets (ver _petRows) — precisa da
+        // referência ao Content do ScrollRect pra anexar/remover linhas a cada refresh.
+        _statsContent = content;
+
         return root;
     }
 
@@ -428,6 +439,122 @@ public class CharacterPanel : MonoBehaviour
 
         RefreshSkills(p);
         RefreshArmas(p);
+        RefreshPets(p);
+    }
+
+    // Mostra HP/Dano/Speed/AGI/STR efetivos (já com o escalonamento por nível do dono — ver
+    // PetState.ApplyLevelScaling, mesmo cálculo usado por CombatSceneLoader.SpawnPets/
+    // CombatSimulator.BuildState) de cada tipo de pet que o personagem tem. Sem seção nenhuma
+    // (nem separador) quando profile.pets estiver vazio — só "aparece quando ele selecionar o
+    // atributo do pet" (level-up, categoria Pet), pedido pelo usuário.
+    private void RefreshPets(PlayerProfile p)
+    {
+        foreach (var go in _petRows) Destroy(go);
+        _petRows.Clear();
+
+        if (p.pets == null || p.pets.Count == 0) return;
+
+        var counts = new Dictionary<PetType, int>();
+        var order  = new List<PetType>();
+        foreach (var type in p.pets)
+        {
+            if (!counts.ContainsKey(type)) { counts[type] = 0; order.Add(type); }
+            counts[type]++;
+        }
+
+        _petRows.Add(MakeSepGo(_statsContent));
+        _petRows.Add(MakeSectionTitleGo(_statsContent, "PETS"));
+
+        foreach (var type in order)
+        {
+            var pet = PetState.Create(type);
+            if (pet == null) continue;
+            pet.ApplyLevelScaling(p.level);
+
+            int   count = counts[type];
+            string name = PetState.DisplayName(type) + (count > 1 ? $" x{count}" : "");
+            _petRows.Add(BuildPetHeaderGo(_statsContent, name));
+
+            var (dmgMin, dmgMax) = PetState.DamageRange(type);
+            string dmgText = dmgMin == dmgMax ? $"{dmgMin}" : $"{dmgMin}–{dmgMax}";
+
+            _petRows.Add(BuildPetStatRow(_statsContent, "HP",   $"{pet.maxHp}"));
+            _petRows.Add(BuildPetStatRow(_statsContent, "DANO", dmgText));
+            _petRows.Add(BuildPetStatRow(_statsContent, "SPD",  $"{pet.speed}"));
+            _petRows.Add(BuildPetStatRow(_statsContent, "AGI",  $"{pet.agility}"));
+            _petRows.Add(BuildPetStatRow(_statsContent, "STR",  $"{pet.str:F0}"));
+        }
+    }
+
+    private GameObject MakeSepGo(Transform parent)
+    {
+        var go = new GameObject("PetSep");
+        go.transform.SetParent(parent, false);
+        go.AddComponent<RectTransform>();
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = 2f; le.flexibleWidth = 1f;
+        go.AddComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.4f);
+        return go;
+    }
+
+    private GameObject MakeSectionTitleGo(Transform parent, string text)
+    {
+        var go = new GameObject("PetsTitle");
+        go.transform.SetParent(parent, false);
+        go.AddComponent<RectTransform>();
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = 26f; le.flexibleWidth = 1f;
+        var txt = go.AddComponent<TextMeshProUGUI>();
+        txt.text = text; txt.fontSize = 17; txt.fontStyle = FontStyles.Bold;
+        txt.color = Gold; txt.alignment = TextAlignmentOptions.MidlineLeft;
+        return go;
+    }
+
+    private GameObject BuildPetHeaderGo(Transform parent, string name)
+    {
+        var go = new GameObject("PetHeader_" + name);
+        go.transform.SetParent(parent, false);
+        go.AddComponent<RectTransform>();
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = 24f; le.flexibleWidth = 1f;
+        var txt = go.AddComponent<TextMeshProUGUI>();
+        txt.text = name; txt.fontSize = 15; txt.fontStyle = FontStyles.Bold;
+        txt.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+        txt.alignment = TextAlignmentOptions.MidlineLeft;
+        return go;
+    }
+
+    // Mesma estrutura visual de BuildStatRow (label dourado à esquerda, valor branco à
+    // direita), mas com indentação maior e valor estático (sem highlight base→efetivo — os
+    // stats de pet não são modificados por skill nenhuma do dono, só pelo escalonamento por
+    // nível já refletido no valor passado).
+    private GameObject BuildPetStatRow(Transform parent, string label, string value)
+    {
+        var rowGo = new GameObject("Pet" + label + "Row");
+        rowGo.transform.SetParent(parent, false);
+        rowGo.AddComponent<RectTransform>();
+        var le = rowGo.AddComponent<LayoutElement>();
+        le.preferredHeight = 26f; le.flexibleWidth = 1f;
+        rowGo.AddComponent<Image>().color = SectBg;
+
+        var lblGo = new GameObject("Lbl");
+        lblGo.transform.SetParent(rowGo.transform, false);
+        var lrt = lblGo.AddComponent<RectTransform>();
+        lrt.anchorMin = new Vector2(0f, 0f); lrt.anchorMax = new Vector2(0.55f, 1f);
+        lrt.offsetMin = new Vector2(22f, 0f); lrt.offsetMax = Vector2.zero;
+        var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+        lbl.text = label; lbl.fontSize = 13; lbl.color = Gold;
+        lbl.alignment = TextAlignmentOptions.MidlineLeft;
+
+        var valGo = new GameObject("Val");
+        valGo.transform.SetParent(rowGo.transform, false);
+        var vrt = valGo.AddComponent<RectTransform>();
+        vrt.anchorMin = new Vector2(0.55f, 0f); vrt.anchorMax = Vector2.one;
+        vrt.offsetMin = Vector2.zero; vrt.offsetMax = new Vector2(-10f, 0f);
+        var val = valGo.AddComponent<TextMeshProUGUI>();
+        val.text = value; val.fontSize = 15; val.fontStyle = FontStyles.Bold; val.color = Color.white;
+        val.alignment = TextAlignmentOptions.MidlineRight;
+        return rowGo;
     }
 
     // Mirrors MainMenuCharacterPreview's "base→effective" highlight: mostra só o valor

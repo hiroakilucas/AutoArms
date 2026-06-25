@@ -1,6 +1,16 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+// Rato (Mouse, equivalente ao Dog), Macaco (Monkey, equivalente ao Wolf/Panther), Javali
+// (Boar, equivalente ao Bear) — ver stats completos em PetState.cs.
+public enum PetType
+{
+    None,
+    Mouse,
+    Monkey,
+    Boar,
+}
+
 [CreateAssetMenu(fileName = "NewPlayerProfile", menuName = "Game/Player Profile", order = 100)]
 public class PlayerProfile : ScriptableObject
 {
@@ -50,6 +60,15 @@ public class PlayerProfile : ScriptableObject
 
     [Header("Skills")]
     public List<SkillData> skills = new List<SkillData>();
+
+    // Pode ter múltiplos pets do mesmo tipo (ex: 3 Ratos) — sem restrição de duplicatas, cada
+    // entrada vira uma instância independente (PetState) com seu próprio HP/estado na luta.
+    // Stats efetivos de cada pet (já com o escalonamento por nível do dono — ver
+    // PetState.ApplyLevelScaling/CombatSimulator.BuildState) não têm exibição na UI ainda;
+    // intenção documentada pra uma futura GetEffectivePetStats(), mesmo padrão de
+    // GetEffectiveStats() abaixo, quando o CharacterPanel ganhar uma aba/seção própria de Pets.
+    [Header("Pets")]
+    public List<PetType> pets = new List<PetType>();
 
     [Header("Progresso")]
     [Tooltip("N�vel atual do personagem")]

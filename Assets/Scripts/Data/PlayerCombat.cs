@@ -376,6 +376,18 @@ public class PlayerCombat : MonoBehaviour
             monkAuraPulseRoutine = StartCoroutine(MonkAuraPulseLoop());
     }
 
+    // Para o pulso contínuo da aura do Monk sem destruir o GameObject — a aura em si é
+    // permanente "durante a luta" por design (ver ShowMonkAura acima), mas nada se beneficia
+    // de continuar pulsando (Update todo frame) depois que a luta de fato terminou e o
+    // resultado já foi decidido (tela de level-up pode ficar aberta por tempo indefinido).
+    // Chamado só por CombatPlayer.TriggerCombatEnd — no-op se a aura nunca existiu ou já não
+    // está pulsando.
+    public void StopMonkAuraPulse()
+    {
+        if (monkAuraPulseRoutine != null) { StopCoroutine(monkAuraPulseRoutine); monkAuraPulseRoutine = null; }
+        if (monkAuraFlashRoutine != null) { StopCoroutine(monkAuraFlashRoutine); monkAuraFlashRoutine = null; }
+    }
+
     // Skill Chef: aura verde persistente no defensor enquanto `poisoned` (CombatSimulator.
     // PlayerState.poisoned) estiver true — chamada pelo CombatPlayer (case ChefPizzaThrow, ao
     // chegar a pizza) e destruída de novo quando o veneno é curado (case TragicPotionUse) ou a

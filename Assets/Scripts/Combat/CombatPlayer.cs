@@ -13,6 +13,11 @@ public class CombatPlayer : MonoBehaviour
     [HideInInspector] public WeaponHUD       p1WeaponHUD;
     [HideInInspector] public WeaponHUD       p2WeaponHUD;
 
+    // Pets (Fase 3) — instanciados e populados por CombatSceneLoader antes de PlayCombat ser
+    // chamado (mesmo padrão de p1Combat/p2Combat). Índice na lista = petIndex dos eventos.
+    [HideInInspector] public List<PetCombatController> p1Pets;
+    [HideInInspector] public List<PetCombatController> p2Pets;
+
     // CombatPlayer é adicionado via gameObject.AddComponent<CombatPlayer>() em runtime
     // (CombatSceneLoader.Initialize) — não existe como componente colocado na cena em modo
     // Editor, então não há onde arrastar esse prefab direto no Inspector dele. Wireado em
@@ -91,6 +96,249 @@ public class CombatPlayer : MonoBehaviour
     private bool              _is2x = false;
     private bool              _skipRequested;
     private HealthSystem      _h1, _h2;
+
+    // case PetAttack montava `System.Action onImpact = () => {...}` capturando 5 variáveis
+    // locais a cada execução — closure (objeto extra no heap pra guardar as variáveis
+    // capturadas) + delegate, alocados de novo em TODO ataque de pet da luta inteira (suspeita
+    // do usuário confirmada: o stutter recorrente começou junto da implementação dos pets).
+    // Fix: delegate cacheado 1x (method group de uma instância NUNCA recriada) + estado do
+    // impacto guardado em campos de instância em vez de variáveis capturadas — zero alocação
+    // por ataque de pet. Seguro porque eventos são processados estritamente em sequência (1
+    // coroutine, nunca 2 PetAttack concorrentes no mesmo CombatPlayer).
+    // Atribuído 1x em Awake() (não dá pra inicializar direto no campo — CS0236, field
+    // initializer não pode referenciar membro de instância via `this` implícito).
+    private System.Action       _onPetImpact;
+    private CombatEvent         _petImpactEvt;
+    private PetCombatController _petImpactPet;
+    private PetCombatController _petImpactTargetPet;
+    private PlayerCombat        _petImpactTargetCharacter;
+    private Vector3             _petImpactTargetPos;
+
+    // Distância de "alcance" pra qualquer interação pet↔personagem ou pet↔pet — sem isso, quem
+    // corre até o alvo (pet correndo pra atacar, ou personagem correndo pra atacar um pet via
+    // Ajuste 1) ia até a posição EXATA do alvo, sobrepondo/atravessando o sprite (bug real
+    // reportado pelo usuário: "passando do hitbox"). Um valor único fixo (0.55f, 1ª tentativa)
+    // ainda deixava os dois indo "até a cabeça um do outro" — pets têm tamanhos bem diferentes
+    // entre si (PetState.Scale 0.30–0.60) e o reach precisa escalar com o "meio-corpo" de quem
+    // está envolvido, não um número fixo igual pra todos. `CharacterHalfBody` aproxima a metade
+    // do alcance desarmado entre 2 personagens (0.8f em CalcAttackPosition, ou seja ~0.4 cada
+    // lado); `PetHalfBody` escala linear com `PetState.Scale` do tipo do pet.
+    private const float CharacterHalfBody = 0.35f;
+    private static float PetHalfBody(PetType type) => PetState.Scale(type) * 1.3f;
+
+    // Mesma fórmula de CalcAttackPosition (reach na direção do alvo), mas sem depender de arma
+    // — usado em toda corrida pet↔personagem/pet↔pet (CombatPlayer corre o personagem até o pet
+    // nos casos Hit/Dodge/RunToDefender/PlayPetTargetedSuper; PetCombatController.
+    // PlayAttackSequence corre o pet até o alvo dele, ver case PetAttack abaixo).
+    private static Vector2 CalcPetStopPosition(Vector3 fromPos, Vector3 towardPos, float reach)
+    {
+        Vector2 from = fromPos, toward = towardPos;
+        Vector2 dir  = toward - from;
+        if (dir.sqrMagnitude < 0.0001f) dir = Vector2.right;
+        else dir.Normalize();
+        return toward - dir * reach;
+    }
+
+    // Reach entre um personagem e um pet (qualquer direção) — meio-corpo fixo do personagem +
+    // meio-corpo do pet, pelo tipo dele.
+    private static float CharacterPetReach(PetType petType) => CharacterHalfBody + PetHalfBody(petType);
+
+    // Reach entre 2 pets — soma o meio-corpo de cada um (sem o termo de personagem).
+    private static float PetPetReach(PetType a, PetType b) => PetHalfBody(a) + PetHalfBody(b);
+
+    // Calibração manual por pet, ajustada pelo usuário direto na cena de combate (corrige
+    // pivot/proporção que a fórmula geométrica de CharacterPetReach acima não cobre
+    // perfeitamente para cada tipo) — X espelha pelo sentido do ataque (esquerda↔direita, igual
+    // a todo flip do projeto), Y é absoluto (altura não espelha).
+    private static readonly Dictionary<PetType, Vector2> PetAttacksCharacterOffset = new Dictionary<PetType, Vector2>
+    {
+        { PetType.Monkey, new Vector2(-0.31f, 0.74f) },
+        // Javali ainda não testado pelo usuário — chute inicial escalado pela proporção de
+        // tamanho contra o Macaco (PetState.Scale: Boar 0.60 vs Monkey 0.35, fator ~1.714),
+        // mesmo ponto de partida usado pra calibrar o Macaco. Ajustar depois de testar em jogo.
+        { PetType.Boar, new Vector2(-0.31f * 1.714f, 0.74f * 1.714f) },
+        // Rato ainda não testado — chute inicial escalado pela proporção de tamanho contra o
+        // Macaco (Mouse 0.30 vs Monkey 0.35, fator ~0.857). Ajustar depois de testar em jogo.
+        { PetType.Mouse, new Vector2(-0.31f * 0.857f, 0.74f * 0.857f) },
+    };
+
+    // Mesma calibração, mas pro sentido contrário (personagem desarmado correndo até o pet) —
+    // valor diferente porque a pose/alcance desarmado não é simétrica à do pet atacando. Sem
+    // espelhamento de X (ver ApplyPetOffsetRaw abaixo) — o usuário calibra olhando direto pra
+    // cena com P2 sempre do mesmo lado, então "direita"/"esquerda" aqui é literal, não relativo
+    // ao sentido do ataque.
+    private static readonly Dictionary<PetType, Vector2> UnarmedAttacksPetOffset = new Dictionary<PetType, Vector2>
+    {
+        // X recalculado pelo usuário: resultado bateu em +0.7551482, devia bater em -0.7551482
+        // (mesma magnitude, sinal invertido) — delta de -1.5102964 sobre o valor anterior (2.1).
+        { PetType.Monkey, new Vector2(0.5897036f, -0.8f) },
+        // 1º teste: muito em cima do Javali (1.0107) → +0.7 ficou muito afastado (1.7107) —
+        // bisseção entre as duas tentativas: 1.3607.
+        { PetType.Boar, new Vector2(1.3607f, -0.8f * 1.714f) },
+        // Rato ainda não testado — chute inicial escalado pela proporção de tamanho contra o
+        // Macaco (Mouse 0.30 vs Monkey 0.35, fator ~0.857). Ajustar depois de testar em jogo.
+        { PetType.Mouse, new Vector2(0.5897036f * 0.857f, -0.8f * 0.857f) },
+    };
+
+    // Mesma calibração de UnarmedAttacksPetOffset, mas pra quando o personagem ataca o pet
+    // COM arma equipada — reportado pelo usuário que o alcance armado contra o Javali batia na
+    // mesma posição (muito em cima) que o desarmado batia antes do offset acima existir; a
+    // fórmula geométrica de CharacterPetReach por si só não é suficiente pra nenhum pet com
+    // arma. Macaco/Rato ainda não testados armados — chute inicial = mesmo valor calibrado/
+    // estimado do desarmado de cada um (única referência que existe até alguém testar).
+    private static readonly Dictionary<PetType, Vector2> ArmedAttacksPetOffset = new Dictionary<PetType, Vector2>
+    {
+        { PetType.Boar,   new Vector2(1.3607f, -0.8f * 1.714f) },
+        { PetType.Monkey, new Vector2(0.5897036f, -0.8f) },
+        { PetType.Mouse,  new Vector2(0.5897036f * 0.857f, -0.8f * 0.857f) },
+    };
+
+    private static Vector3 ApplyPetOffset(Vector3 basePos, Vector3 fromPos, Vector3 towardPos, Dictionary<PetType, Vector2> table, PetType type)
+    {
+        if (!table.TryGetValue(type, out var off)) return basePos;
+        float dirSign = Mathf.Sign(towardPos.x - fromPos.x);
+        if (dirSign == 0f) dirSign = 1f;
+        basePos.x += off.x * dirSign;
+        basePos.y += off.y;
+        return basePos;
+    }
+
+    // Mesma ideia, mas SEM espelhar o X pelo sentido do ataque — usado por UnarmedAttacksPetOffset,
+    // onde a 1ª tentativa espelhada inverteu a direção (P2 fica à direita do Rato/Macaco na cena
+    // de teste, então dirSign saía negativo e jogava o offset pro lado errado; reportado pelo
+    // usuário). X positivo aqui sempre desloca pra direita, negativo pra esquerda, literal.
+    private static Vector3 ApplyPetOffsetRaw(Vector3 basePos, Dictionary<PetType, Vector2> table, PetType type)
+    {
+        if (!table.TryGetValue(type, out var off)) return basePos;
+        basePos.x += off.x;
+        basePos.y += off.y;
+        return basePos;
+    }
+
+    // Pets agora sorteiam um novo ponto aleatório a cada retorno ao spawn (case PetAttack
+    // abaixo), em vez de voltar sempre pro mesmo ponto fixo da queda inicial — mesma faixa de X
+    // do spawn original (CombatSceneLoader.SpawnPets) e mesma faixa de Y de
+    // PlayerCombat.RandomSpawnPosition, já que pets ocupam a mesma faixa vertical da arena.
+    // Tenta algumas vezes até achar um ponto sem ninguém (outro pet ou os 2 personagens) muito
+    // próximo, pra não aterrissar em cima de alguém — pedido explícito do usuário ("fique atento
+    // as sobreposições"); se não achar em N tentativas, usa o último sorteado mesmo assim (evita
+    // travar esperando um ponto perfeito numa arena cheia de pets).
+    private const float PetOverlapMinDistance = 1.0f;
+    private const int   PetSpawnRollAttempts  = 8;
+
+    // ThrowWeapon nunca carrega targetIsPet/targetPetIndex (só o Hit/Miss seguinte, ver
+    // CombatSimulator.SimulateThrow) — esse par é sempre emitido em sequência, sem nenhum
+    // evento entre os dois (Emit(ThrowWeapon) é a linha imediatamente anterior ao
+    // Emit(Hit)/Emit(Miss) pra essa mesma jogada), então olhar pro próximo item de _events é
+    // seguro.
+    private PetCombatController FindThrowTargetPet(CombatEvent throwEvt)
+    {
+        int idx = _events.IndexOf(throwEvt);
+        if (idx < 0 || idx + 1 >= _events.Count) return null;
+        var next = _events[idx + 1];
+        if (!next.targetIsPet) return null;
+        if (next.type != CombatEventType.Hit && next.type != CombatEventType.Miss) return null;
+        return GetPet(next.targetIndex, next.targetPetIndex);
+    }
+
+    private Vector2 RollPetSpawnPosition(PetCombatController pet)
+    {
+        Vector2 candidate = pet.spawnPosition;
+        for (int attempt = 0; attempt < PetSpawnRollAttempts; attempt++)
+        {
+            float x = pet.isPlayer1 ? Random.Range(-5f, -1f) : Random.Range(1f, 5f);
+            float y = Random.Range(-3.90f, -0.81f);
+            candidate = new Vector2(x, y);
+            if (!PetSpawnOverlapsAnyone(candidate, pet)) break;
+        }
+        return candidate;
+    }
+
+    private bool PetSpawnOverlapsAnyone(Vector2 pos, PetCombatController self)
+    {
+        if (p1Combat != null && Vector2.Distance(pos, p1Combat.transform.position) < PetOverlapMinDistance) return true;
+        if (p2Combat != null && Vector2.Distance(pos, p2Combat.transform.position) < PetOverlapMinDistance) return true;
+        return PetListOverlaps(p1Pets, pos, self) || PetListOverlaps(p2Pets, pos, self);
+    }
+
+    private static bool PetListOverlaps(List<PetCombatController> pets, Vector2 pos, PetCombatController self)
+    {
+        if (pets == null) return false;
+        for (int i = 0; i < pets.Count; i++)
+        {
+            var p = pets[i];
+            if (p == null || p == self) continue;
+            if (Vector2.Distance(pos, p.transform.position) < PetOverlapMinDistance) return true;
+        }
+        return false;
+    }
+
+    private void Awake()
+    {
+        _onPetImpact = HandlePetImpact;
+    }
+
+    // Pool de ghosts da Fierce Brute (Profiler confirmou Rendering dominante com spikes de
+    // Scripts — SpawnGhostTrail cria/destrói até ~10 SpriteRenderer por tick a cada 0.06s
+    // durante até 1.5s, e Instantiate/Destroy repetido em GameObjects é exatamente esse tipo de
+    // custo de Scripts em spike). Cresce sob demanda (sem tamanho fixo pré-alocado) e nunca
+    // encolhe — GameObjects ficam `SetActive(false)` entre usos em vez de destruídos.
+    private readonly List<(GameObject go, SpriteRenderer sr)> _ghostPool = new List<(GameObject, SpriteRenderer)>();
+
+    private (GameObject go, SpriteRenderer sr) RentGhost()
+    {
+        foreach (var item in _ghostPool)
+        {
+            if (!item.go.activeSelf)
+            {
+                item.go.SetActive(true);
+                return item;
+            }
+        }
+
+        var go = new GameObject("GhostTrail (pooled)");
+        var sr = go.AddComponent<SpriteRenderer>();
+        var entry = (go, sr);
+        _ghostPool.Add(entry);
+        return entry;
+    }
+
+    // Diagnóstico temporário (investigação de FPS drop introduzido pelos pets, pedido pelo
+    // usuário) — P liga/desliga o Profiler em runtime durante a luta, sem precisar abrir o
+    // painel manualmente antes de o problema acontecer. Remover depois de identificado o
+    // método mais custoso (ou manter, é inócuo: só reage a uma tecla específica em builds com
+    // o Profiler já compilado, que normalmente nem chega a fazer parte de builds finais).
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.P))
+            UnityEngine.Profiling.Profiler.enabled = !UnityEngine.Profiling.Profiler.enabled;
+
+        UpdatePetDepthSorting();
+    }
+
+    // Profundidade visual pet↔personagem por posição Y (bug reportado pelo usuário: o
+    // personagem "sobrescrevia" o pet ao passar por trás dele, sem nenhuma relação com quem
+    // está mais próximo da câmera) — Y maior = mais "pro fundo" da arena = deve renderizar
+    // ATRÁS; Y menor = mais "pra frente" = na FRENTE. Reusa as sorting layers já existentes do
+    // projeto (Characters/Characters2, ver CLAUDE.md) em vez de inventar sortingOrder novo —
+    // cada pet só compara contra o personagem ADVERSÁRIO (o lado que pode de fato cruzar o
+    // caminho dele em combate; o próprio dono nunca ataca o próprio pet).
+    private void UpdatePetDepthSorting()
+    {
+        UpdatePetGroupDepthSorting(p1Pets, p2Combat);
+        UpdatePetGroupDepthSorting(p2Pets, p1Combat);
+    }
+
+    private static void UpdatePetGroupDepthSorting(List<PetCombatController> pets, PlayerCombat opponent)
+    {
+        if (pets == null || opponent == null) return;
+        for (int i = 0; i < pets.Count; i++)
+        {
+            var pet = pets[i];
+            if (pet == null) continue;
+            pet.SetDepthLayer(pet.transform.position.y <= opponent.transform.position.y);
+        }
+    }
 
     // Called by CombatSceneLoader after both players have landed.
     public void PlayCombat(List<CombatEvent> events)
@@ -228,6 +476,23 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.RunToDefender:
+                // Pets como alvo válido: corre até CharacterPetReach de distância do pet (CalcPetStopPosition)
+                // em vez de calcular alcance de arma contra o personagem (CalcAttackPosition não
+                // se aplica a pets) — sem isso o personagem corria pra dentro do sprite do pet.
+                if (evt.targetIsPet)
+                {
+                    var runTargetPet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    if (attacker != null && runTargetPet != null)
+                    {
+                        Vector3 runStopPos = CalcPetStopPosition(attacker.transform.position, runTargetPet.transform.position, CharacterPetReach(runTargetPet.petType));
+                        runStopPos = ApplyPetOffsetRaw(runStopPos,
+                            attacker.weaponHandler.CurrentWeapon == null ? UnarmedAttacksPetOffset : ArmedAttacksPetOffset,
+                            runTargetPet.petType);
+                        yield return StartCoroutine(
+                            attacker.animationController.PlayRun(runStopPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
+                    }
+                    break;
+                }
                 if (attacker != null && defender != null)
                 {
                     Vector2 attackPos = CalcAttackPosition(attacker, defender);
@@ -391,6 +656,33 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.HasteAttack:
+                // Pets como alvo válido: dash simplificado (PlayPetTargetedSuper) em vez da
+                // coreografia cheia de atravessar a tela — ver CombatSimulator.SimulateHaste.
+                if (evt.targetIsPet)
+                {
+                    var hastePet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    yield return StartCoroutine(PlayPetTargetedSuper(attacker, hastePet, t, () =>
+                    {
+                        if (hastePet == null) return;
+                        Vector3 petPopupPos = hastePet.transform.position + Vector3.up * 0.8f;
+                        if (evt.isDodged)
+                        {
+                            DamagePopup.SpawnDodge(petPopupPos);
+                            Vector2 hasteDodgeDir = ((Vector2)hastePet.transform.position - (Vector2)attacker.transform.position).normalized;
+                            StartCoroutine(hastePet.DodgeLeap(hasteDodgeDir, t));
+                        }
+                        else
+                        {
+                            hastePet.healthBar?.UpdateBar(evt.newTargetHp, hastePet.maxHp);
+                            DamagePopup.Spawn(petPopupPos, evt.damage, evt.isCrit);
+                            hastePet.animController.PlayHurt();
+                            if (evt.newTargetHp <= 0) hastePet.PlayDeath();
+                        }
+                    }));
+                    yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                    break;
+                }
+
                 // Super "Haste": dash que atravessa o defensor — corre até a posição dele (onde
                 // o resultado é resolvido, exatamente na sobreposição), continua na mesma direção
                 // até sair pela borda da tela, reaparece do lado oposto e corre de volta pra
@@ -467,6 +759,24 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.PiledriverAttack:
+                // Pets como alvo válido: sem o grab/salto cheio (não faz sentido erguer um pet
+                // pequeno em arco até o topo da tela) — PlayPetTargetedSuper cobre a abordagem +
+                // impacto. Nunca esquivado, mesmo padrão do personagem (ver SimulatePiledriver).
+                if (evt.targetIsPet)
+                {
+                    var piledriverPet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    yield return StartCoroutine(PlayPetTargetedSuper(attacker, piledriverPet, t, () =>
+                    {
+                        if (piledriverPet == null) return;
+                        piledriverPet.healthBar?.UpdateBar(evt.newTargetHp, piledriverPet.maxHp);
+                        DamagePopup.Spawn(piledriverPet.transform.position + Vector3.up * 0.8f, evt.damage, evt.isCrit);
+                        piledriverPet.animController.PlayHurt();
+                        if (evt.newTargetHp <= 0) piledriverPet.PlayDeath();
+                    }));
+                    yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                    break;
+                }
+
                 // Super "Piledriver": agarra o defensor, sobe com ele em arco até o topo da
                 // tela, e cai de volta exatamente na posição original do defensor — onde o
                 // impacto é resolvido. Nunca é esquivado/bloqueado (o simulador já garante
@@ -598,7 +908,14 @@ public class CombatPlayer : MonoBehaviour
                     }
                     attacker.animationController.SetIdle(true);
 
-                    defender.ShowNetEnsnared(netLandedSprite, Net2LandedScale);
+                    // Se a rede pegou um pet do defensor em vez do personagem (50% de chance,
+                    // ver CombatSimulator.TryActivateNet), o personagem nunca mostra a pose de
+                    // enredado — só o pet alvo fica "preso" (sem clip dedicado no Animator de 6
+                    // estados dos pets; o efeito visual real é só nunca mais agir, ver
+                    // PetNetSkip abaixo, que se repete pra sempre — netEnsnared de pet é
+                    // permanente).
+                    if (!evt.targetIsPet)
+                        defender.ShowNetEnsnared(netLandedSprite, Net2LandedScale);
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -742,6 +1059,23 @@ public class CombatPlayer : MonoBehaviour
                             StartCoroutine(PlayNetBreakEffect(targetCombat, t));
                     }
 
+                    // Pets vivos do defensor atingidos pela mesma explosão (evt.bombPetIndexes/
+                    // bombPetHp, paralelas entre si — ver CombatSimulator.TryActivateBomb).
+                    if (evt.bombPetIndexes != null)
+                    {
+                        for (int i = 0; i < evt.bombPetIndexes.Count; i++)
+                        {
+                            var petCombat = GetPet(evt.targetIndex, evt.bombPetIndexes[i]);
+                            if (petCombat == null) continue;
+
+                            petCombat.healthBar?.UpdateBar(evt.bombPetHp[i], petCombat.maxHp);
+                            Vector3 petPopupPos = petCombat.transform.position + Vector3.up * 0.8f;
+                            DamagePopup.Spawn(petPopupPos, evt.damage, isCrit: false);
+                            petCombat.animController.PlayHurt();
+                            if (evt.bombPetHp[i] <= 0) petCombat.PlayDeath();
+                        }
+                    }
+
                     yield return new WaitForSeconds(0.6f * t);
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
@@ -804,6 +1138,31 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.VampirismAttack:
+                // Pets como alvo válido: sem a coreografia de "montar nas costas" (StealWeapon-
+                // like), não faz sentido contra um pet — PlayPetTargetedSuper resolve a mordida
+                // de forma simplificada; cura do atacante continua igual (sempre na vida dele).
+                if (evt.targetIsPet)
+                {
+                    var vampirismPet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    yield return StartCoroutine(PlayPetTargetedSuper(attacker, vampirismPet, t, () =>
+                    {
+                        if (vampirismPet != null)
+                        {
+                            vampirismPet.healthBar?.UpdateBar(evt.newTargetHp, vampirismPet.maxHp);
+                            DamagePopup.Spawn(vampirismPet.transform.position + Vector3.up * 0.8f, evt.damage, isCrit: false);
+                            vampirismPet.animController.PlayHurt();
+                            if (evt.newTargetHp <= 0) vampirismPet.PlayDeath();
+                        }
+                        if (attacker != null)
+                        {
+                            ApplyHealthDelta(evt.playerIndex, evt.newAttackerHp);
+                            DamagePopup.SpawnHeal(attacker.transform.position + Vector3.up * 1.5f, evt.healAmount);
+                        }
+                    }));
+                    yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                    break;
+                }
+
                 // Super "Vampirism": mordida garantida (nunca esquivada/bloqueada) — o
                 // simulador já resolveu dano/cura (evt.damage/evt.healAmount); PlayerCombat.
                 // VampirismRoutine cobre o visual inteiro (salto nas costas, bounce, efeito
@@ -922,6 +1281,64 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.Hit:
+                // Pets como alvo válido: melee/throw redirecionado pra um pet em vez do
+                // personagem (ver CombatSimulator.SimulateHit/SimulateThrow) — sem
+                // RepositionIfNeeded (assume PlayerCombat defender) nem Counter/Block/Reversal/
+                // Disarm visuais (o simulador já não emite nenhum desses pra alvo pet); só
+                // aproxima do pet se precisar (combo hit depois do pet já ter sido atingido) e
+                // aplica swing + hurt/morte direto nele.
+                if (evt.targetIsPet)
+                {
+                    var hitPet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    if (hitPet != null && attacker != null)
+                    {
+                        float swingMultPet = SwingSpeedMultiplier(attacker);
+                        float slashHalfPet = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / swingMultPet;
+
+                        if (!evt.isThrow)
+                        {
+                            float distToPet = Vector2.Distance(attacker.transform.position, hitPet.transform.position);
+                            if (distToPet > 1.0f)
+                            {
+                                Vector3 hitPetStopPos = CalcPetStopPosition(attacker.transform.position, hitPet.transform.position, CharacterPetReach(hitPet.petType));
+                                hitPetStopPos = ApplyPetOffsetRaw(hitPetStopPos,
+                                    attacker.weaponHandler.CurrentWeapon == null ? UnarmedAttacksPetOffset : ArmedAttacksPetOffset,
+                                    hitPet.petType);
+                                yield return StartCoroutine(attacker.animationController.PlayRun(hitPetStopPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
+                            }
+
+                            string triggerPet = SwingTrigger(attacker);
+                            if (swingMultPet != 1f) attacker?.animationController.SetSpeed(swingMultPet);
+                            attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
+                            yield return new WaitForSeconds(slashHalfPet);
+                        }
+
+                        Vector3 petPopupPos = hitPet.transform.position + Vector3.up * 0.8f;
+                        hitPet.healthBar?.UpdateBar(evt.newTargetHp, hitPet.maxHp);
+                        if (evt.isFierceBrute)
+                        {
+                            // Fierce Brute conectou num pet — mesmo dobro de dano já aplicado
+                            // pelo simulador; só a aura/popup diferenciados, sem flash de tela
+                            // nem ghost trail extra (mantém o caso pet mais discreto).
+                            DamagePopup.SpawnFierceBrute(petPopupPos, evt.damage, evt.isCrit);
+                            attacker?.HideFierceBruteAura(0.2f);
+                        }
+                        else
+                        {
+                            DamagePopup.Spawn(petPopupPos, evt.damage, evt.isCrit);
+                        }
+                        hitPet.animController.PlayHurt();
+                        if (evt.newTargetHp <= 0) hitPet.PlayDeath();
+
+                        if (!evt.isThrow)
+                        {
+                            yield return new WaitForSeconds(slashHalfPet);
+                            if (swingMultPet != 1f) attacker?.animationController.SetSpeed(1f);
+                        }
+                    }
+                    yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                    break;
+                }
                 if (defender != null)
                 {
                     float swingMult = SwingSpeedMultiplier(attacker);
@@ -1068,6 +1485,37 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.Dodge:
+                // Pets como alvo válido: esquiva do pet (PetState.evasionBase) em vez do
+                // personagem — sem RepositionIfNeeded/DodgeLeap (PlayerCombat-only); usa o
+                // trigger "Jumping" do próprio PetAnimationController.
+                if (evt.targetIsPet)
+                {
+                    var dodgePet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    if (dodgePet != null && attacker != null)
+                    {
+                        float dodgeSwingMultPet = SwingSpeedMultiplier(attacker);
+                        float slashHalfPet = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMultPet;
+
+                        float distToPet = Vector2.Distance(attacker.transform.position, dodgePet.transform.position);
+                        if (distToPet > 1.0f)
+                            yield return StartCoroutine(attacker.animationController.PlayRun(CalcPetStopPosition(attacker.transform.position, dodgePet.transform.position, CharacterPetReach(dodgePet.petType)), (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
+
+                        string triggerPet = SwingTrigger(attacker);
+                        if (dodgeSwingMultPet != 1f) attacker?.animationController.SetSpeed(dodgeSwingMultPet);
+                        attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
+                        yield return new WaitForSeconds(slashHalfPet);
+
+                        DamagePopup.SpawnDodge(dodgePet.transform.position + Vector3.up * 0.8f);
+                        attacker?.HideFierceBruteAura();
+                        Vector2 petDodgeDir = ((Vector2)dodgePet.transform.position - (Vector2)attacker.transform.position).normalized;
+                        yield return StartCoroutine(dodgePet.DodgeLeap(petDodgeDir, t));
+
+                        yield return new WaitForSeconds(slashHalfPet);
+                        if (dodgeSwingMultPet != 1f) attacker?.animationController.SetSpeed(1f);
+                    }
+                    yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                    break;
+                }
                 if (defender != null)
                 {
                     // Dodge always follows a melee swing attempt (never a throw) — the attacker
@@ -1137,6 +1585,23 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.Miss:
+                // Pets como alvo válido: arremesso errado contra um pet — popup + Jumping (pet
+                // não tem DodgeLeap, é um personagem-only; reusa o trigger de esquiva do próprio
+                // PetAnimationController).
+                if (evt.targetIsPet)
+                {
+                    var missPet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    if (missPet != null)
+                    {
+                        DamagePopup.SpawnMiss(missPet.transform.position + Vector3.up * 0.8f);
+                        Vector2 missDodgeDir = attacker != null
+                            ? ((Vector2)missPet.transform.position - (Vector2)attacker.transform.position).normalized
+                            : Vector2.right;
+                        StartCoroutine(missPet.DodgeLeap(missDodgeDir, t));
+                    }
+                    yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                    break;
+                }
                 if (defender != null)
                 {
                     Vector3 missPos = defender.transform.position + Vector3.up * 1.5f
@@ -1215,9 +1680,19 @@ public class CombatPlayer : MonoBehaviour
 
                     if (weaponData?.inHandSprite != null)
                     {
-                        Vector3 targetPos = defender != null
-                            ? defender.transform.position
-                            : attacker.transform.position + (attacker.isPlayer1 ? Vector3.right : Vector3.left) * 5f;
+                        // Pets como alvo válido (Ajuste 1): o próprio evento ThrowWeapon NUNCA
+                        // carrega targetIsPet/targetPetIndex (CombatSimulator.SimulateThrow só os
+                        // seta no Hit/Miss seguinte, ver CombatEvent.cs) — sem essa checagem a
+                        // arma sempre mirava no personagem dono (evt.targetIndex), "passando" do
+                        // pet de verdade (bug reportado pelo usuário: arma "mirada no player1" em
+                        // vez do pet sorteado pelo simulador). FindThrowTargetPet espia o Hit/Miss
+                        // imediatamente seguinte na lista (sempre o par desta mesma jogada).
+                        var throwTargetPet = FindThrowTargetPet(evt);
+                        Vector3 targetPos = throwTargetPet != null
+                            ? throwTargetPet.transform.position
+                            : defender != null
+                                ? defender.transform.position
+                                : attacker.transform.position + (attacker.isPlayer1 ? Vector3.right : Vector3.left) * 5f;
 
                         Vector3 flightDir   = (targetPos - launchPos).normalized;
                         float   flightAngle = Mathf.Atan2(flightDir.y, flightDir.x) * Mathf.Rad2Deg;
@@ -1301,6 +1776,149 @@ public class CombatPlayer : MonoBehaviour
                 yield return null;
                 break;
 
+            // --- Pets (Fase 3) ---
+
+            case CombatEventType.PetTurnStart:
+                GetPet(evt.playerIndex, evt.petIndex)?.animController.SetIdle(true);
+                yield return null;
+                break;
+
+            case CombatEventType.PetAttack:
+            {
+                var pet = GetPet(evt.playerIndex, evt.petIndex);
+                if (pet == null) { yield return null; break; }
+
+                // Mesma velocidade de corrida do personagem dono (settings.runSpeed, escalada
+                // por t igual ao jump-back de TurnEnd) — era um valor fixo de 6f (default do
+                // parâmetro), bem mais lento que os ~35 dos personagens, pedido pelo usuário
+                // pra equalizar.
+                float petRunSpeed = (GetCombat(evt.playerIndex)?.settings?.runSpeed ?? 35f) * t;
+
+                // Duração do swing varia por tipo de pet (PetState.SlashDuration — Boar 0.85s,
+                // ajustado a pedido do usuário; Monkey/Mouse mantêm o default 0.4s). comboDelay
+                // de PlayAttackSequence é metade da duração total (pré-impacto + pós-impacto,
+                // mesmo papel de slashHalf nos personagens).
+                float petComboDelay = PetState.SlashDuration(pet.petType) * 0.5f * t;
+
+                if (evt.shieldIntercept)
+                {
+                    // Rato intercepta um hit de Fierce Brute do PRÓPRIO dono — aqui não é o pet
+                    // atacando, é o pet sendo atingido no lugar do personagem (ver
+                    // CombatSimulator.SimulateHit) — sem correr/atacar, só reage.
+                    pet.animController.PlayHurt();
+                    pet.healthBar?.UpdateBar(evt.newTargetHp, pet.maxHp);
+                    DamagePopup.Spawn(pet.transform.position + Vector3.up * 0.8f, evt.damage, isCrit: false);
+                    if (evt.newTargetHp <= 0) pet.PlayDeath();
+                    yield return new WaitForSeconds(0.2f * t);
+                    break;
+                }
+
+                _petImpactPet             = pet;
+                _petImpactEvt             = evt;
+                _petImpactTargetPet       = null;
+                _petImpactTargetCharacter = null;
+                _petImpactTargetPos       = pet.transform.position;
+                Vector3 petRunPos         = pet.transform.position;
+
+                if (evt.targetIsPet)
+                {
+                    _petImpactTargetPet = GetPet(evt.targetIndex, evt.targetPetIndex);
+                    if (_petImpactTargetPet != null)
+                    {
+                        _petImpactTargetPos = _petImpactTargetPet.transform.position;
+                        petRunPos = CalcPetStopPosition(pet.transform.position, _petImpactTargetPet.transform.position, PetPetReach(pet.petType, _petImpactTargetPet.petType));
+                    }
+                }
+                else
+                {
+                    _petImpactTargetCharacter = GetCombat(evt.targetIndex);
+                    if (_petImpactTargetCharacter != null)
+                    {
+                        _petImpactTargetPos = _petImpactTargetCharacter.transform.position;
+                        petRunPos = CalcPetStopPosition(pet.transform.position, _petImpactTargetCharacter.transform.position, CharacterPetReach(pet.petType));
+                        petRunPos = ApplyPetOffset(petRunPos, pet.transform.position, _petImpactTargetCharacter.transform.position, PetAttacksCharacterOffset, pet.petType);
+                    }
+                }
+
+                pet.spawnPosition = RollPetSpawnPosition(pet);
+                yield return StartCoroutine(pet.PlayAttackSequence(petRunPos, evt.isDodged, evt.damage, _onPetImpact, runSpeed: petRunSpeed, comboDelay: petComboDelay));
+                break;
+            }
+
+            case CombatEventType.PetNetSkip:
+                // Pet enredado (permanente) ou caído — sem nada visível pra tocar, só ocupa o
+                // tempo de um "turno" curto antes do PetTurnEnd seguinte.
+                yield return new WaitForSeconds(0.1f * t);
+                break;
+
+            case CombatEventType.PetDeath:
+                GetPet(evt.playerIndex, evt.petIndex)?.PlayDeath();
+                yield return null;
+                break;
+
+            case CombatEventType.PetDisarm:
+            {
+                var disarmedCharacter = GetCombat(evt.targetIndex);
+                if (disarmedCharacter != null)
+                    StartCoroutine(PlayerCombat.DropWeapon(disarmedCharacter, isDisarm: true));
+                yield return null;
+                break;
+            }
+
+            case CombatEventType.PetTurnEnd:
+                yield return null;
+                break;
+
+            case CombatEventType.CryOfTheDamned:
+            {
+                var crier = GetCombat(evt.playerIndex);
+                if (crier != null)
+                    yield return StartCoroutine(PlayCryOfTheDamned(crier, t));
+                else
+                    yield return null;
+                break;
+            }
+
+            case CombatEventType.PetFlee:
+            {
+                var fleeingPet = GetPet(evt.playerIndex, evt.petIndex);
+                if (fleeingPet != null)
+                    StartCoroutine(PlayPetFlee(fleeingPet, t));
+                yield return new WaitForSeconds(0.4f * t);
+                break;
+            }
+
+            case CombatEventType.Hypnosis:
+            {
+                var hypnotizer = GetCombat(evt.playerIndex);
+                if (hypnotizer != null)
+                    yield return StartCoroutine(PlayHypnosisScreenEffect(hypnotizer, t));
+                else
+                    yield return null;
+                break;
+            }
+
+            case CombatEventType.PetHypnotized:
+            {
+                var ownerPets    = evt.playerIndex == 0 ? p1Pets : p2Pets;
+                var newOwnerPets = evt.targetIndex == 0 ? p1Pets : p2Pets;
+                PetCombatController hypnotizedPet = null;
+                if (evt.petIndex >= 0 && evt.petIndex < ownerPets.Count)
+                {
+                    hypnotizedPet = ownerPets[evt.petIndex];
+                    ownerPets.RemoveAt(evt.petIndex);
+                    newOwnerPets.Add(hypnotizedPet);
+                }
+                if (hypnotizedPet != null)
+                {
+                    var newOwner = GetCombat(evt.targetIndex);
+                    yield return StartCoroutine(PlayPetHypnotized(hypnotizedPet, newOwner, t));
+                }
+                else
+                    yield return null;
+                break;
+            }
+
             default:
                 yield return null;
                 break;
@@ -1311,6 +1929,287 @@ public class CombatPlayer : MonoBehaviour
 
     private PlayerCombat GetCombat(int index) => index == 0 ? p1Combat : p2Combat;
     private WeaponHUD GetWeaponHUD(int index) => index == 0 ? p1WeaponHUD : p2WeaponHUD;
+
+    // Pets (Fase 3) — ownerIndex = índice do DONO (0/1, mesma convenção de evt.playerIndex/
+    // evt.targetIndex), petIndex = posição na lista PlayerState.pets/p1Pets-p2Pets dele.
+    private PetCombatController GetPet(int ownerIndex, int petIndex)
+    {
+        var list = ownerIndex == 0 ? p1Pets : p2Pets;
+        if (list == null || petIndex < 0 || petIndex >= list.Count) return null;
+        return list[petIndex];
+    }
+
+    // Pets como alvo válido (Ajuste 1) — versão simplificada de Haste/Piledriver/Vampirism
+    // quando CombatSimulator redireciona o alvo do turno pra um pet em vez do personagem: corre
+    // até o pet, resolve (callback onResolve aplica dano/cura/popup/Hurt/morte), e volta pro
+    // lugar original. Sem a coreografia cheia de cada Super (sair da tela, erguer no ar, montar
+    // nas costas) — não faz sentido fisicamente contra um pet pequeno, e o caso é raro o
+    // bastante (precisa do roll de alvo E do roll da própria Super) pra não justificar duplicar
+    // a coreografia inteira de cada uma só pra esse alvo.
+    private IEnumerator PlayPetTargetedSuper(PlayerCombat attacker, PetCombatController targetPet, float t, System.Action onResolve)
+    {
+        if (attacker == null || targetPet == null) yield break;
+
+        Vector3 startPos = attacker.transform.position;
+        float   runSpeed = (attacker.settings?.runSpeed ?? 35f) * t;
+
+        yield return StartCoroutine(attacker.animationController.PlayRun(CalcPetStopPosition(attacker.transform.position, targetPet.transform.position, CharacterPetReach(targetPet.petType)), runSpeed, attacker.movement));
+
+        onResolve?.Invoke();
+        yield return new WaitForSeconds(0.15f * t);
+
+        yield return StartCoroutine(attacker.animationController.PlayRun(startPos, runSpeed, attacker.movement));
+        attacker.animationController.SetIdle(true);
+    }
+
+    // Callback de impacto do case PetAttack — lê só dos campos _petImpact* (setados ali,
+    // imediatamente antes de StartCoroutine(PlayAttackSequence(...))), nunca de uma closure, pra
+    // _onPetImpact poder ser cacheado 1x (ver campo acima) em vez de uma lambda nova por ataque.
+    private void HandlePetImpact()
+    {
+        var evt             = _petImpactEvt;
+        var pet             = _petImpactPet;
+        var targetPetCombat = _petImpactTargetPet;
+        var targetCharacter = _petImpactTargetCharacter;
+        var targetPos       = _petImpactTargetPos;
+
+        if (evt.isDodged)
+        {
+            if (targetPetCombat != null)
+            {
+                Vector2 petPushDir = ((Vector2)targetPetCombat.transform.position - (Vector2)pet.transform.position).normalized;
+                StartCoroutine(targetPetCombat.DodgeLeap(petPushDir, 1f / _playbackSpeed));
+            }
+            else if (targetCharacter != null)
+            {
+                Vector2 pushDir = ((Vector2)targetCharacter.transform.position - (Vector2)pet.transform.position).normalized;
+                StartCoroutine(targetCharacter.DodgeLeap(pushDir, targetCharacter.settings?.knockbackDistance ?? 0.5f));
+            }
+            DamagePopup.SpawnDodge(targetPos + Vector3.up * 0.8f);
+        }
+        else if (targetPetCombat != null)
+        {
+            targetPetCombat.healthBar?.UpdateBar(evt.newTargetHp, targetPetCombat.maxHp);
+            DamagePopup.Spawn(targetPetCombat.transform.position + Vector3.up * 0.8f, evt.damage, evt.isCrit);
+            targetPetCombat.animController.PlayHurt();
+            if (evt.newTargetHp <= 0) targetPetCombat.PlayDeath();
+        }
+        else if (targetCharacter != null)
+        {
+            ApplyHealthDelta(evt.targetIndex, evt.newHp);
+            DamagePopup.Spawn(targetCharacter.transform.position + Vector3.up * 1.5f, evt.damage, evt.isCrit);
+            // Knockback pequeno (0.3f, metade do normal) — valor fixo pedido na spec.
+            Vector2 pushDir = ((Vector2)targetCharacter.transform.position - (Vector2)pet.transform.position).normalized;
+            StartCoroutine(targetCharacter.Knockback(pushDir, 0.3f, targetCharacter.settings?.hurtDuration ?? 0.07f));
+            StartCoroutine(targetCharacter.animationController.PlayHurt(targetCharacter.settings?.hurtDuration ?? 0.07f));
+        }
+    }
+
+    // --- Cry of the Damned ---
+
+    private IEnumerator PlayCryOfTheDamned(PlayerCombat crier, float t)
+    {
+        var animator  = crier.GetComponent<Animator>();
+        float savedSpeed = animator != null ? animator.speed : 1f;
+        if (animator != null) animator.speed = 0f;
+
+        // Boca: mesma fórmula do TragicPotion — offset à frente do rosto do personagem
+        float   forwardSign = Mathf.Sign(crier.transform.localScale.x);
+        Vector3 mouthPos    = crier.transform.position
+                            + new Vector3(0.38f * forwardSign, 0.38f, 0f);
+
+        var glow  = PlayerCombat.GetGlowSprite();
+        int count = UnityEngine.Random.Range(9, 13);
+        for (int i = 0; i < count; i++)
+        {
+            StartCoroutine(SpawnBreathParticle(mouthPos, forwardSign, glow));
+            if (i < count - 1)
+                yield return new WaitForSeconds(0.06f * t);
+        }
+
+        yield return new WaitForSeconds(0.55f * t);
+
+        if (animator != null) animator.speed = savedSpeed;
+    }
+
+    private IEnumerator SpawnBreathParticle(Vector3 origin, float dirSign, Sprite glow)
+    {
+        var go = new GameObject("CryBreath");
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite           = glow;
+        sr.sortingLayerName = "Characters";
+        sr.sortingOrder     = 28;
+        // Cor espectral: verde-fantasmagórico com toque azulado
+        sr.color = new Color(
+            UnityEngine.Random.Range(0.3f, 0.55f),
+            UnityEngine.Random.Range(0.85f, 1.0f),
+            UnityEngine.Random.Range(0.65f, 1.0f),
+            UnityEngine.Random.Range(0.70f, 0.90f));
+        Color  startColor = sr.color;
+        float  scale      = UnityEngine.Random.Range(0.10f, 0.28f);
+        float  speed      = UnityEngine.Random.Range(1.8f, 3.8f);
+        float  waveFreq   = UnityEngine.Random.Range(3.5f, 7.5f);
+        float  waveAmp    = UnityEngine.Random.Range(0.07f, 0.20f);
+        float  life       = UnityEngine.Random.Range(0.45f, 0.80f);
+        float  elapsed    = 0f;
+
+        go.transform.position = origin + new Vector3(
+            UnityEngine.Random.Range(-0.12f, 0.12f),
+            UnityEngine.Random.Range(-0.10f, 0.10f), 0f);
+        go.transform.localScale = Vector3.one * scale;
+
+        Vector3 pos = go.transform.position;
+        while (elapsed < life && go != null)
+        {
+            elapsed += Time.deltaTime;
+            float p  = elapsed / life;
+            pos.x   += dirSign * speed * Time.deltaTime;
+            pos.y   += Mathf.Sin(elapsed * waveFreq) * waveAmp * Time.deltaTime;
+            go.transform.position   = pos;
+            go.transform.localScale = Vector3.one * scale * Mathf.Lerp(1f, 0.6f, p);
+            if (sr != null) sr.color = new Color(startColor.r, startColor.g, startColor.b, startColor.a * (1f - p));
+            yield return null;
+        }
+        if (go != null) Destroy(go);
+    }
+
+    // --- Pet Flee ---
+
+    private IEnumerator PlayPetFlee(PetCombatController pet, float t)
+    {
+        if (pet == null) yield break;
+
+        // Foge para o lado de fora da arena
+        float   targetX    = pet.transform.position.x > 0f ? 12f : -12f;
+        Vector3 startPos   = pet.transform.position;
+        Vector3 startScale = pet.transform.localScale;
+
+        pet.animController?.PlayRun();
+        pet.FlipToward(new Vector3(targetX, 0f, 0f));
+
+        float duration = 0.60f * t;
+        float elapsed  = 0f;
+
+        while (elapsed < duration && pet != null)
+        {
+            elapsed  += Time.deltaTime;
+            float p   = elapsed / duration;
+            float ease = p * p; // ease-in: acelera ao sair
+            pet.transform.position   = Vector3.Lerp(startPos, new Vector3(targetX, startPos.y, startPos.z), ease);
+            pet.transform.localScale = Vector3.Lerp(startScale, Vector3.zero, p * 0.75f);
+            yield return null;
+        }
+
+        if (pet != null)
+        {
+            pet.healthBar?.FadeOutAndDestroy(0.2f);
+            Destroy(pet.gameObject);
+        }
+    }
+
+    // --- Hypnosis ---
+
+    private IEnumerator PlayHypnosisScreenEffect(PlayerCombat hypnotizer, float t)
+    {
+        var canvasGO = new GameObject("HypnosisOverlay");
+        var canvas   = canvasGO.AddComponent<Canvas>();
+        canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 50;
+
+        float duration = 1.5f * t;
+        float elapsed  = 0f;
+
+        var rings = new List<GameObject>();
+        var colors = new Color[]
+        {
+            new Color(0.6f, 0f, 0.9f, 0f),
+            new Color(0f,  0.8f, 0.8f, 0f),
+            new Color(0.5f, 0f, 0.7f, 0f),
+            new Color(0f,  0.6f, 0.7f, 0f),
+        };
+
+        for (int i = 0; i < 4; i++)
+        {
+            var ringGO = new GameObject($"Ring{i}");
+            var rt     = ringGO.AddComponent<RectTransform>();
+            ringGO.transform.SetParent(canvas.transform, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = Vector2.one * (200f + i * 150f);
+            var img = ringGO.AddComponent<UnityEngine.UI.Image>();
+            img.sprite = PlayerCombat.GetGlowSprite();
+            img.color  = colors[i];
+            rings.Add(ringGO);
+        }
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float p     = elapsed / duration;
+            float alpha = p < 0.4f ? (p / 0.4f) * 0.5f : (1f - p) * 0.5f;
+            for (int i = 0; i < rings.Count; i++)
+            {
+                var img = rings[i].GetComponent<UnityEngine.UI.Image>();
+                var c   = colors[i];
+                c.a     = alpha;
+                img.color = c;
+                rings[i].transform.rotation   = Quaternion.Euler(0f, 0f, elapsed * (60f + i * 40f));
+                float scale = 1f + 0.2f * Mathf.Sin(elapsed * 4f + i);
+                rings[i].transform.localScale = Vector3.one * scale;
+            }
+            yield return null;
+        }
+
+        Destroy(canvasGO);
+    }
+
+    private IEnumerator PlayPetHypnotized(PetCombatController pet, PlayerCombat newOwner, float t)
+    {
+        if (pet == null || newOwner == null) yield break;
+
+        // Flash purple
+        float   flashDuration = 0.3f * t;
+        float   elapsed       = 0f;
+        var     renderers     = pet.GetComponentsInChildren<SpriteRenderer>(true);
+        var     origColors    = System.Array.ConvertAll(renderers, r => r.color);
+        var     purple        = new Color(0.6f, 0f, 0.9f, 1f);
+        while (elapsed < flashDuration)
+        {
+            elapsed += Time.deltaTime;
+            float p = elapsed / flashDuration;
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] != null)
+                    renderers[i].color = Color.Lerp(origColors[i], purple, Mathf.Sin(p * Mathf.PI));
+            yield return null;
+        }
+        for (int i = 0; i < renderers.Length; i++)
+            if (renderers[i] != null)
+                renderers[i].color = origColors[i];
+
+        // Run to new owner's area
+        float   sign      = newOwner.transform.position.x > 0f ? -1f : 1f;
+        Vector3 targetPos = new Vector3(
+            newOwner.spawnPosition.x + sign * 1.5f,
+            newOwner.spawnPosition.y,
+            pet.transform.position.z);
+
+        pet.FlipToward(targetPos);
+        pet.animController?.PlayRun();
+
+        float   runDuration = 0.8f * t;
+        Vector3 startPos    = pet.transform.position;
+        elapsed = 0f;
+        while (elapsed < runDuration && pet != null)
+        {
+            elapsed += Time.deltaTime;
+            pet.transform.position = Vector3.Lerp(startPos, targetPos, elapsed / runDuration);
+            yield return null;
+        }
+        if (pet != null)
+        {
+            pet.transform.position = targetPos;
+            pet.animController?.SetIdle(true);
+        }
+    }
 
     private static WeaponData FindWeaponByName(PlayerLoadout loadout, string name)
     {
@@ -1361,11 +2260,42 @@ public class CombatPlayer : MonoBehaviour
 
     private void TriggerCombatEnd(CombatEvent evt)
     {
+        StopLingeringLoops();
+
         if (sequencer != null)
         {
             PlayerCombat winner = evt.playerIndex == 0 ? p1Combat : p2Combat;
             sequencer.OnCombatEnd(winner);
         }
+    }
+
+    // Para todos os loops/coroutines visuais de duração indefinida que podem ter sobrado
+    // ativos quando a luta termina de verdade (ex: a luta acaba enquanto alguém ainda está
+    // net-ensnared, ou um Monk vencedor cuja aura é "permanente durante a luta" por design —
+    // ver ShowMonkAura) — sem isso continuavam rodando Update todo frame durante o tempo
+    // indefinido em que a tela de resultado/level-up fica aberta, já que a cena
+    // 04_CombatScenePVP continua carregada por baixo dela. Cada Hide*/Release*/Stop* chamado
+    // aqui já é idempotente/no-op se aquele efeito nunca esteve ativo (mesmo padrão usado nos
+    // pontos normais de término de cada efeito durante a luta).
+    private void StopLingeringLoops()
+    {
+        foreach (var combat in new[] { p1Combat, p2Combat })
+        {
+            if (combat == null) continue;
+
+            combat.HideStunLabel();
+            combat.HideFierceBruteAura(0f);
+            combat.HidePoisonAura(0f);
+            combat.StopMonkAuraPulse();
+
+            // ReleaseNet devolve o GameObject da rede pro chamador animar fragmentos antes de
+            // destruir — irrelevante aqui (luta já acabou), só destrói direto.
+            var netVisual = combat.ReleaseNet();
+            if (netVisual != null) Destroy(netVisual);
+        }
+
+        FadeFastMetabolismLeaves(0);
+        FadeFastMetabolismLeaves(1);
     }
 
     // Heavy e Sharp/default não são somados (não faz sentido físico somar dois alcances de
@@ -1547,19 +2477,19 @@ public class CombatPlayer : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < duration)
         {
+            // target é sempre p1Combat.transform/p2Combat.transform (chamadas em FierceBrute/
+            // Hit) — GetComponentsInChildren aqui nunca varre pets (GameObjects raiz separados,
+            // fora da hierarquia do personagem), então pets não introduzem custo extra aqui.
             var renderers = target.GetComponentsInChildren<SpriteRenderer>(true);
-            // Diagnóstico temporário: confirma que o rig está sendo encontrado. Remover quando confirmado.
-            Debug.Log($"[GhostTrail] {target.name}: {renderers.Length} SpriteRenderers encontrados.");
 
             foreach (var sr in renderers)
             {
                 if (sr.sprite == null) continue;
 
-                var ghost = new GameObject("GhostTrail");
+                var (ghost, ghostSr) = RentGhost();
                 ghost.transform.position   = sr.transform.position;
                 ghost.transform.rotation   = sr.transform.rotation;
                 ghost.transform.localScale = sr.transform.lossyScale;
-                var ghostSr = ghost.AddComponent<SpriteRenderer>();
                 ghostSr.sprite           = sr.sprite;
                 ghostSr.color            = ghostColor;
                 // Characters2 (atrás de Weapons/Characters na ordem de layers do projeto, ver
@@ -1578,6 +2508,8 @@ public class CombatPlayer : MonoBehaviour
         }
     }
 
+    // Desativa em vez de destruir (pool de _ghostPool, ver RentGhost) — o GameObject volta a
+    // ficar disponível pro próximo RentGhost assim que o fade termina.
     private IEnumerator FadeOutAndDestroyGhost(GameObject go, float duration)
     {
         if (go == null) yield break;
@@ -1594,7 +2526,7 @@ public class CombatPlayer : MonoBehaviour
             sr.color = c;
             yield return null;
         }
-        if (go != null) Destroy(go);
+        if (go != null) go.SetActive(false);
     }
 
     // Flash branco de tela inteira — Canvas/Image temporários criados e destruídos na hora (sem

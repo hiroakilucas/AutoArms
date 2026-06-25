@@ -56,6 +56,18 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("Prefab da pizza (Assets/Data/UI/SkillEffect/Chef/ChefPizzaPrefab.prefab, gerado por Tools > AutoArms > Generate Chef Effect Prefab) — GameObject com SpriteRenderer (sprite \"chef\") + Animator (controller da explosão verde). Usado tanto na fase de voo (sprite estático) quanto na explosão (2ª instância, Animator religado), mesmo padrão do Bomb Prefab.")]
     [SerializeField] private GameObject chefPizzaPrefab;
 
+    [Header("Pets")]
+    // NÃO usar o prefab em "Vector Parts/<Tipo>.prefab" (rig multi-bone do Spriter) — ele não
+    // tem SpriteRenderer na própria raiz, e as animações dos pets são flipbooks simples que
+    // trocam o m_Sprite de um SpriteRenderer na raiz (ver Assets/Editor/PetPrefabGenerator.cs).
+    // Usar os prefabs gerados por Tools > AutoArms > Generate Pet Gameplay Prefabs.
+    [Tooltip("Prefab de gameplay do Javali (Assets/Data/UI/Pets/Boar/BoarPet.prefab, gerado por Tools > AutoArms > Generate Pet Gameplay Prefabs).")]
+    [SerializeField] private GameObject boarPetPrefab;
+    [Tooltip("Prefab de gameplay do Macaco (Assets/Data/UI/Pets/Monkey/MonkeyPet.prefab, gerado por Tools > AutoArms > Generate Pet Gameplay Prefabs).")]
+    [SerializeField] private GameObject monkeyPetPrefab;
+    [Tooltip("Prefab de gameplay do Rato (Assets/Data/UI/Pets/Mouse/MousePet.prefab, gerado por Tools > AutoArms > Generate Pet Gameplay Prefabs).")]
+    [SerializeField] private GameObject mousePetPrefab;
+
     private const string Player2ProfileFallbackPath =
         "Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset";
 
@@ -194,7 +206,7 @@ public class CombatSceneLoader : MonoBehaviour
             var simulator = new CombatSimulator();
             events = simulator.Simulate(profile, player2Profile);
 
-            Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events));
+            Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events, profile.pets, player2Profile.pets));
 
             // Spy: ícones das armas sabotadas (ver CombatSimulator.ApplySpySabotage) ficam
             // vermelhos no WeaponHUD de quem foi sabotado, mesmo antes de equipá-las.
@@ -220,7 +232,30 @@ public class CombatSceneLoader : MonoBehaviour
         bool p1Done = false, p2Done = false;
         StartCoroutine(EntryFall(player1Obj,    p1Land, () => p1Done = true));
         StartCoroutine(EntryFall(player2Object, p2Land, () => p2Done = true));
-        yield return new WaitUntil(() => p1Done && p2Done);
+
+        // Pets (Fase 3) — instanciados e soltos do céu junto dos personagens principais, só
+        // quando o simulador está ativo (events != null), já que o caminho legado não tem
+        // nenhuma lógica de pet. p1Pets/p2Pets ficam preenchidos antes do WaitUntil abaixo
+        // resolver, prontos pra passar pro CombatPlayer.
+        var p1Pets = new List<PetCombatController>();
+        var p2Pets = new List<PetCombatController>();
+        var petsDone = new List<bool>();
+
+        if (events != null)
+        {
+            // 1 frame de respiro antes de instanciar pets — deixa o frame de
+            // StartCoroutine(EntryFall) dos 2 personagens principais (acima) sozinho, sem
+            // competir com Instantiate+HealthBarPet.Create de cada pet no mesmo frame
+            // (investigação de stutter ao entrar na cena: SpawnPets virou IEnumerator, ver
+            // abaixo, e CLAUDE.md/Pets — causa real era esse bloco síncrono concentrado
+            // exatamente no frame em que a queda do céu dos personagens principais começa a
+            // ser visível, agravado pela quantidade de pets no profile).
+            yield return null;
+            StartCoroutine(SpawnPets(profile.pets, profile.level, p1Land, isPlayer1: true, p1Pets, petsDone));
+            StartCoroutine(SpawnPets(player2Profile.pets, player2Profile.level, p2Land, isPlayer1: false, p2Pets, petsDone));
+        }
+
+        yield return new WaitUntil(() => p1Done && p2Done && petsDone.TrueForAll(d => d));
 
         if (events != null)
         {
@@ -229,6 +264,8 @@ public class CombatSceneLoader : MonoBehaviour
             var combatPlayer = gameObject.AddComponent<CombatPlayer>();
             combatPlayer.p1Combat    = player1Combat;
             combatPlayer.p2Combat    = player2Combat;
+            combatPlayer.p1Pets      = p1Pets;
+            combatPlayer.p2Pets      = p2Pets;
             combatPlayer.sequencer   = attackSequencer;
             combatPlayer.p1WeaponHUD = p1WeaponHUD;
             combatPlayer.p2WeaponHUD = p2WeaponHUD;
@@ -503,6 +540,80 @@ public class CombatSceneLoader : MonoBehaviour
         }
 
         return hp;
+    }
+
+    private GameObject PetPrefabFor(PetType type)
+    {
+        switch (type)
+        {
+            case PetType.Boar:   return boarPetPrefab;
+            case PetType.Monkey: return monkeyPetPrefab;
+            case PetType.Mouse:  return mousePetPrefab;
+            default: return null;
+        }
+    }
+
+    // Instancia um pet por entrada em petTypes, acima da câmera (mesmo padrão de spawnY + 12f
+    // do EntryFall dos personagens principais), com X aleatório dentro da arena — P1 do lado
+    // esquerdo (-5 a -1), P2 do lado direito (1 a 5) — e dispara o próprio EntryFall (mesma
+    // coroutine, com squash de impacto). doneFlags acumula 1 bool por pet, lido pelo
+    // WaitUntil em Initialize() junto dos p1Done/p2Done dos personagens principais.
+    // IEnumerator (não mais void síncrono) — yield a cada pet instanciado, pra espalhar o custo
+    // de Instantiate+HealthBarPet.Create (Canvas+Image+RectTransform por pet) por frame em vez
+    // de empacar todos os pets de um lado no mesmo frame (escala mal com profiles que acumulam
+    // vários pets — ver investigação de stutter ao entrar na cena, CLAUDE.md/Pets). Chamada via
+    // StartCoroutine em Initialize() (fire-and-forget, mesmo padrão de EntryFall) — o WaitUntil
+    // final já tolera conclusão assíncrona/fora de ordem via petsDone.
+    private IEnumerator SpawnPets(List<PetType> petTypes, int ownerLevel, Vector3 ownerLand, bool isPlayer1, List<PetCombatController> outList, List<bool> doneFlags)
+    {
+        if (petTypes == null) yield break;
+
+        foreach (var petType in petTypes)
+        {
+            var prefab = PetPrefabFor(petType);
+            if (prefab == null)
+            {
+                Debug.LogError($"[CombatSceneLoader] Prefab não wireado para pet {petType} — pulando instanciação.");
+                continue;
+            }
+
+            float x = isPlayer1 ? UnityEngine.Random.Range(-5f, -1f) : UnityEngine.Random.Range(1f, 5f);
+            Vector3 landPos = new Vector3(x, ownerLand.y, ownerLand.z);
+
+            var petObj = Instantiate(prefab);
+            petObj.name = PetState.DisplayName(petType);
+
+            float scale = PetState.Scale(petType);
+            petObj.transform.localScale = new Vector3(scale, scale, scale);
+            petObj.transform.position   = new Vector3(landPos.x, landPos.y + 12f, landPos.z);
+
+            var petCombat = petObj.AddComponent<PetCombatController>();
+            petCombat.petType = petType;
+            petCombat.isPlayer1 = isPlayer1;
+            outList.Add(petCombat);
+
+            // Mesmo escalonamento por nível do dono aplicado em CombatSimulator.BuildState
+            // (PetState.ApplyLevelScaling) — só pra essa preview (maxHp inicial da barra de
+            // vida) não ficar desincronizada do maxHp real usado na simulação.
+            var preview = PetState.Create(petType);
+            preview?.ApplyLevelScaling(ownerLevel);
+            petCombat.healthBar = HealthBarPet.Create(petObj.transform);
+            if (preview != null)
+            {
+                petCombat.maxHp = preview.maxHp;
+                petCombat.healthBar.UpdateBar(preview.hp, preview.maxHp);
+            }
+
+            int idx = doneFlags.Count;
+            doneFlags.Add(false);
+            StartCoroutine(EntryFall(petObj, landPos, () =>
+            {
+                petCombat.spawnPosition = landPos;
+                doneFlags[idx] = true;
+            }));
+
+            yield return null;
+        }
     }
 
     private IEnumerator EntryFall(GameObject obj, Vector3 landPos, Action onLand)

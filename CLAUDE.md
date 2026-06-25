@@ -805,6 +805,378 @@ Novos `CombatEventType.ChefPizzaThrow` (`playerIndex` = dono da skill, `targetIn
 
 **Prefab e geração**: os assets `chef.png` (sprite estático, voo), `Explosion_1..10.png` (frames verdes da explosão), o clipe `chef.anim` (curva de `m_Sprite` sobre os 10 frames, montado pelo usuário no Animation Window) e o controller `Explosion_1.controller` (estado único "chef" usando esse clipe como motion) já estavam completos — ao contrário do que pareceu numa 1ª inspeção dos arquivos (`chef.anim` parecia vazio, sem nenhuma curva ainda, antes do usuário terminar de montá-lo no Editor). `Assets/Editor/ChefEffectGenerator.cs` (**Tools → AutoArms → Generate Chef Effect Prefab**) hoje só falta o mesmo passo final do `PiledriverEffectGenerator`: força `Loop Time = false` no clipe (estava `m_LoopTime: 1` — a explosão reiniciaria em loop em vez de tocar uma única vez, e `AnimationAutoDestroy` nunca teria um `clip.length` de uma única passada pra calcular o delay, mesmo bug já visto no Piledriver/Bomb) e monta o prefab (`SpriteRenderer` com sprite inicial `chef` + `Animator` com o controller) salvo em `ChefPizzaPrefab.prefab`. **Pendente do usuário**: rodar o comando acima e arrastar o `ChefPizzaPrefab.prefab` gerado no campo **Chef Pizza Prefab**, novo no `CombatSceneLoader` da cena `04_CombatScenePVP`; rodar também **Tools → AutoArms → Generate Skill Assets** pra resolver o `skill_chef.asset` (ícone já existia).
 
+### Pets (Fase 3)
+
+Pets entram na luta desde o início, atacam separadamente com seus próprios atributos, e ficam
+no chão (não destruídos) quando nocauteados — preparação pra skill futura **Tamer**, que
+permitirá "comer" pets caídos. Referência: My Brute (Muxxu/eternaltwin), pets de combate.
+
+**3 tipos** (`PetType` enum em `PlayerProfile.cs`; `PetState.Create`/`DamageRange`/`HpCost`/
+`Scale`/`DisplayName` em `Assets/Scripts/Combat/PetState.cs` concentram os stats):
+
+| Pet | HP | Dano | Speed | AGI | ComboRate | DisarmRate | EvasionBase | Counter | Reversal | Custo HP do dono |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Rato (Mouse) | 25 | 4-6 | 10 | 8 | 20% | 0% | 10% | 0% | 0% | -12 |
+| Macaco (Monkey) | 50 | 9-12 | 20 | 25 | 40% | 0% | 35% | 15% | 20% | -36 |
+| Javali (Boar) | 110 | 18-27 | 3 | 2 | 0% | 15% | 2% | 0% | 0% | -48 |
+
+`PlayerProfile.pets` (`List<PetType>`) — sem restrição de duplicatas (3 Ratos geram 3
+instâncias independentes). `PlayerState.pets`/`PetState` (pure C#, mesmo padrão de
+`PlayerState`) guardam o estado de cada pet durante a simulação — `CombatSimulator.BuildState`
+constrói a lista a partir de `profile.pets`.
+
+**Speed System dos pets** (`CombatSimulator.SimulatePetActions`) — não compara speed contra um
+"oponente" 1:1 como os personagens fazem entre si (não existe par equivalente); usa uma
+baseline fixa de 10 como divisor do próprio `speedDebt` do pet, **sem mínimo forçado de 1 ação
+por round** (diferente do personagem): Rato (10) e Macaco (20) agem quase todo round (Macaco
+as vezes 2x); Javali (3) acumula devagar e só libera a 1ª ação por volta do 3º-4º round —
+aproxima a "demora 2-3 rounds pra atacar" pedida sem precisar de um sistema de par dedicado.
+Ordem simplificada por round: ações do Player1 → pets do Player1 → ações do Player2 → pets do
+Player2 (`SimulateRound`).
+
+**Turno do pet** (`CombatSimulator.SimulatePetTurn`/`SimulatePetHit`) — alvo decidido 1x por
+turno (não re-sorteado a cada hit de combo): 40% de chance de atacar um pet inimigo vivo
+aleatório em vez do personagem principal, se houver algum vivo. Dano `Random.Range(min, max+1)`
+da tabela acima. Esquiva contra personagem usa a mesma fórmula de `DodgeChance` mas sem o termo
+`accuracy` do atacante (pet não tem esse stat, ver `PetDodgeChanceOnCharacter`); esquiva contra
+pet usa só o `evasionBase` do alvo. Combo do pet: `pet.comboRate × 0.5^comboCount`, decaimento
+igual ao personagem, mas com teto fixo de **3 hits extras** (sem decair até ficar irrelevante).
+**Macaco sendo atacado** por outro pet conta Counter (cancela o hit antes de conectar,
+interrompe o combo do atacante — mesmo padrão do Counter de personagem) e Reversal (contra-ataca
+depois de já ter tomado dano, não interrompe) via `SimulatePetRetaliation` — "simples": só rola
+a esquiva do alvo, sem recursão de Counter/Reversal. **Javali** desarma o personagem (15%, só no
+1º hit do turno, nunca contra outro pet) via `CombatEventType.PetDisarm`.
+
+**Interações com skills existentes**:
+- **Net** — alvo decidido ANTES de imobilizar: se o defensor tem pets vivos (e ainda não
+  enredados), 50% de chance de pegar um deles em vez do personagem. `PetState.netEnsnared` é
+  **permanente** — nunca solto de volta (diferente do personagem, que se liberta no próximo hit
+  que sofrer) — `SimulatePetTurn` checa isso no topo, mesmo padrão de skip do personagem.
+- **Bomb** — pets vivos do defensor são atingidos pela mesma explosão (mesmo dano bruto, sem
+  esquiva/crítico/STR/armadura, igual ao personagem) — `CombatEvent.bombPetIndexes`/
+  `bombPetHp` (paralelas), tratadas separado de `GetEnemyTargets`/`bombTargets` porque
+  `PetState` não é um `PlayerState` (misturar os dois tipos exigiria um wrapper só pra isso).
+  Bomb **não** liberta pets da rede (diferente do personagem, que tem a rede quebrada pela
+  explosão).
+- **Fierce Brute — Rato como escudo vivo** — quando o hit dobrado de Fierce Brute vai acertar o
+  personagem e o defensor tem um Rato vivo, 50% de chance do Rato interceptar o golpe no lugar
+  dele (`CombatSimulator.SimulateHit`, dentro do bloco `fierceBruteThisHit`) — dano vai direto
+  pro Rato, sem Resistant/Lead Skeleton/armadura do personagem (nunca chegam a entrar em jogo).
+  Emite `CombatEventType.PetAttack` com `shieldIntercept = true` (reaproveita o evento de ataque
+  de pet pra representar "pet sendo atingido", não "pet atacando").
+- **Chef/poison, Flash Flood, Haste, Piledriver, Vampirism, Tragic Potion** — todos continuam
+  escopados só ao personagem principal, sem nenhuma mudança de código (nunca leem/escrevem
+  `PlayerState.pets`/`PetState.poisoned`).
+
+**Novos `CombatEventType`** (`CombatEvent.cs`): `PetTurnStart`, `PetAttack` (`petIndex`,
+`targetIsPet`, `targetPetIndex`, `newTargetHp`/`newTargetMaxHp` — campos próprios, não reusam
+`newHp`/`maxHp`, que no resto do arquivo representam sempre um jogador; `shieldIntercept` pro
+caso do Rato acima), `PetNetSkip`, `PetDeath`, `PetDisarm`, `PetTurnEnd`. `playerIndex` sempre =
+índice do DONO do pet; quando o alvo de um `PetAttack` é outro pet, `targetIndex` = dono do pet
+alvo (não o pet em si) e `targetPetIndex` = índice na lista dele.
+
+**Instanciação em cena** (`CombatSceneLoader.SpawnPets`, chamado em `Initialize()` só quando o
+simulador está ativo) — 3 campos novos `boarPetPrefab`/`monkeyPetPrefab`/`mousePetPrefab`
+(prefabs em `Assets/Data/UI/Pets/<Tipo>/Vector Parts/<Tipo>.prefab`, wirear no Inspector da cena
+`04_CombatScenePVP`). Cada pet de `profile.pets`/`player2Profile.pets`: escala inicial
+(`PetState.Scale` — Rato 0.30, Macaco 0.35, Javali 0.60, aumentada a pedido do usuário —
+era 0.15/0.20/0.25), posição acima da câmera (mesma
+convenção `spawnY + 12f` dos personagens principais) com X aleatório dentro da arena (P1:
+-5 a -1, P2: 1 a 5), `AddComponent<PetCombatController>` (que por sua vez já adiciona
+`PetAnimationController`/`MovementController` no próprio `Awake`), `HealthBarPet.Create`, e o
+mesmo `EntryFall` coroutine dos personagens (squash de impacto incluso). `CombatPlayer.p1Pets`/
+`p2Pets` (`List<PetCombatController>`) só são atribuídos depois que TODOS os pets e os 2
+personagens principais terminam de pousar (`WaitUntil` combinado).
+
+**Componentes novos**:
+- `PetAnimationController.cs` — resolve o `Animator` do prefab (Spriter2UnityDX), expõe
+  `SetIdle`/`PlayRun`/`PlaySlash`/`PlayHurt`/`PlayJump` (esquiva — trigger `"Jumping"`, **não**
+  `"Jump_Loop"`)/`PlayDying`. Os 3 Animator Controllers dos pets vieram **sem nenhum parâmetro
+  nem transição** (`m_AnimatorParameters: []`, todo estado com `m_Transitions: []` —
+  diferente dos personagens principais, que já tinham isso ajustado manualmente) — novo
+  `Assets/Editor/PetAnimatorSetup.cs` (**Tools → AutoArms → Setup Pet Animators**) recria do
+  zero as 6 states (`Idle`/`Running`/`Slashing`/`Hurt`/`Jumping`/`Dying`) apontando direto pros
+  `.anim` avulsos em `Assets/Data/UI/Pets/<Tipo>/Animations/`, com parâmetros (`Idle`/`Running`
+  bool, `Slashing`/`Hurt`/`Jumping`/`Dying` trigger) e transições equivalentes (versão
+  simplificada) ao padrão dos personagens — `AnyState → Slashing/Hurt/Jumping/Dying`,
+  `Idle ↔ Running`, retorno automático pro Idle depois de Slashing/Hurt/Jumping
+  (`ExitTime = 0.9`), e **Dying sem transição de saída** (trava no último frame, `Loop Time =
+  false`, preparação pra Tamer). O Boar também tinha estados decoy de uma versão anterior do
+  rig (`Sleep`/`Walking`/`Base`/`"Jump Loop"` — esse último apontando pra um clipe embutido
+  diferente do `Jumping.anim` avulso) — todos removidos pelo gerador junto da reconstrução.
+  **Pendente do usuário**: rodar **Tools → AutoArms → Setup Pet Animators** no Editor antes de
+  testar combate com pets — sem isso, os pets ficam presos no estado default do Animator,
+  sem nenhuma animação reagindo aos eventos de combate.
+  - **Bug encontrado depois do 1º teste em combate, reportado pelo usuário**: o Rato se movia
+    de posição normalmente (corria, atacava, voltava ao spawn) mas a POSE visual nunca mudava
+    — sempre a mesma sprite estática, sem nenhum erro no Console. Causa raiz: os clipes em
+    `Animations/*.anim` são **flipbooks simples** — cada um troca o `m_Sprite` de UM
+    `SpriteRenderer` no `path=""` (a própria GameObject que tem o `Animator`), ciclando os
+    frames de `PNG Sequences/<Estado>/*.png` (confirmado lendo `Idle.anim`: 18 keyframes de
+    `m_Sprite`, batendo 1:1 com `Idle_000..017.png`). O prefab `Vector Parts/<Tipo>.prefab`
+    (rig multi-bone exportado do Spriter, usado até então como o GameObject de gameplay) tem o
+    `Animator` na raiz mas **sem nenhum `SpriteRenderer` nela** — só nos ossos filhos (Head/
+    Body/Tail/etc, cada um com seu próprio `SpriteRenderer`) — a curva de `m_Sprite` em
+    `path=""` não tinha componente nenhum pra escrever, falhando em silêncio (sem warning),
+    enquanto o Animator continuava transicionando de estado normalmente por baixo (daí a
+    posição mudar mas a pose nunca mudar). Confirmado o mesmo problema estrutural em Boar e
+    Monkey (mesmo padrão de asset pack). Fix: novo `Assets/Editor/PetPrefabGenerator.cs`
+    (**Tools → AutoArms → Generate Pet Gameplay Prefabs**) gera o prefab de gameplay CORRETO
+    por tipo — 1 GameObject raiz só com `SpriteRenderer` (sprite inicial = `Idle_000`, sorting
+    layer `Characters`) + `Animator` (controller já montado por `PetAnimatorSetup`), sem
+    nenhum osso — salvo em `Assets/Data/UI/Pets/<Tipo>/<Tipo>Pet.prefab` (`BoarPet`/
+    `MonkeyPet`/`MousePet`). **Pendente do usuário**: rodar esse comando e trocar os 3 campos
+    `boarPetPrefab`/`monkeyPetPrefab`/`mousePetPrefab` no Inspector do `CombatSceneLoader`
+    (cena `04_CombatScenePVP`) pra apontar pros novos prefabs em vez dos antigos
+    `Vector Parts/<Tipo>.prefab`.
+- `PetCombatController.cs` — `RunToTarget`/`ReturnToSpawn` (reusa `MovementController.MoveTo`
+  genérico, já existente, sem acoplamento a `PlayerCombat`), `FlipToward`/`FlipToInitial`
+  (mesmo mecanismo de flip por `localScale.x` já usado no projeto), `PlayAttackSequence`
+  (corotina completa: vira pro alvo → corre → ataca → `onImpact` callback → pausa → vira pra
+  trás → corre de volta → idle — `onImpact` é quem decide hit/dodge/dano, já que
+  `CombatPlayer`, que conhece os dois lados do evento, é quem a constrói), `PlayDeath` (toca
+  `Dying`, faz fade da `HealthBarPet`, adiciona à lista estática `deadPets` — **nunca destrói o
+  GameObject**). `CleanupDeadPets()` (static) só limpa essa lista de rastreamento entre lutas —
+  chamado por `AttackSequencer.OnCombatEnd`, junto de `PlayerCombat.CleanupFallenWeapons()`.
+- `HealthBarPet.cs` (`Assets/Scripts/UI/`) — mesmo padrão world-space Canvas de `HealthBar.cs`
+  (personagens principais), mas mais fino (80×8px), sem texto, verde pouco-visível
+  (`Color(0.2, 0.8, 0.2, 0.7)`) sobre fundo preto semi-transparente, e `FadeOutAndDestroy(2s)`
+  em vez de simplesmente desaparecer ao morrer.
+
+**Level-up** (`CombatResultPanel.cs`) — `LevelUpOption.Kind.Pet` (novo, junto de
+Attribute/Skill/Weapon) com peso `wPet = 0.10f` somado ao denominador junto dos outros 3 (sem
+degradar a 0 quando vazio — o pool de pets é sempre `{Mouse, Monkey, Boar}`, nunca vazio, ao
+contrário de Skill/Weapon). `ApplyBonus` adiciona o tipo a `profile.pets` e subtrai o custo de
+HP (tabela acima) de `profile.maxHealth`, clampado em `Mathf.Max(1, ...)`. Também adicionado à
+grade de teste (`ShowAllOptionsChoice`, `ShowAllOptionsForTesting = true` atualmente ativo).
+
+**Investigação de queda de FPS reportada pelo usuário** (depois dos pets entrarem em combate)
+— nenhuma das hipóteses sobre os PETS em si se confirmou (`SpawnGhostTrail` já é escopado só ao
+`transform` do personagem, nunca varre pets; `HealthBarPet.UpdateBar` já é 100% event-driven,
+sem nenhum `Update()` tocando `fillAmount`; `HealthBarPet.Create` já só é chamado 1x por pet;
+`BoarPet`/`MonkeyPet`/`MousePet.prefab` não têm Collider2D/Rigidbody2D — `MovementController`
+sempre usa `transform.position` puro). A causa real era em mecânicas de PERSONAGEM
+pré-existentes, sem nenhum stop garantido ao fim da luta — agravado pelos pets só por
+coincidência de timing (a luta ficou mais comprida com pets em jogo, aumentando a chance de
+terminar com algum desses loops ainda ativo):
+- **Aura do Monk** (`PlayerCombat.MonkAuraPulseLoop`) é permanente "durante a luta" por design
+  (nunca tinha um `Hide`) — `while (monkAura != null) yield return null;` continuava pulsando
+  TODO FRAME mesmo depois do `CombatEnd`, durante o tempo indefinido em que a tela de
+  resultado/level-up fica aberta (a cena `04_CombatScenePVP` continua carregada por baixo
+  dela). Mesmo risco pra quem terminasse a luta ainda net-ensnared (`NetFaceLoop`/
+  `NetOscillateLoop`) ou com a aura de Fierce Brute/Poison ainda ativa.
+- Fix: `CombatPlayer.StopLingeringLoops()` (chamado no topo de `TriggerCombatEnd`, antes de
+  `sequencer.OnCombatEnd`) — `HideStunLabel`/`HideFierceBruteAura(0f)`/`HidePoisonAura(0f)`/
+  novo `PlayerCombat.StopMonkAuraPulse()`/`ReleaseNet()` (destruindo o `netVisual` retornado
+  direto, sem animar fragmentos — irrelevante já com a luta decidida) pros dois personagens, e
+  `FadeFastMetabolismLeaves(0)`/`FadeFastMetabolismLeaves(1)`. Todos já eram idempotentes/no-op
+  se o efeito nunca esteve ativo.
+- **Pets mortos com Animator ainda ativo** — esse sim era um custo real introduzido pelos pets:
+  `PetCombatController.PlayDeath` tocava `Dying` mas nunca desligava o `Animator` depois —
+  como o pet morto NUNCA é destruído (preparação pra Tamer), o Animator continuava avaliando
+  esse estado parado (já travado no último frame, sem nenhuma mudança visual a mais) pelo resto
+  da luta inteira. Novo `PetAnimationController.DisableAfterDying()` — lê a duração real do
+  clipe `Dying` (`animationClips`, mesma técnica de `AnimationAutoDestroy`) e desliga
+  `_animator.enabled` depois dela, chamado por `PlayDeath` logo depois do trigger.
+- Limpeza/instrumentação menor: removido um `Debug.Log` de diagnóstico esquecido em
+  `SpawnGhostTrail` (de quando a Fierce Brute foi implementada, nunca removido — chamava
+  `GetComponentsInChildren` + log a cada ~0.06s durante 1.5s do trail, somando bem mais chamadas
+  do que aparenta). Adicionado um novo `Debug.Log($"[PetHUD] Criando barra para {petType}")` em
+  `CombatSceneLoader.SpawnPets` (diagnóstico, a pedido do usuário, pra confirmar visualmente no
+  Console que cada pet recebe exatamente 1 Canvas — já era o caso antes desta investigação,
+  `SpawnPets` só itera 1x por dono). Novo `CombatPlayer.Update()` com toggle de
+  `UnityEngine.Profiling.Profiler.enabled` na tecla **P** — diagnóstico pra próximas
+  investigações, sem custo relevante (só reage a uma tecla específica).
+
+**Continuação da investigação de FPS (2026-06-24) — causa real era as centenas de `Debug.Log`
+de instrumentação temporária, removidas (ver Logging Policy abaixo); depois disso o usuário
+reportou que a sensação de FPS baixo persistia DENTRO da cena de combate (não só na entrada).
+Profiler do usuário: Rendering (verde) dominante, baseline ~30fps, picos a 15fps com Scripts
+(amarelo) contribuindo nos spikes — confirmado com os 2 profiles de teste (`Medieval Warrior`/
+`Medieval Warrior Girl`) **sem nenhum pet** (`profile.pets` vazio nos dois) — ou seja, o custo de
+Rendering de base **não tem nada a ver com pets**, acontece em qualquer luta normal de 2
+personagens.**
+
+- **Causa do baseline (Rendering)**: cada rig de personagem (`Assets/Personagens/<Nome>/
+  Graphics/`) usa **10+ PNGs separados por bone** (`Body.png`, `Left Arm.png`, `Head.png`,
+  `Sword.png`, `Face 01/02/03.png`, etc.) — cada um sua própria `Texture2D`. O batching de
+  sprites do Unity só agrupa `SpriteRenderer`s que compartilham a MESMA textura/material; sem
+  nenhum Sprite Atlas, cada bone visível de cada personagem é um draw call separado (~20+ só
+  pros 2 rigs principais, antes de armas/HUD/pets) — bate exatamente com "Rendering dominante,
+  mesmo sem pets". Fix: novo `Assets/Editor/CombatSpriteAtlasGenerator.cs`
+  (**Tools → AutoArms → Generate Combat Sprite Atlas**) cria `Assets/Data/SpriteAtlas/
+  CombatAtlas.spriteatlas` (Type Master, sem rotation/tight packing — sprites com transparência
+  e flipbooks animados não combinam com nenhum dos dois) empacotando as 3 pastas `Graphics/` dos
+  personagens + as 3 pastas `PNG Sequences/` dos pets (mesmo problema de textura-por-frame
+  quando pets entrarem em jogo) + `Assets/Data/UI/Weapons/`. **Nenhuma mudança de código
+  necessária além do gerador** — o Unity usa o atlas automaticamente pra qualquer Sprite já
+  referenciado nos assets/prefabs existentes assim que ele for empacotado. **Pendente do
+  usuário**: rodar o comando acima, selecionar o atlas gerado e clicar **Pack Preview** no
+  Inspector (ou simplesmente entrar em Play/Build, que empacota automaticamente).
+- **Causa dos spikes (Scripts)**: confirmado real — `CombatPlayer.SpawnGhostTrail` (efeito
+  "Matrix" da Fierce Brute) cria um `GameObject`+`SpriteRenderer` novo por `Instantiate` pra
+  CADA SpriteRenderer do rig (~10+) a cada 0.06s, por até 1.5s — até ~250 instanciações/luta só
+  nesse efeito, cada uma sendo destruída ~0.5s depois (`FadeOutAndDestroyGhost`). Fix: pool de
+  objetos (`CombatPlayer._ghostPool`/`RentGhost`) — cresce sob demanda, nunca destrói, recicla
+  via `SetActive(true/false)`; `FadeOutAndDestroyGhost` agora desativa em vez de `Destroy`.
+- **Transparency Sort Mode (sugestão do usuário, não aplicada)**: investigado e descartado —
+  `ProjectSettings/GraphicsSettings.asset` já está em `Default` (`m_TransparencySortMode: 0`),
+  que pra uma câmera ortográfica já ordena por distância ao longo do eixo de visão (equivalente
+  a Z aqui). O CUSTO de ordenar N renderers transparentes é o mesmo `O(n log n)` independente do
+  eixo escolhido — trocar pra "Custom Axis (0,1,0)" não reduz nenhum custo de CPU/GPU mensurável,
+  e arriscaria reordenar sprites dentro da MESMA Sorting Layer por posição Y em vez de respeitar
+  só `sortingOrder`, que é como o projeto controla profundidade hoje (ver Sorting Layers acima) —
+  não aplicado.
+- **Canvas world-space por pet / Animator idle de pet (sugestões do usuário)**: não aplicável ao
+  teste reportado — os 2 profiles envolvidos não tinham nenhum pet no momento do teste. Mantidos
+  como possíveis otimizações futuras SE uma luta com vários pets simultâneos vier a reproduzir o
+  mesmo sintoma, mas não implementados agora (sem evidência de que sejam o problema real).
+
+**Bug corrigido no próprio `CombatSpriteAtlasGenerator.cs` (personagens ficaram foscos depois da
+1ª geração do atlas, reportado pelo usuário)**: a 1ª versão nunca chamava
+`atlas.SetPlatformSettings(...)` — sem isso, o atlas usa o `maxTextureSize` default da
+plataforma (bem menor que a soma dos 3 rigs + armas + (na 1ª versão) todas as PNG Sequences dos
+3 pets), forçando o packer a fazer downscale de tudo pra caber numa única página — causa real do
+desfoque, não o `FilterMode` (que já estava em `Bilinear`, igual ao `filterMode: 1` dos `.meta`
+originais de cada PNG — confirmado lendo `Body.png.meta`; **não** trocado pra `Point` como o
+usuário sugeriu, isso deixaria os personagens pixelados, um estilo visual diferente do resto do
+jogo). Fix: `SetPlatformSettings` explícito (`maxTextureSize = 4096`, `format = RGBA32`, sem
+compressão) + o gerador agora deleta e recria o atlas do zero a cada execução (`AssetDatabase.
+DeleteAsset` no início de `Generate()`), garantindo que nenhuma configuração de uma geração
+anterior sobreviva. **Pets removidos do `PackFolders`** (saem do atlas, ficam pra um atlas
+separado só quando forem testados de verdade em combate) — as PNG Sequences somam muitos frames
+por estado × 3 pets, inflando a área total sem nenhum benefício mensurável no teste atual (os 2
+profiles envolvidos não tinham pets). **Pendente do usuário**: rodar **Tools → AutoArms →
+Generate Combat Sprite Atlas** de novo (recria do zero automaticamente, sem precisar apagar o
+asset manualmente) e confirmar visualmente que os personagens voltaram a ficar nítidos.
+
+**Hipótese do `EntityRenderer` (Spriter2UnityDX) como causa de custo por frame — investigada e
+descartada por leitura direta do código-fonte do plugin**: `Assets/Spriter2UnityDX/Runtime/
+EntityRenderer.cs` não tem nenhum método `Update()` — só `Awake`/`OnEnable`/`OnDisable`, todos
+disparados só na criação/ativação do GameObject, nunca por frame. O único componente do plugin
+com `Update()` é `SortingOrderUpdater.cs` (reordena `sortingOrder` com base na posição Z do
+bone) — mas esse só é adicionado quando `EntityRenderer.ApplySpriterZOrder = true`, e
+confirmado via grep que **nenhum** prefab de personagem tem isso ativado
+(`applySpriterZOrder: 0` nos 3 `.prefab` do Medieval Warrior, e zero ocorrências de
+`SortingOrderUpdater` em `Assets/Personagens` no total) — esse componente nunca chega a existir
+em cena. Spriter2UnityDX não introduz nenhum custo por frame neste projeto; não é a causa do
+Rendering dominante no Profiler.
+
+**Pendente de confirmação do usuário**: número de **Batches** no Stats overlay antes/depois do
+atlas (corrigido) — se não cair de forma perceptível mesmo com o atlas empacotando
+corretamente, a causa mais provável não é falta de atlas, e sim **quebra de continuidade do
+batching por intercalação de Sorting Layer**: o Unity só funde em 1 draw call desenhos
+CONSECUTIVOS que compartilham material+textura — se uma arma (`Weapons`/`Weapons2`) ou um
+ghost trail (`Characters2`) é desenhado ENTRE dois bones do mesmo personagem (`Characters`) na
+ordem de profundidade, a sequência se quebra mesmo com todos os bones já num atlas único. Isso
+seria uma limitação estrutural do sistema de Sorting Layers do próprio projeto (ver Sorting
+Layers acima), não um problema do atlas ou do Spriter2UnityDX — precisa do número real de
+Batches pra confirmar antes de qualquer mudança nesse sentido.
+
+**Confirmado pelo usuário**: Batches não mudou entre Menu (14) e Combate (14) — atlas funcionando
+corretamente (Saved by batching subiu de 10 pra 18-20 durante o combate). O CPU ms (33-36ms,
+~27-30fps) era na maior parte **VSync** — `ProjectSettings/QualitySettings.asset` tinha
+`m_CurrentQuality: 5` (Ultra) com `vSyncCount: 1` ("Every V Blank"); com VSync desligado nessa
+Quality, FPS subiu pra ~36 (27.8ms). Não é mais investigação, é configuração de projeto
+confirmada pelo usuário diretamente no Editor.
+
+**Freezes pontuais remanescentes mesmo com VSync desligado (GC.Alloc)**: `Assets/Scripts/UI/
+DamagePopup.cs` — cada popup (`Spawn`/`SpawnDodge`/`SpawnHeal`/etc., usado em TODO hit/dodge/
+block/miss/combo/cura) fazia `new GameObject` + `AddComponent<DamagePopup>` +
+`AddComponent<TextMeshPro>`, destruído 1s depois — `TextMeshPro` aloca buffers de mesh/material
+internamente em Add/Destroy, caro o bastante pra gerar um spike perceptível quando vários
+popups nascem em sequência rápida (combo longo, Flash Flood com 3 arremessos, burst de 10 curas
+do Fast Metabolism). Reescrito pra pool estático (`DamagePopup._pool`/`Rent`, mesmo padrão de
+`CombatPlayer._ghostPool`/`RentGhost`) — `AddComponent<TextMeshPro>` só roda 1x por objeto
+pooled, reciclado via `SetActive(true/false)` em vez de `Destroy`; os ~14 métodos `Init*`
+antigos (1 por tipo de popup) foram consolidados num único `Begin(text, fontSize, color)` de
+instância, chamado pelos `Spawn*` estáticos depois de `Rent()` — mesmo texto/fonte/cor de cada
+variante preservados exatamente.
+
+**Bug corrigido no próprio pool do `DamagePopup` (`MissingReferenceException` reportado pelo
+usuário)**: `_pool` é `static`, então sobrevive a um `SceneManager.LoadScene` (Combate →
+MainMenu → Combate de novo, dentro da mesma sessão de Play) — diferente dos GameObjects que ele
+referencia, destruídos junto da cena anterior. A próxima luta tentava reusar uma entrada morta
+do pool e `p.gameObject` lançava `MissingReferenceException`. Fix: `Rent()` agora começa com
+`_pool.RemoveAll(p => p == null)` — usa o operator overload do `UnityEngine.Object` (`==`
+retorna `true` pra uma referência já destruída, "fake null" do Unity), autolimpando o pool a
+cada uso, sem precisar de nenhum hook de ciclo de vida externo (`ClearPool()`/
+`CombatSceneLoader` nunca precisam saber que o pool existe). `CombatPlayer._ghostPool`
+(ghost trail da Fierce Brute) **não** tem esse problema — é um campo de instância de
+`CombatPlayer`, que por sua vez é criado via `AddComponent` do zero em todo
+`CombatSceneLoader.Initialize()` (sem `DontDestroyOnLoad`/singleton), então é destruído junto da
+cena toda vez, nunca carrega referência de uma luta anterior.
+
+**Causa real do stutter recorrente, confirmado pelo palpite do usuário ("começou junto dos
+pets")**: `CombatPlayer.ExecuteEvent`'s `case PetAttack` montava `System.Action onImpact = () =>
+{...}` capturando 5 variáveis locais (`pet`, `evt`, `targetPetCombat`, `targetCharacter`,
+`targetPos`) — toda closure que captura variáveis precisa de um objeto extra no heap pra guardar
+essas variáveis, MAIS o delegate em si, **alocados de novo em TODO ataque de pet da luta
+inteira** (não 1x por luta como os outros `Instantiate`/`new GameObject` já investigados — um
+pet ataca repetidas vezes ao longo dos rounds, então essa alocação se repete continuamente
+durante todo o combate, batendo com "o stutter continua acontecendo" em vez de um hitch único).
+Fix: `CombatPlayer._onPetImpact` — campo `readonly System.Action` inicializado 1x com o method
+group de `HandlePetImpact` (instância nunca recriada, sem closure) — e o estado que antes era
+capturado (`pet`/`evt`/alvo/posição) agora mora em campos de instância (`_petImpactPet`/
+`_petImpactEvt`/`_petImpactTargetPet`/`_petImpactTargetCharacter`/`_petImpactTargetPos`),
+setados no `case PetAttack` imediatamente antes de `StartCoroutine(PlayAttackSequence(...))` e
+lidos por `HandlePetImpact()` (novo método privado, mesma lógica de antes, sem captura). Seguro
+porque os eventos do `CombatPlayer` são processados estritamente em sequência (1 única coroutine
+de replay, nunca 2 `PetAttack` concorrentes no mesmo `CombatPlayer`) — não há risco de um
+`PetAttack` sobrescrever os campos de outro ainda em voo.
+
+**Causa real do "engasgo" (diferente do fix acima — esse era válido, mas não era O stutter
+reportado)**: o usuário esclareceu que o FPS no Stats overlay continua normal durante o
+travamento, e que ele acontece especificamente **no momento de entrar em `04_CombatScenePVP`**
+(queda do céu dos personagens) — não espalhado pelo combate. FPS médio normal + um "engasgo"
+visual pontual = jitter de frame time concentrado, não custo sustentado de GC — outra categoria
+de problema, sem relação com o fix do `PetAttack` acima (esse continua válido, só não era a
+causa DESTE sintoma específico).
+
+`CombatSceneLoader.SpawnPets` era um método **síncrono** (`void`, não coroutine) chamado 2x em
+sequência direto de dentro de `Initialize()`, no MESMO frame em que `StartCoroutine(EntryFall(...))`
+dos 2 personagens principais acabava de ser disparado — ou seja, todo o custo de `Instantiate`
++ `AddComponent<PetCombatController>` + `HealthBarPet.Create` (que monta um Canvas+Image+
+RectTransform inteiro) de **cada pet de cada lado** ficava concentrado exatamente no frame em
+que a queda do céu (a única coisa em movimento visível bem no instante de entrar na cena) está
+prestes a começar a ser desenhada. Antes dos pets existirem, esse frame só continha o
+`StartCoroutine` dos 2 `EntryFall` (barato); pets sozinhos não mudaram a ARQUITETURA do bug
+(`SpawnPets` sempre foi síncrono), só inflaram o que já cabia nesse frame até passar do limiar
+de ser visualmente perceptível — explica por que o usuário associa o início do problema aos
+pets sem que o código deles tenha, sozinho, criado o padrão.
+
+Fix: `SpawnPets` virou `IEnumerator`, chamado via `StartCoroutine` (fire-and-forget, mesmo
+padrão de `EntryFall`) em vez de uma chamada direta — `yield return null` depois de cada pet
+instanciado, espalhando o custo por frame em vez de empacar todos os pets de um lado de uma vez
+só. Mais 1 `yield return null` inserido logo ANTES dos 2 `StartCoroutine(SpawnPets(...))`,
+depois do `StartCoroutine(EntryFall(...))` dos personagens principais — garante que a queda dos
+2 personagens principais comece sozinha no próprio frame, sem nenhum `Instantiate`/`AddComponent`
+de pet competindo por ciclos de CPU naquele exato instante. `petsDone`/`WaitUntil` (mecanismo já
+existente que tolera conclusão assíncrona/fora de ordem) não precisou de nenhuma mudança.
+Removido também o `Debug.Log($"[PetHUD] Criando barra para {petType}")` temporário (instrumentação
+da investigação 1e, já confirmada há tempo — 1 Canvas por pet, sem duplicação).
+
+**Log pré-combate** (`CombatLogFormatter.cs`) — `Format()` ganhou 2 parâmetros opcionais
+(`p1Pets`/`p2Pets`, `List<PetType>`) pra resolver o nome de exibição (Rato/Macaco/Javali) por
+índice — sem eles (chamadas antigas) cai no fallback genérico `"Pet"`. `CombatSceneLoader`
+passa `profile.pets`/`player2Profile.pets` na única chamada existente.
+
+**Escalonamento por nível do dono** (`PetState.ApplyLevelScaling`) — a cada 5 níveis do
+PERSONAGEM DONO (level 5, 10, 15...), os stats do pet sobem permanentemente pro resto daquela
+luta: `levelTiers = ownerLevel / 5` (divisão inteira). Rato: `+5 HP`/`+1 Speed` por tier.
+Macaco: `+10 HP`/`+2 AGI`/`+1 Speed` por tier. Javali: `+20 HP`/`+1 AGI`/`+1 Speed`/`+3 STR` por
+tier. Chamado 1x na construção do `PetState` (`CombatSimulator.BuildState`, logo depois de
+`PetState.Create`) — entra no `maxHp`/`speed`/`agility`/`str` definitivos da luta, nunca
+recalculado durante o combate em si. **Não afeta** o custo de HP do dono (`PetState.HpCost` —
+Rato -12/Macaco -36/Javali -48): esse é fixo, perdido de uma vez só na escolha do pet no
+level-up, sem relação com o escalonamento. Espelhado em `CombatSceneLoader.SpawnPets` (a
+`PetState.Create` "preview" usada só pra inicializar o valor de `PetCombatController.maxHp`/
+a `HealthBarPet`, ver acima) — sem isso a barra de vida mostraria um máximo desatualizado em
+relação ao HP real usado pelo simulador. Sem exibição na UI ainda — intenção documentada (não
+implementada) de uma futura `PlayerProfile.GetEffectivePetStats()`, mesmo padrão de
+`GetEffectiveStats()` (ver **Stats System**), pra quando o `CharacterPanel` ganhar uma
+aba/seção própria de Pets.
+
 ### Entry Drop (Entrada em Cena)
 Ao carregar `04_CombatScenePVP`, ambos os personagens aparecem 12 unidades acima de sua `spawnPosition` (fora da câmera) e caem simultaneamente com gravidade (28f) antes do combate começar.
 
@@ -960,11 +1332,9 @@ O projeto não usa `Debug.Log`/`Debug.LogWarning` soltos pelo código — só `D
 Exceções (todas no caminho do `CombatSimulator`, quando `useSimulator=true`):
 - `CombatSceneLoader.Initialize()` imprime **um** `Debug.Log(CombatLogFormatter.Format(...))` com o resumo completo da luta inteira, gerado depois de `CombatSimulator.Simulate()` e antes de `CombatPlayer.PlayCombat()` começar a tocar as animações — ver `CombatLogFormatter` abaixo.
 - `CombatSimulator.Simulate()` loga `[CombatSimulator] Iniciando simulação...` na entrada e `[CombatSimulator] {n} eventos gerados` na saída — confirmação rápida de que o simulador rodou, sem precisar ler o log completo.
-- `CombatSimulator.SimulateTurn` loga `[ComboChance] {nome} (P1|P2, arma=...) hit extra #{n} chance={valor}` a cada checagem do loop de combo (antes do `Roll()`) — instrumentação temporária para validar a fórmula de `ComboChance()` (base + AGI + comboBonus da arma + skills, teto 60%, decaimento ×0.5 por hit extra consecutivo). Remover quando o balanceamento estiver confirmado.
-- `CombatSimulator.EmitSpeedBonus` loga `[SpeedBonus] round={n} {nome} (P1|P2) ação extra, index={i}` sempre que o popup "RAPIDO!" é emitido — instrumentação temporária para confirmar que `index` nunca é 0 (ou seja, nunca dispara na 1ª ação do round, só na 2ª em diante). Remover quando confirmado.
-- `CombatSimulator.CalcDamage` loga `[CalcDamage] {nome} arma=... weaponBaseDamage=... str=... critMult=... isCrit=... resultado=...` em **todo** hit normal/combo — confirma os componentes exatos da fórmula `(weaponBaseDamage + str) × critMultiplier × sharpMult`. `CombatSimulator.CalcThrowDamage` loga `[CalcThrowDamage] arma=... weaponDamage=... str=... resultado=...` em todo arremesso, pra confirmar que o throw soma STR (`weaponDamage + str`). Remover os dois quando o balanceamento estiver confirmado.
 - `CombatSimulator.ApplySpySabotage` loga `[Spy] Armas sabotadas: {nome1}, {nome2} (-20% dano).` quando a skill **Spy** sabota pelo menos 1 arma do oponente — **não** é instrumentação temporária, pedido explícito do usuário para sempre aparecer no pré-combate (ver seção própria **Spy** em Combat Systems).
-- `CombatSimulator.ApplySaboteur` loga `[Saboteur] Arma destruída: {nome} | initiative do oponente -100.` quando a skill **Saboteur** destrói uma arma do oponente — mesma exceção deliberada, pedido explícito do usuário (ver seção própria **Saboteur** em Combat Systems).
+
+**Instrumentação temporária removida (2026-06-24, investigação de FPS drop)** — `[WeaponLoadout]` (`LogWeaponLoadout`, 4 armas × 2 jogadores = 8 linhas/luta), `[ComboChance]` (`SimulateComboLoop`, 1 linha por checagem de combo), `[SpeedBonus]` (`EmitSpeedBonus`) e `[CalcDamage]`/`[CalcThrowDamage]` (1 linha por hit/arremesso, literalmente todo hit da luta) — todas já estavam marcadas no código como "remover quando confirmado" desde a implementação original de cada mecânica, mas nunca tinham sido removidas de fato. Causavam dezenas de `Debug.Log` síncronos (cada um com captura de stack trace pro Console, intrinsicamente lento no Editor) concentrados em poucos frames — `CombatSimulator.Simulate()` roda a luta INTEIRA de uma vez, antes de qualquer animação tocar (ver arquitetura no CombatSimulator Architecture abaixo), então todas essas centenas de chamadas aconteciam basicamente no mesmo frame, exatamente quando a cena `04_CombatScenePVP` carrega — reportado pelo usuário como "fica estranho" especificamente ao entrar na cena de combate (MainMenu continuava normal, sem nenhuma chamada desse tipo). Removida também a referência a um log de `ApplySaboteur` que a doc antiga ainda citava aqui — esse log já tinha sido removido bem antes, junto da reescrita da mecânica de Saboteur pra "quebra a 1ª arma puxada" (ver seção própria **Saboteur** em Combat Systems — "Log pré-combate removido junto da mecânica antiga").
 
 ### CombatLogFormatter
 `Assets/Scripts/Combat/CombatLogFormatter.cs` — `Format(p1Name, p2Name, List<CombatEvent>)` é puro C# (sem MonoBehaviour) e devolve uma string multi-linha legível: um cabeçalho com os dois nomes, uma linha `--- Turno de {nome} ---` por `TurnStart`, e uma linha por ação relevante (pickup/equip/throw/hit com dano+crit/combo+HP resultante/dodge/block/miss/disarm/drop/speed bonus), terminando em `========== VENCEDOR: {nome} ==========`. `Hit` consome o `HealthChanged` emparelhado (mesmo `targetIndex`, evento seguinte) para anexar o HP resultante na mesma linha. `RunToDefender` e `TurnEnd` não geram linha própria.
@@ -1007,7 +1377,7 @@ Sem limitador por atributo — toda a sorte pode cair em um único stat.
 
 Para re-sortear: **Tools → AutoArms → Randomize Level 1 Stats** (`Assets/Editor/CharacterCreationEditor.cs`). Só afeta profiles com `level == 1`.
 
-**Tools → AutoArms → Reset All Profiles to Level 1** — além de `level`/`xpCurrent`/`xpRequired`/`battlesRemaining`, agora também: re-sorteia HP/STR/AGI/SPD via `CharacterCreation.GenerateLevel1Stats()` (mesma lógica do botão acima), limpa `profile.skills`, e reseta `profile.weaponLoadout.weapons` para as 4 armas iniciais (Satyr1, Golem3, Succubus, Zombie — guids hardcoded em `DefaultWeaponGuids`). Como cada profile tem seu próprio `WeaponLoadout` (ver tabela de ScriptableObject Assets acima), isso não afeta os outros personagens.
+**Tools → AutoArms → Reset All Profiles to Level 1** — além de `level`/`xpCurrent`/`xpRequired`/`battlesRemaining`, agora também: re-sorteia HP/STR/AGI/SPD via `CharacterCreation.GenerateLevel1Stats()` (mesma lógica do botão acima), limpa `profile.skills`, limpa `profile.pets` (bug corrigido — faltava desde a implementação dos pets; sem isso o profile voltava pro level 1 mas continuava com os pets antigos, e como `profile.maxHealth` já é sobrescrito direto pelo HP sorteado de `GenerateLevel1Stats()` — não descontado relativamente — o custo de HP de cada pet já saía implicitamente zerado mesmo sem essa linha, só os pets em si que ficavam presos), e reseta `profile.weaponLoadout.weapons` para as 4 armas iniciais (Satyr1, Golem3, Succubus, Zombie — guids hardcoded em `DefaultWeaponGuids`). Como cada profile tem seu próprio `WeaponLoadout` (ver tabela de ScriptableObject Assets acima), isso não afeta os outros personagens.
 
 ### Campos e defaults
 
@@ -1116,11 +1486,17 @@ Referência jogável: https://brute.eternaltwin.org/
 - Thrown: pode ser arremessada no adversário
 - Block: chance de bloquear dano recebido
 
-### Pets planejados
+### Pets planejados (roster original, substituído na implementação — ver Fase 3/Combat Systems)
 - Cachorro — meat shield inicial, combatente fraco
 - Lobo — versão mais forte do cachorro
 - Águia — ataque à distância
 - Urso — mais poderoso, alta vida própria
+
+**Implementado de fato**: Rato (Mouse, equivalente ao Cachorro), Macaco (Monkey, equivalente
+ao Lobo/uma versão mais ágil), Javali (Boar, equivalente ao Urso) — os assets de arte
+(`Assets/Data/UI/Pets/{Boar,Monkey,Mouse}/`) já existiam nesse roster antes da implementação
+de código, então o roster real seguiu os assets disponíveis em vez do texto original. Sem
+Águia (ataque à distância) — nenhum dos 3 pets ataca a distância.
 
 ### Progressão e XP
 - Vitória: +3 XP
@@ -1243,6 +1619,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Atributos aleatórios ao criar personagem level 1 (vida, força, agilidade, velocidade)
 - [ ] Habilidades inspiradas no My Brute
 - [ ] Criar habilidades originais adicionais
+- [ ] **Arte chibi + retrato realista do personagem**: ao criar o personagem, ter duas versões visuais — o boneco chibi (estilo atual usado em combate/seleção) na frente, e uma versão mais realista do mesmo personagem ao fundo. Pedir ajuda a alguma IA de geração de imagem pra gerar essas duas versões e definir/separar o estilo de cada uma.
 
 ### Fase 2 — Combate Robusto
 - [x] Barra de vida com dano baseado em status + dano da arma
@@ -1268,7 +1645,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 ### Fase 3 — Armas & Pets
 - [ ] Criar mais armas com sprites e stats (tipos: Fast, Slow, Heavy, Thrown, Block)
 - [ ] Sistema de raridade de armas
-- [ ] Pets: cachorro, lobo, águia, urso
+- [x] Pets: Rato (Mouse), Macaco (Monkey), Javali (Boar) — substituem o roster original (cachorro/lobo/águia/urso) do "Pets planejados" abaixo, que ficou desatualizado frente aos assets reais (Boar/Monkey/Mouse) já disponíveis em `Assets/Data/UI/Pets/`. Ver seção própria **Pets** em Combat Systems.
 
 ### Fase 4 — Monetização
 - [ ] Sistema de diamantes (moeda premium)
@@ -1284,6 +1661,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] **Pacote Premium — Diamantes (quantia maior) + libera 2x e Skip juntos** (30 dias): tier acima dos dois passes diários — diamante por dia em quantidade maior que A/B somados, e libera os dois botões (2x e Skip) ao mesmo tempo durante a vigência. Pensar se substitui A+B ou é um upgrade comprável por cima.
 - [ ] **Passe Mensal de Arma (Battle Pass)**: progressão por XP de passe, ganho ao completar batalhas (separado do XP de personagem/level já existente). Ao subir de nível no passe, libera **3-4 skins de arma** ao longo do mês — cada skin dá atributos extras na arma equipada (dano/crítico/etc. acima do `WeaponData` base) — sendo a **última (nível mais alto do passe) a mais rara/forte** das recompensas. Precisa definir: curva de XP do passe (independente da curva de XP de personagem), se o passe expira ao fim dos 30 dias levando recompensas não coletadas, e se dá pra comprar níveis do passe direto com diamante (skip de progresso, padrão comum em battle pass).
 - [ ] **Pacotes de diamantes (loja) e promoções**: tela de loja com vários pacotes de diamante em quantidades/preços crescentes (ex: pequeno/médio/grande/mega), com bônus de diamante extra proporcionalmente maior nos pacotes mais caros (incentiva compra do pacote maior). Promoções temporárias: desconto por tempo limitado, diamante em dobro na primeira compra, pacote sazonal ligado a evento/torneio. Depende do Sistema de diamantes (ainda não implementado, item acima) e da integração de pagamento real (Google Play Billing / Apple StoreKit / Steam, ver checklist de Segurança/Validação server-side em Fase 8). Precisa definir: quantidades e preços de cada pacote, e se as promoções são manuais (painel admin) ou agendadas por código.
+- [ ] **Slot extra de atributo/habilidade/arma pago (caro)**: compra cara (R$100-150) de 1 slot adicional de atributo, habilidade ou arma, liberado quando o personagem sobe de level — oferecer também como benefício de um pacote/passe mensal, como alternativa à compra avulsa única. Precisa definir: preço exato, se é só 1 slot por personagem (limite) ou repetível, e se entra como upgrade do passe mensal já planejado acima ou como pacote separado.
 
 ### Fase 5 — Endgame & Social
 - [ ] Mapa PVE
@@ -1308,12 +1686,15 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] Torneios 2v2 e 3v3
 - [ ] Sistema de discípulos (recrutar amigos = bônus XP)
 - [ ] Guildas
+- [ ] **Convite de amigo dá premiação**: jogador que convida um amigo pra instalar/criar conta ganha algum prêmio (diamante, item, etc. — ainda não decidido qual). Diferente do "Sistema de discípulos" acima (bônus de XP por recrutar) — esse é sobre o próprio ato do convite dar recompensa; precisa decidir se os dois sistemas coexistem ou se um substitui o outro.
+- [ ] **Presença em redes sociais (Discord, Instagram, etc.)**: criar e divulgar canais oficiais do jogo (servidor de Discord pra comunidade, conta de Instagram). Ainda não decidido o conteúdo de cada canal nem o cronograma de lançamento.
 
 ### Fase 6 — Infraestrutura
 - [ ] Criar cena 03_SelectWeapons (já referenciada no código)
 - [ ] Definir banco de dados para salvar personagens (Firebase ou PlayFab)
 - [ ] Integrar persistência de dados online
 - [ ] **Decidir arquitetura de servidor — por região vs. por temporada/tempo**: ainda não decidido, pensar com calma antes de implementar. Servidor **por região** (ex: Brasil, EUA, Europa) reduz latência e é o padrão pra jogos competitivos/PVP em tempo real — mas esse jogo é turn-based assíncrono (`CombatSimulator` pré-calcula o combate inteiro), então a sensibilidade a latência é bem menor que num jogo de ação ao vivo, o que reduz a urgência de sharding por região. Servidor **por tempo/temporada** (ex: reset periódico de ranking/torneio, ligado ao Battle Pass mensal já planejado acima) é mais sobre ciclo de conteúdo/economia do que sobre infraestrutura física, e os dois não são mutuamente exclusivos (pode ter região E temporada ao mesmo tempo). Definir antes de decidir: se vai ter PVP em tempo real de verdade (justificaria região) ou só matchmaking assíncrono (não justificaria tanto).
+- [ ] **Login/criação de conta por múltiplos métodos**: além de conta própria por email, permitir login/criação de conta via Google, Apple e Facebook (OAuth). Depende da escolha de backend de autenticação (Firebase Auth ou PlayFab Auth, já listado em Segurança/Fase 8).
 
 ### Fase 7 — Plataformas & Distribuição
 - [ ] Instalar módulos Android e iOS no Unity Hub (Android SDK, NDK, OpenJDK)
@@ -1398,8 +1779,11 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
 
 ### Progresso
-- Total: 116 tarefas | Concluídas: 55
-- Última atualização: 2026-06-23 (Timing da explosão do veneno (skill **Chef**) ajustado pelo usuário — a explosão (`PoisonDamage`) tocava ANTES do jump-back de volta ao spawn (mesma posição em que o personagem agiu); agora `CombatSimulator.EmitTurnEnd` emite `TurnEnd` primeiro e só depois `PoisonDamage`, então a explosão só toca quando o envenenado já pulou de volta e está parado. `CombatPlayer`'s case `PoisonDamage` deixou de ser fire-and-forget — agora espera a duração real do clipe (`animator.runtimeAnimatorController.animationClips[0].length`, mesma técnica do `AnimationAutoDestroy`) antes de liberar o próximo evento da lista, pra a animação do veneno sempre terminar de tocar antes da próxima ação começar. Ver seção própria **Chef** em Combat Systems (atualizada).
+- Total: 121 tarefas | Concluídas: 56
+- Última atualização: 2026-06-25 (5 tasks novas adicionadas ao roadmap pelo usuário: chibi+retrato realista do personagem ao criar (Fase 1), slot extra de atributo/habilidade/arma pago caro R$100-150 ou via pacote mensal (Fase 4), convite de amigo dá premiação e presença em redes sociais Discord/Instagram (Fase 5), login/criação de conta por email/Google/Apple/Facebook (Fase 6) — nenhuma decisão de design fechada ainda, só registradas)
+- Última atualização anterior: 2026-06-24 (**4 ajustes nos pets (Mouse/Monkey/Boar), pedidos pelo usuário**: (1) **Targeting** — pets agora são alvos válidos do adversário: novo `CombatSimulator.RollPetTarget(defender)` (chamado 1x no topo de `SimulateTurn`, antes de Flash Flood/Haste/Piledriver/Supers/melee) rola, pra cada pet vivo do defensor, uma chance própria de ser o alvo do turno em vez do personagem — Boar 75%, Monkey/Mouse 50% (`PetTargetChance`); se mais de um passar, sorteia 1. `targetPet` é então passado por `SimulateHaste`/`SimulatePiledriver`/`TryActivateVampirism`/`SimulateThrow`/`SimulateHitWithDetermination`/`SimulateHit`/`SimulateComboLoop` — cada um ganhou um branch dedicado quando o alvo é pet: só rola a esquiva do pet (`evasionBase`, mesmo termo de `SimulatePetHit`), sem Counter/Block/Reversal/Disarm/Resistant/armadura (nenhum existe pra pet); Piledriver passa a usar `targetPet.str` em vez de `defender.str`. Flash Flood/Bomb não mudam (já atingem todos via `GetEnemyTargets`); Thief/pickup/swap continuam só contra o personagem. Visual em `CombatPlayer`: novo helper `PlayPetTargetedSuper` (corre até o pet, resolve, volta) cobre Haste/Piledriver/Vampirism contra pet sem replicar a coreografia cheia de cada Super (atravessar a tela, erguer no ar, montar nas costas — não fazem sentido contra um pet pequeno); `Hit`/`Dodge`/`Miss`/`RunToDefender` ganharam branches `evt.targetIsPet` que redirecionam swing/popup/hurt/morte pro `PetCombatController` em vez do `PlayerCombat` defensor. (2) **Escala visual** — `PetState.Scale` aumentada (Mouse 0.15→0.30, Monkey 0.20→0.35, Boar 0.25→0.60), já consumida por `CombatSceneLoader.SpawnPets`. (3) **Engasgo de animação corrigido** — causa raiz identificada: os 18 clipes `.anim` dos 3 pets (Idle/Running/Slashing/Hurt/Jumping/Dying) estavam todos com `m_SampleRate: 12` e keyframes espaçados em 1/12s (default do "Create Animation" do Unity ao selecionar um PNG Sequence), em vez de 1/30s (33ms) do export real do Spriter Pro — ou seja, tocavam a 12fps, 2.5× mais lento/picotado que o pretendido. Corrigido reescalando os tempos de todos os keyframes (`time(i) = i/30`) e `m_SampleRate`/`m_StopTime` nos 18 arquivos. Transições `Idle↔Running` dos 3 `Vector Parts/<Tipo>.controller` (as que de fato estão wireadas nos prefabs `<Tipo>Pet.prefab`, não as órfãs em `Animations/<Tipo>.controller`) tinham `m_TransitionDuration: 0.05` — zeradas pra 0s (Has Exit Time já era `false`); `PetAnimatorSetup.cs` atualizado pra gerar `duration = 0f` em futuras regenerações. Update Mode dos 3 Animators já era `Normal` (sem mudança). **Boar Slashing não disparava**: o trigger em si já estava corretamente wireado no Animator (`AnyState → Slashing`, `canTransitionToSelf=1`) — o problema era só a duração de 2.08s do clipe a 12fps, tão mais longa que a janela de swing (`comboDelay×2`=0.4s) que o golpe nunca chegava a ficar visualmente reconhecível como um slash antes do resto da sequência continuar. Com o fix de Sample Rate o clipe já cai pra ~0.83s (perto do pedido); novo `PetState.SlashDuration(type)` (Boar 0.85f, default 0.4f) + novo campo `PetCombatController.petType` (setado por `CombatSceneLoader.SpawnPets`) alimentam `comboDelay = SlashDuration/2` no case `PetAttack` de `CombatPlayer`, em vez do `0.2f` fixo de antes. (4) **Dano do Monkey** — `PetState.DamageRange(Monkey)` de `(6,10)` pra `(9,12)`, pedido pelo usuário.
+- Última atualização anterior: 2026-06-24 (**Pets implementados** — Rato (Mouse), Macaco (Monkey), Javali (Boar) entram na luta desde o início, atacam separadamente com seus próprios atributos, e ficam caídos no chão (GameObject nunca destruído) quando nocauteados — preparação pra skill futura Tamer. Novos `PetType`/`profile.pets` em `PlayerProfile`, `PetState.cs` (pure C#, stats/dano/custo de HP/escala por tipo), `PlayerState.pets`, 6 `CombatEventType` novos (`PetTurnStart/PetAttack/PetNetSkip/PetDeath/PetDisarm/PetTurnEnd`) + campos novos em `CombatEvent` (`petIndex`/`targetIsPet`/`targetPetIndex`/`newTargetHp`/`newTargetMaxHp`/`shieldIntercept`/`bombPetIndexes`/`bombPetHp`). `CombatSimulator`: `SimulatePetActions`/`SimulatePetTurn`/`SimulatePetHit`/`SimulatePetRetaliation` (speed debt próprio por pet, sem mínimo de 1 ação/round — Javali demora ~3-4 rounds pra atacar; 40% de chance de atacar pet inimigo em vez do personagem; Macaco conta Counter/Reversal quando atacado; Javali desarma personagem 15% no 1º hit); interações com Net (50% de pegar um pet em vez do personagem, permanente), Bomb (atinge pets vivos também), Fierce Brute (Rato intercepta 50% dos hits dobrados como "escudo vivo"); Chef/Flash Flood/Haste/Piledriver/Vampirism/Tragic Potion continuam só pro personagem, sem mudança. Componentes novos: `PetAnimationController`/`PetCombatController` (`Assets/Scripts/Combat/`), `HealthBarPet` (`Assets/Scripts/UI/`, barra fina world-space, fade out ao morrer). `CombatSceneLoader.SpawnPets` instancia os pets (3 novos campos de prefab no Inspector), entry fall + squash igual aos personagens. `CombatPlayer` ganhou `p1Pets`/`p2Pets` e os 6 cases novos. `CombatResultPanel`: categoria Pet no level-up (peso 10%, pool sempre `{Mouse,Monkey,Boar}`, sem restrição de duplicata) — escolher subtrai HP do dono (Rato -12/Macaco -36/Javali -48, clampado em mínimo 1). `CombatLogFormatter.Format` ganhou 2 parâmetros opcionais (`p1Pets`/`p2Pets`) pra resolver nomes de exibição. `AttackSequencer.OnCombatEnd` chama `PetCombatController.CleanupDeadPets()` junto de `CleanupFallenWeapons`. **Pendente do usuário**: os 3 Animator Controllers dos pets (Boar/Monkey/Mouse) vieram do Spriter2UnityDX sem nenhum parâmetro/transição configurada — novo `Assets/Editor/PetAnimatorSetup.cs` (**Tools → AutoArms → Setup Pet Animators**) monta os 6 estados/transições necessários, mas precisa ser executado no Editor antes do 1º teste; também wirear os 3 prefabs (`boarPetPrefab`/`monkeyPetPrefab`/`mousePetPrefab`) no `CombatSceneLoader` da cena `04_CombatScenePVP`, e adicionar pelo menos 1 pet a algum `PlayerProfile.pets` pra testar (ainda não há nenhum profile existente com pets, e a única forma de ganhar um é pelo level-up). Ver seção própria **Pets** em Combat Systems.
+- Última atualização anterior: 2026-06-23 (Timing da explosão do veneno (skill **Chef**) ajustado pelo usuário — a explosão (`PoisonDamage`) tocava ANTES do jump-back de volta ao spawn (mesma posição em que o personagem agiu); agora `CombatSimulator.EmitTurnEnd` emite `TurnEnd` primeiro e só depois `PoisonDamage`, então a explosão só toca quando o envenenado já pulou de volta e está parado. `CombatPlayer`'s case `PoisonDamage` deixou de ser fire-and-forget — agora espera a duração real do clipe (`animator.runtimeAnimatorController.animationClips[0].length`, mesma técnica do `AnimationAutoDestroy`) antes de liberar o próximo evento da lista, pra a animação do veneno sempre terminar de tocar antes da próxima ação começar. Ver seção própria **Chef** em Combat Systems (atualizada).
 - Última atualização anterior: 2026-06-23 (Visual da skill **Chef** redefinido pelo usuário — a explosão verde (`chef.anim`) não toca mais no momento em que a pizza aterrissa no defensor (`ChefPizzaThrow`); agora a pizza só some ao chegar (sem explodir), e a explosão de verdade passa a tocar no fim de TODO turno do envenenado, parado, sincronizada com o tick real do veneno (`PoisonDamage`) — já era ali que o dano de fato acontecia (`EmitTurnEnd`), só faltava o visual seguir o mesmo timing. Escala renomeada de `ChefExplosionScale` (`1.8f`) pra `ChefPizzaScale` (`0.3f`, bem menor, "simular que está envenenado") e agora aplicada nos dois lugares — na pizza durante o voo (`ChefPizzaThrow`) e na explosão do tick (`PoisonDamage`), em vez de só na explosão. A Bomb (escala `2.5f`, "domina a tela") não foi alterada — usuário confirmou que era só a explosão/pizza do Chef que devia ficar pequena, a Bomb continua igual. Ver seção própria **Chef** em Combat Systems (atualizada).
 - Última atualização anterior: 2026-06-23 (Bug de compilação corrigido em `Assets/Editor/ChefEffectGenerator.cs`, reportado pelo usuário: `EditorCurveBinding.PPtrCurveBinding(...)` não existe nessa API (`CS0117`) — o binding precisa ser construído direto pelos campos públicos do struct (`new EditorCurveBinding { path, type, propertyName }`). No mesmo intervalo, o usuário terminou de montar `chef.anim` (curva de `m_Sprite` sobre os 10 frames, via Animation Window) e `Explosion_1.controller` (estado "chef" usando esse clipe) no Editor — os dois ficaram completos antes mesmo do gerador rodar, diferente do estado vazio observado na 1ª inspeção dos arquivos. **Gerador simplificado** de volta ao mesmo padrão do `PiledriverEffectGenerator` (não precisa mais montar clipe/controller do zero, só força `Loop Time = false` — estava `m_LoopTime: 1` — e monta o prefab). Ver seção própria **Chef** em Combat Systems (atualizada).
 - Última atualização anterior: 2026-06-23 (Skill **Chef** implementada — Passivo de Combate (não é Super, não entra no loop embaralhado de Supers). Na 1ª ação do dono da skill nesta luta (`PlayerState.chefPizzaThrown`), lança uma pizza envenenada que SEMPRE acerta (sem Roll de Dodge/Block) e não consome o turno; marca `defender.poisoned = true` e calcula `poisonDamagePerTurn = Max(1, CeilToInt(maxHp * 0.01f))` no momento do lançamento. **Refatoração**: `CombatSimulator.SimulateTurn` tinha 8 pontos de saída emitindo `TurnEnd` direto (skip por Net/Stun, Supers, throw, melee) — generalizados num funil único, `EmitTurnEnd(attacker)`, que aplica o tick do veneno (se `attacker.poisoned`, via `ApplyDamage` — Survival/Chaining/Fast Metabolism continuam funcionando) ANTES do próprio `TurnEnd`, em TODO turno do envenenado, mesmo turnos inteiramente pulados (Net/Stun) — sem duração, só curado pela Tragic Potion (`poisoned = false`, já preparado antes). Novos `CombatEventType.ChefPizzaThrow`/`PoisonDamage` (sem campos novos em `CombatEvent`, reusam `damage`/`newHp`/`playerIndex`/`targetIndex`). Visual: lançamento em arco idêntico à estrutura da Bomb (rotação 300°/s, escala de explosão 1.8 — menor, "é uma pizza"), `PlayerCombat.ShowPoisonAura`/`HidePoisonAura` (aura verde persistente, mesmo padrão procedural da Fierce Brute/Monk, destruída no `TragicPotionUse` — no-op se nunca esteve envenenado), `PoisonDamage` reusa `FlashCharacterGreen` (já existente, do pulso da Fast Metabolism) + novo `DamagePopup.SpawnPoison` (verde escuro). **Assets incompletos resolvidos por código**: diferente do Bomb/Piledriver, nem o clipe (`chef.anim`) nem o controller (`Explosion_1.controller`) do usuário tinham conteúdo real (clipe sem curva, controller sem layer) — novo `Assets/Editor/ChefEffectGenerator.cs` (**Tools → AutoArms → Generate Chef Effect Prefab**) gera o clipe (`ChefExplosion.anim`, 25fps, sem loop) a partir dos frames `Explosion_1..10.png`, popula o controller existente, e monta `ChefPizzaPrefab.prefab`. **Pendente do usuário**: rodar esse comando, wirear o prefab gerado no novo campo **Chef Pizza Prefab** do `CombatSceneLoader` (cena `04_CombatScenePVP`), e rodar **Tools → AutoArms → Generate Skill Assets** pra resolver o `skill_chef.asset` (ícone já existia). Ver seção própria **Chef** em Combat Systems.

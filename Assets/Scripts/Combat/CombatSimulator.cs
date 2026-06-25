@@ -27,12 +27,6 @@ public class CombatSimulator
         _p1 = BuildState(p1Profile, index: 0);
         _p2 = BuildState(p2Profile, index: 1);
 
-        // Diagnóstico temporário: confirma que os campos de WeaponData chegaram certos do
-        // asset (pedido pelo usuário após suspeitar que damage não estava sendo lido depois
-        // da migração de WeaponType único para WeaponData.types). Remover quando confirmado.
-        LogWeaponLoadout(_p1);
-        LogWeaponLoadout(_p2);
-
         // Saboteur ANTES de Spy (ordem pedida pelo usuário) — destrói 1 arma aleatória do
         // loadout do oponente e dá -100 initiative nele, antes de qualquer turno. Validar
         // Saboteur primeiro garante que Spy calcula "metade do loadout" já em cima do que
@@ -153,21 +147,21 @@ public class CombatSimulator
             foreach (var sk in profile.skills)
                 if (sk?.skillName != null) s.skills.Add(sk.skillName);
 
-        return s;
-    }
+        // Pets (Fase 3) — instâncias independentes a partir de PlayerProfile.pets, sem
+        // restrição de duplicatas (3 Ratos geram 3 PetState separados, cada um com seu
+        // próprio HP/estado).
+        if (profile.pets != null)
+            foreach (var petType in profile.pets)
+            {
+                var pet = PetState.Create(petType);
+                if (pet != null)
+                {
+                    pet.ApplyLevelScaling(profile.level);
+                    s.pets.Add(pet);
+                }
+            }
 
-    // Diagnóstico temporário (ver chamada em Simulate) — confirma nome, damage, types,
-    // hitSpeed, critChanceBonus e comboBonus de cada WeaponData do loadout, lidos direto do
-    // asset, antes de qualquer sorteio/equip da luta.
-    private void LogWeaponLoadout(PlayerState s)
-    {
-        foreach (var w in s.weaponLoadout)
-        {
-            if (w == null) continue;
-            string types = w.types != null ? string.Join(",", w.types) : "(none)";
-            Debug.Log($"[WeaponLoadout] P{s.index + 1} {s.name}: arma={w.weaponName} damage={w.damage} " +
-                      $"types=[{types}] hitSpeed={w.hitSpeed} critChanceBonus={w.critChanceBonus} comboBonus={w.comboBonus}");
-        }
+        return s;
     }
 
     private void ApplySkillStats(PlayerState s)
@@ -330,23 +324,65 @@ public class CombatSimulator
         for (int i = 0; i < firstActCount; i++)
         {
             if (!_p1.isAlive || !_p2.isAlive) return;
-            if (i > 0) EmitSpeedBonus(round, firstAttacker, i);
+            if (i > 0) EmitSpeedBonus(firstAttacker);
             SimulateTurn(firstAttacker, firstDefender);
         }
+
+        // Pets (Fase 3) — ordem simplificada: pets do atacante agem logo depois das ações
+        // principais dele, antes do segundo atacante (e dos pets dele) começarem. Não entram
+        // no sorteio de iniciativa acima — só seguem o jogador a quem pertencem.
+        if (!_p1.isAlive || !_p2.isAlive) return;
+        SimulatePetActions(firstAttacker, firstDefender);
 
         for (int i = 0; i < secondActCount; i++)
         {
             if (!_p1.isAlive || !_p2.isAlive) return;
-            if (i > 0) EmitSpeedBonus(round, secondAttacker, i);
+            if (i > 0) EmitSpeedBonus(secondAttacker);
             SimulateTurn(secondAttacker, secondDefender);
+        }
+
+        if (!_p1.isAlive || !_p2.isAlive) return;
+        SimulatePetActions(secondAttacker, secondDefender);
+    }
+
+    // Speed debt PRÓPRIO de cada pet (não compara contra a speed de um "oponente" 1:1 como os
+    // personagens fazem entre si — não existe par equivalente pra pets). Usa uma baseline fixa
+    // de 10 (mesmo valor base de personagem comum) como divisor: Rato (10) e Macaco (20) agem
+    // pelo menos 1x por round quase sempre (Macaco às vezes 2x); Javali (3) acumula devagar e só
+    // libera a 1ª ação por volta do 3º-4º round — sem mínimo forçado de 1 ação por round (ao
+    // contrário do personagem) pra essa demora aparecer de verdade, conforme pedido.
+    private void SimulatePetActions(PlayerState owner, PlayerState enemyOwner)
+    {
+        if (owner.pets.Count == 0) return;
+
+        foreach (var pet in owner.pets)
+        {
+            if (!owner.isAlive || !enemyOwner.isAlive) return;
+
+            if (!pet.isAlive)
+            {
+                // Pet caído ainda "ocupa" um turno por round (emite só os eventos de skip) —
+                // preparação pra Tamer futuramente poder interagir com ele fora de uma janela
+                // de ação específica não é necessária aqui, é só pra manter o log consistente.
+                SimulatePetTurn(pet, owner, enemyOwner, enemyOwner.pets);
+                continue;
+            }
+
+            pet.speedDebt += pet.speed;
+            int actions = 0;
+            while (pet.speedDebt >= 10) { actions++; pet.speedDebt -= 10; }
+
+            for (int i = 0; i < actions; i++)
+            {
+                if (!owner.isAlive || !enemyOwner.isAlive) return;
+                if (!pet.isAlive) break;
+                SimulatePetTurn(pet, owner, enemyOwner, enemyOwner.pets);
+            }
         }
     }
 
-    // Diagnóstico temporário: confirma round/índice de ação exatos em que o popup "RAPIDO!"
-    // é disparado, para validar que nunca acontece em i=0 (1ª ação, nunca é bônus de velocidade).
-    private void EmitSpeedBonus(int round, PlayerState player, int actionIndex)
+    private void EmitSpeedBonus(PlayerState player)
     {
-        Debug.Log($"[SpeedBonus] round={round} {player.name} (P{player.index + 1}) ação extra, index={actionIndex}");
         Emit(new CombatEvent { type = CombatEventType.SpeedBonus, playerIndex = player.index, extraActions = 1 });
     }
 
@@ -377,6 +413,18 @@ public class CombatSimulator
             return;
         }
 
+        // Pets como alvo válido do adversário (pedido pelo usuário): decidido 1x por turno,
+        // antes de qualquer ação real do atacante — cada pet vivo do defensor tem sua própria
+        // chance de ser sorteado como alvo no lugar do personagem principal (Boar 75%, Monkey/
+        // Mouse 50%; se mais de um passar, sorteia 1 entre eles). Usado por melee (SimulateHit/
+        // SimulateComboLoop), SimulateThrow, Haste e Piledriver, e pela Super Vampirism (todas
+        // resolvidas mais abaixo) — Flash Flood e Bomb continuam ignorando isso por completo
+        // (já atingem todos os alvos via GetEnemyTargets, sem necessidade de redirecionar um
+        // único alvo) e Thief/pickup/swap continuam só contra o personagem (não faz sentido
+        // roubar/equipar arma de um pet). Net já tem seu próprio roll de 50% pra pegar um pet
+        // em vez do personagem, separado e sem relação com este (ver TryActivateNet).
+        PetState targetPet = RollPetTarget(defender);
+
         // 0. Flash Flood (Super, 1x por luta): 17% de chance por ação, exige >= 3 armas no
         // weaponLoadout e o uso ainda disponível. weaponLoadout inclui a arma em mão enquanto
         // equipada (nunca é removida da lista só por estar empunhada — ver BuildState/
@@ -398,7 +446,7 @@ public class CombatSimulator
         // Checado ANTES de Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno.
         if (attacker.HasSkill("Haste") && attacker.hasteUsesRemaining > 0 && Roll(0.23f))
         {
-            SimulateHaste(attacker, defender);
+            SimulateHaste(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
         }
@@ -410,7 +458,7 @@ public class CombatSimulator
         // DEFENSOR, não do atacante — ver SimulatePiledriver.
         if (attacker.HasSkill("Piledriver") && attacker.piledriverUsesRemaining > 0 && Roll(0.17f))
         {
-            SimulatePiledriver(attacker, defender);
+            SimulatePiledriver(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
         }
@@ -505,7 +553,11 @@ public class CombatSimulator
         if (attacker.HasSkill("Tragic Potion") && attacker.tragicPotionUsesRemaining > 0)
             supers.Add(() => { TryActivateTragicPotion(attacker); return false; });
         if (attacker.HasSkill("Vampirism") && attacker.vampirismUsesRemaining > 0)
-            supers.Add(() => TryActivateVampirism(attacker, defender));
+            supers.Add(() => TryActivateVampirism(attacker, defender, targetPet));
+        if (attacker.HasSkill("Cry of the Damned") && attacker.cryOfTheDamnedUsesRemaining > 0)
+            supers.Add(() => { TryActivateCryOfTheDamned(attacker, defender); return false; });
+        if (attacker.HasSkill("Hypnosis") && attacker.hypnosisUsesRemaining > 0)
+            supers.Add(() => { TryActivateHypnosis(attacker, defender); return false; });
         // futuros Supers entram aqui
 
         ShuffleList(supers);
@@ -594,15 +646,18 @@ public class CombatSimulator
             // chega a agir de verdade, então o buff persiste pro turno seguinte (ver
             // TryActivateFierceBrute) — aqui ele chega a agir (arremessar), só não com o bônus.
             attacker.fierceBruteActive = false;
-            SimulateThrow(attacker, defender);
+            SimulateThrow(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
         }
 
         // 4. Melee
-        Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index });
-        bool interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: false, out bool _);
-        SimulateComboLoop(attacker, defender, interrupted);
+        {
+            int runTargetPetIdx = targetPet != null ? defender.pets.IndexOf(targetPet) : -1;
+            Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = targetPet != null, targetPetIndex = runTargetPetIdx });
+        }
+        bool interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: false, out bool _, targetPet);
+        SimulateComboLoop(attacker, defender, interrupted, targetPet);
 
         EmitTurnEnd(attacker);
     }
@@ -624,6 +679,165 @@ public class CombatSimulator
         }
     }
 
+    // --- Pets (Fase 3) ---
+
+    // Turno de um pet. Alvo é decidido uma única vez (não re-sorteado a cada hit extra de
+    // combo) — 40% de chance de atacar um pet inimigo vivo aleatório em vez do personagem
+    // principal, se houver algum vivo. Combo do pet usa o mesmo decaimento ×0.5 do personagem
+    // (ComboChance), mas sem clamp/bônus de tag de arma — é só pet.comboRate puro — e com um
+    // teto fixo de 3 hits extras (em vez de decair até ficar irrelevante como no personagem).
+    private void SimulatePetTurn(PetState pet, PlayerState petOwner, PlayerState enemy, List<PetState> enemyPets)
+    {
+        int petIndex = petOwner.pets.IndexOf(pet);
+        Emit(new CombatEvent { type = CombatEventType.PetTurnStart, playerIndex = petOwner.index, petIndex = petIndex });
+
+        if (!pet.isAlive || pet.netEnsnared)
+        {
+            Emit(new CombatEvent { type = CombatEventType.PetNetSkip, playerIndex = petOwner.index, petIndex = petIndex });
+            Emit(new CombatEvent { type = CombatEventType.PetTurnEnd, playerIndex = petOwner.index, petIndex = petIndex });
+            return;
+        }
+
+        var aliveEnemyPetIdx = new List<int>();
+        for (int i = 0; i < enemyPets.Count; i++)
+            if (enemyPets[i].isAlive) aliveEnemyPetIdx.Add(i);
+
+        bool targetIsPet  = aliveEnemyPetIdx.Count > 0 && Roll(0.40f);
+        int  targetPetIdx = targetIsPet ? aliveEnemyPetIdx[_rng.Next(aliveEnemyPetIdx.Count)] : -1;
+
+        bool interrupted = SimulatePetHit(petOwner, petIndex, enemy, enemyPets, targetIsPet, targetPetIdx, comboCount: 0);
+
+        int comboCount = 0;
+        while (!interrupted && pet.isAlive && comboCount < 3)
+        {
+            float chance = pet.comboRate * Mathf.Pow(0.5f, comboCount);
+            if (!Roll(chance)) break;
+            comboCount++;
+            interrupted = SimulatePetHit(petOwner, petIndex, enemy, enemyPets, targetIsPet, targetPetIdx, comboCount);
+        }
+
+        Emit(new CombatEvent { type = CombatEventType.PetTurnEnd, playerIndex = petOwner.index, petIndex = petIndex });
+    }
+
+    // Uma tentativa de ataque do pet (1ª do turno, ou hit extra de combo). Retorna `interrupted`
+    // = true só quando o Macaco alvo conta com sucesso (mesmo padrão do Counter de personagem:
+    // cancela o resto do combo deste pet no turno). comboCount == 0 identifica o 1º hit do
+    // turno — só nele o Javali pode desarmar (mesma regra "first hit only" do desarme normal).
+    private bool SimulatePetHit(PlayerState petOwner, int petIndex, PlayerState enemyOwner, List<PetState> enemyPets, bool targetIsPet, int targetPetIdx, int comboCount)
+    {
+        var pet = petOwner.pets[petIndex];
+        if (!pet.isAlive) return true;
+
+        PetState targetPet = targetIsPet ? enemyPets[targetPetIdx] : null;
+        if (targetIsPet && (targetPet == null || !targetPet.isAlive)) return true;
+        if (!targetIsPet && !enemyOwner.isAlive) return true;
+
+        var (minDmg, maxDmg) = PetState.DamageRange(pet.type);
+        int damage = _rng.Next(minDmg, maxDmg + 1);
+
+        // Esquiva: alvo personagem usa a fórmula normal de DodgeChance, mas sem o termo de
+        // accuracy do atacante (pet não tem esse stat) — ver PetDodgeChanceOnCharacter. Alvo
+        // pet usa só o próprio evasionBase, sem nenhum outro termo.
+        bool isDodged = targetIsPet ? Roll(targetPet.evasionBase) : Roll(PetDodgeChanceOnCharacter(enemyOwner));
+
+        // Macaco sendo atacado: Counter cancela o hit antes de conectar (interrompe o resto do
+        // combo deste pet, mesmo padrão do Counter de personagem).
+        if (targetIsPet && targetPet.type == PetType.Monkey && Roll(targetPet.counter))
+        {
+            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, isDodged = true });
+            SimulatePetRetaliation(enemyOwner, targetPetIdx, petOwner, petIndex);
+            return true;
+        }
+
+        if (isDodged)
+        {
+            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = targetIsPet, targetIndex = enemyOwner.index, targetPetIndex = targetIsPet ? targetPetIdx : -1, isDodged = true });
+            return false;
+        }
+
+        if (targetIsPet)
+        {
+            ApplyDamageToPet(targetPet, damage);
+            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, damage = damage, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
+
+            if (!targetPet.isAlive)
+                Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = enemyOwner.index, petIndex = targetPetIdx });
+            else if (targetPet.type == PetType.Monkey && Roll(targetPet.reversal))
+                SimulatePetRetaliation(enemyOwner, targetPetIdx, petOwner, petIndex); // não interrompe o combo, mesmo padrão do Reversal de personagem
+        }
+        else
+        {
+            enemyOwner.hp = ApplyDamage(enemyOwner, damage);
+            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = false, targetIndex = enemyOwner.index, damage = damage, newHp = enemyOwner.hp, maxHp = enemyOwner.maxHp });
+            Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = enemyOwner.index, newHp = enemyOwner.hp, maxHp = enemyOwner.maxHp });
+            CheckNetFreed(enemyOwner);
+
+            // Javali: 15% de desarme, só no 1º hit do turno (comboCount == 0), só contra personagem.
+            if (comboCount == 0 && pet.type == PetType.Boar && enemyOwner.currentWeaponData != null && Roll(0.15f))
+            {
+                string wn = enemyOwner.currentWeaponData.weaponName;
+                enemyOwner.weaponLoadout.Remove(enemyOwner.currentWeaponData);
+                enemyOwner.currentWeaponData = null;
+                Emit(new CombatEvent { type = CombatEventType.PetDisarm, playerIndex = petOwner.index, petIndex = petIndex, targetIndex = enemyOwner.index, weaponName = wn });
+            }
+        }
+
+        return false;
+    }
+
+    // Macaco contra-atacando (Counter, antes do hit conectar, ou Reversal, depois de já ter
+    // tomado dano) — sempre o pet retaliador batendo no pet atacante original. "Simples" por
+    // pedido: sem checar esquiva do atacante além do evasionBase dele, sem recursão de
+    // Counter/Reversal (uma retaliação nunca é retaliada de novo).
+    private void SimulatePetRetaliation(PlayerState retaliatorOwner, int retaliatorPetIndex, PlayerState targetOwner, int targetPetIndex)
+    {
+        var retaliator = retaliatorOwner.pets[retaliatorPetIndex];
+        var targetPet  = targetOwner.pets[targetPetIndex];
+        if (!retaliator.isAlive || !targetPet.isAlive) return;
+
+        var (minDmg, maxDmg) = PetState.DamageRange(retaliator.type);
+        int dmg    = _rng.Next(minDmg, maxDmg + 1);
+        bool dodged = Roll(targetPet.evasionBase);
+
+        if (!dodged) ApplyDamageToPet(targetPet, dmg);
+
+        Emit(new CombatEvent
+        {
+            type = CombatEventType.PetAttack,
+            playerIndex = retaliatorOwner.index, petIndex = retaliatorPetIndex,
+            targetIsPet = true, targetIndex = targetOwner.index, targetPetIndex = targetPetIndex,
+            damage = dodged ? 0 : dmg, isDodged = dodged,
+            newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp,
+        });
+
+        if (!targetPet.isAlive)
+            Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = targetOwner.index, petIndex = targetPetIndex });
+    }
+
+    // Mirrors DodgeChance(attacker, defender), mas sem o termo `- attacker.accuracy` (pets não
+    // têm esse stat) — usado quando o atacante é um pet e o alvo é o personagem principal.
+    private float PetDodgeChanceOnCharacter(PlayerState defender)
+    {
+        if (defender.noEvasion) return 0f;
+
+        float baseChance = defender.currentWeaponData == null
+            ? 0.10f
+            : TagSum(defender.currentWeaponData, sharp: 0.10f, fast: 0.05f, heavy: 0.05f);
+        float agiBonus      = Mathf.Max(0, defender.agility - 3) * 0.02f;
+        float weaponEvasion = defender.currentWeaponData != null
+            ? defender.currentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
+        float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
+        float bodybuilderBonus = (WeaponData.HasType(defender.currentWeaponData, WeaponType.Heavy) && defender.HasSkill("Bodybuilder")) ? 0.10f : 0f;
+        float total = baseChance + agiBonus + defender.evasion + weaponEvasion + survivalBonus + bodybuilderBonus;
+        return Mathf.Clamp(total, 0f, 0.60f);
+    }
+
+    private void ApplyDamageToPet(PetState pet, int rawDamage)
+    {
+        pet.hp = Mathf.Max(0, pet.hp - rawDamage);
+        if (pet.hp <= 0) pet.isAlive = false;
+    }
+
     // Combo loop (mirrors AttackRoutine's while loop). Each consecutive extra hit decays the
     // chance by ×0.5 (1st extra hit normal, 2nd ×0.5, 3rd ×0.25, ...) — mirrors My Brute, where
     // combo probability drops sharply after the first follow-up. Counter zera o resto do combo
@@ -631,16 +845,16 @@ public class CombatSimulator
     // condições de continuar a sequência) — Dodge, Block e Reversal não interrompem nada, o
     // combo continua normal depois deles. Reversal pode disparar de novo em cada hit extra do
     // combo, independente do(s) anterior(es).
-    private void SimulateComboLoop(PlayerState attacker, PlayerState defender, bool interrupted)
+    private void SimulateComboLoop(PlayerState attacker, PlayerState defender, bool interrupted, PetState targetPet = null)
     {
         int comboCount = 0;
-        while (!interrupted && attacker.isAlive && defender.isAlive)
+        // Alvo decidido 1x no início do turno (targetPet) — se for um pet, o combo inteiro
+        // continua nele; a condição de continuação usa a vida do pet em vez da do personagem.
+        while (!interrupted && attacker.isAlive && (targetPet != null ? targetPet.isAlive : defender.isAlive))
         {
             float comboChance = ComboChance(attacker, comboCount);
-            string weaponLabel = attacker.currentWeaponData != null ? attacker.currentWeaponData.weaponName : "Unarmed";
-            Debug.Log($"[ComboChance] {attacker.name} (P{attacker.index + 1}, arma={weaponLabel}) hit extra #{comboCount + 1} chance={comboChance:P1}");
             if (!Roll(comboChance)) break;
-            interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: true, out bool _);
+            interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: true, out bool _, targetPet);
             comboCount++;
         }
     }
@@ -655,12 +869,16 @@ public class CombatSimulator
     // Chamado tanto pro primeiro golpe do turno quanto por cada hit do loop de combo em
     // SimulateTurn — os dois usam este wrapper em vez de SimulateHit direto, então Determination
     // se aplica igual nos dois casos.
-    private bool SimulateHitWithDetermination(PlayerState attacker, PlayerState defender, bool isCombo, out bool damageDealt)
+    private bool SimulateHitWithDetermination(PlayerState attacker, PlayerState defender, bool isCombo, out bool damageDealt, PetState targetPet = null)
     {
-        bool interrupted = SimulateHit(attacker, defender, isCombo, out damageDealt);
+        bool interrupted = SimulateHit(attacker, defender, isCombo, out damageDealt, targetPet);
 
-        while (!damageDealt && attacker.HasSkill("Determination") && attacker.isAlive && defender.isAlive && Roll(0.60f))
-            interrupted = SimulateHit(attacker, defender, isCombo: false, out damageDealt);
+        bool targetAlive = targetPet != null ? targetPet.isAlive : defender.isAlive;
+        while (!damageDealt && attacker.HasSkill("Determination") && attacker.isAlive && targetAlive && Roll(0.60f))
+        {
+            interrupted = SimulateHit(attacker, defender, isCombo: false, out damageDealt, targetPet);
+            targetAlive = targetPet != null ? targetPet.isAlive : defender.isAlive;
+        }
 
         return interrupted;
     }
@@ -670,9 +888,48 @@ public class CombatSimulator
     // Dodge/Block/Reversal, que não interrompem). damageDealt (out): true só quando o dano
     // normal de fato foi aplicado ao defensor — usado por Determination (ver
     // SimulateHitWithDetermination acima) pra saber quando NÃO tentar de novo.
-    private bool SimulateHit(PlayerState attacker, PlayerState defender, bool isCombo, out bool damageDealt)
+    private bool SimulateHit(PlayerState attacker, PlayerState defender, bool isCombo, out bool damageDealt, PetState targetPet = null)
     {
         damageDealt = false;
+
+        // Pets como alvo válido (ver RollPetTarget/SimulateTurn): quando o alvo deste turno é
+        // um pet em vez do personagem, o golpe é resolvido de forma simplificada — só esquiva
+        // (pet.evasionBase, mesmo termo já usado quando um pet ataca um personagem em
+        // SimulatePetHit/PetDodgeChanceOnCharacter), sem Counter/Block/Reversal/Disarm/Chaining/
+        // Sabotage/Iron Head/Resistant/armadura (nenhum desses existe pra um pet). Fierce Brute
+        // ainda dobra o dano normalmente (é um buff do atacante, não depende do tipo de alvo) —
+        // mas a interceptação do Rato (ver branch de personagem abaixo) não se aplica aqui, já
+        // que o alvo já É um pet.
+        if (targetPet != null)
+        {
+            bool fierceBruteThisPetHit = !isCombo && attacker.fierceBruteActive;
+            int petIdx = defender.pets.IndexOf(targetPet);
+
+            if (Roll(targetPet.evasionBase))
+            {
+                if (fierceBruteThisPetHit) attacker.fierceBruteActive = false;
+                Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = true, targetPetIndex = petIdx });
+                return false;
+            }
+
+            damageDealt = true;
+            bool  isCritPet = Roll(CritChance(attacker));
+            float dmgPet    = CalcDamage(attacker, isCritPet);
+            if (fierceBruteThisPetHit)
+            {
+                dmgPet *= 2f;
+                attacker.fierceBruteActive = false;
+            }
+            int finalDamagePet = Mathf.Max(1, Mathf.RoundToInt(dmgPet));
+            ApplyDamageToPet(targetPet, finalDamagePet);
+
+            Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamagePet, isCrit = isCritPet, isCombo = isCombo, isFierceBrute = fierceBruteThisPetHit, targetIsPet = true, targetPetIndex = petIdx, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
+
+            if (!targetPet.isAlive)
+                Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = petIdx });
+
+            return false; // pets não têm Counter — nunca interrompe o combo do atacante
+        }
 
         // Fierce Brute: só a 1ª tentativa de hit do turno (isCombo == false) é elegível pro
         // dobro de dano — combo extra nunca dobra, e cada retry de Determination (também
@@ -778,6 +1035,28 @@ public class CombatSimulator
         {
             dmg *= 2f;
             attacker.fierceBruteActive = false;
+
+            // Rato (Mouse) como escudo vivo: 50% de chance dele interceptar o hit já dobrado no
+            // lugar do personagem, se o defensor tiver um Rato vivo. Dano vai direto pro Rato
+            // (sem Resistant/Lead Skeleton/armadura do personagem — esses nunca chegam a entrar
+            // em jogo, já que o hit nem alcança o defensor de verdade).
+            var mouse = defender.pets.Find(p => p.isAlive && p.type == PetType.Mouse);
+            if (mouse != null && Roll(0.50f))
+            {
+                int mouseIdx    = defender.pets.IndexOf(mouse);
+                int petDamage   = Mathf.Max(1, Mathf.RoundToInt(dmg));
+                ApplyDamageToPet(mouse, petDamage);
+                Emit(new CombatEvent
+                {
+                    type = CombatEventType.PetAttack, playerIndex = defender.index, petIndex = mouseIdx,
+                    targetIsPet = true, targetIndex = defender.index, targetPetIndex = mouseIdx,
+                    damage = petDamage, newTargetHp = mouse.hp, newTargetMaxHp = mouse.maxHp,
+                    shieldIntercept = true,
+                });
+                if (!mouse.isAlive)
+                    Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = mouseIdx });
+                return false;
+            }
         }
 
         // Resistant: cap no dano bruto, antes de Lead Skeleton/armadura (ver ApplyResistantCap).
@@ -961,7 +1240,7 @@ public class CombatSimulator
 
     // --- Throw resolution ---
 
-    private void SimulateThrow(PlayerState attacker, PlayerState defender)
+    private void SimulateThrow(PlayerState attacker, PlayerState defender, PetState targetPet = null)
     {
         var  weaponData = attacker.currentWeaponData;
         // HasType (não tipo único) — uma arma pode ter Thrown combinado com outra tag (ex: uma
@@ -982,6 +1261,26 @@ public class CombatSimulator
         attacker.currentWeaponData = null;
 
         Emit(new CombatEvent { type = CombatEventType.ThrowWeapon, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
+
+        // Pets como alvo válido: arremesso contra um pet usa só o evasionBase dele (mesmo termo
+        // de SimulateHit acima) em vez do hitChance/Hideaway do personagem — Hideaway é skill do
+        // personagem, pets não a herdam.
+        if (targetPet != null)
+        {
+            int petIdx = defender.pets.IndexOf(targetPet);
+            if (Roll(targetPet.evasionBase))
+            {
+                Emit(new CombatEvent { type = CombatEventType.Miss, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = true, targetPetIndex = petIdx });
+                return;
+            }
+
+            int dmg = CalcThrowDamage(attacker, weaponData);
+            ApplyDamageToPet(targetPet, dmg);
+            Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true, targetIsPet = true, targetPetIndex = petIdx, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
+            if (!targetPet.isAlive)
+                Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = petIdx });
+            return;
+        }
 
         // Hideaway: +25% block contra arremessos recebidos — reduz direto a chance de acerto do
         // throw (80% → 55%, miss sobe de 20% pra 45%), em vez de um 3º resultado separado de
@@ -1094,9 +1393,32 @@ public class CombatSimulator
     // normalmente (mesmas DodgeChance/BlockChance de qualquer hit) — só não passa por
     // Counter/Reversal/Desarme, já que não é um golpe corpo a corpo comum, é um dash que
     // atravessa o oponente. Não consome a arma em mão (currentWeaponData intocado).
-    private void SimulateHaste(PlayerState attacker, PlayerState defender)
+    private void SimulateHaste(PlayerState attacker, PlayerState defender, PetState targetPet = null)
     {
         attacker.hasteUsesRemaining--;
+
+        // Pets como alvo válido: dash contra um pet só rola a esquiva dele (evasionBase) — sem
+        // Block (pets não têm), sem CheckNetFreed (netEnsnared de pet é permanente).
+        if (targetPet != null)
+        {
+            int petIdx = defender.pets.IndexOf(targetPet);
+            if (Roll(targetPet.evasionBase))
+            {
+                Emit(new CombatEvent { type = CombatEventType.HasteAttack, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = true, targetPetIndex = petIdx, isDodged = true });
+                return;
+            }
+
+            bool  isCritPet = Roll(CritChance(attacker) + 0.05f);
+            float dmgPet    = attacker.speed * 1.5f;
+            if (isCritPet) dmgPet *= CritDamageMultiplier(attacker);
+            int finalDamagePet = Mathf.Max(1, Mathf.RoundToInt(dmgPet));
+            ApplyDamageToPet(targetPet, finalDamagePet);
+
+            Emit(new CombatEvent { type = CombatEventType.HasteAttack, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = true, targetPetIndex = petIdx, damage = finalDamagePet, isCrit = isCritPet, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
+            if (!targetPet.isAlive)
+                Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = petIdx });
+            return;
+        }
 
         // Net: defensor enredado não pode esquivar/bloquear o dash também (mesmo gate de
         // SimulateHit) — a rede impede evadir o próximo ataque, qualquer que seja.
@@ -1131,9 +1453,27 @@ public class CombatSimulator
     // impacto da queda). NUNCA passa por Roll(BlockChance)/Roll(DodgeChance) — o grab já
     // aconteceu antes do pulo, não há janela pra reagir (diferente de Haste, que pode ser
     // esquivado/bloqueado).
-    private void SimulatePiledriver(PlayerState attacker, PlayerState defender)
+    private void SimulatePiledriver(PlayerState attacker, PlayerState defender, PetState targetPet = null)
     {
         attacker.piledriverUsesRemaining--;
+
+        // Pets como alvo válido: igual ao personagem, NUNCA esquivado — mas a STR usada na
+        // fórmula passa a ser a do próprio PET agarrado (targetPet.str), não a do dono
+        // (PetState tem o campo str, ver tabela de stats dos pets).
+        if (targetPet != null)
+        {
+            int petIdx = defender.pets.IndexOf(targetPet);
+            bool  isCritPet = Roll(CritChance(attacker));
+            float dmgPet    = targetPet.str * 2.5f;
+            if (isCritPet) dmgPet *= CritDamageMultiplier(attacker);
+            int finalDamagePet = Mathf.Max(1, Mathf.RoundToInt(dmgPet));
+            ApplyDamageToPet(targetPet, finalDamagePet);
+
+            Emit(new CombatEvent { type = CombatEventType.PiledriverAttack, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = true, targetPetIndex = petIdx, damage = finalDamagePet, isCrit = isCritPet, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
+            if (!targetPet.isAlive)
+                Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = petIdx });
+            return;
+        }
 
         bool  isCrit = Roll(CritChance(attacker));
         float dmg    = defender.str * 2.5f;
@@ -1157,8 +1497,24 @@ public class CombatSimulator
         if (attacker.netUsesRemaining <= 0 || !Roll(0.50f)) return false;
 
         attacker.netUsesRemaining--;
-        defender.netEnsnared = true;
-        Emit(new CombatEvent { type = CombatEventType.NetThrow, playerIndex = attacker.index, targetIndex = defender.index });
+
+        // Alvo decidido ANTES de imobilizar: se o defensor tem pets vivos (e ainda não
+        // enredados), 50% de chance de pegar um deles em vez do personagem. netEnsnared de pet
+        // é PERMANENTE (PetState.netEnsnared nunca é solto de volta, ver SimulatePetTurn) —
+        // diferente do personagem, que se liberta no próximo hit que sofrer.
+        var alivePets = new List<int>();
+        for (int i = 0; i < defender.pets.Count; i++)
+            if (defender.pets[i].isAlive && !defender.pets[i].netEnsnared) alivePets.Add(i);
+
+        bool caughtPet    = alivePets.Count > 0 && Roll(0.50f);
+        int  caughtPetIdx = caughtPet ? alivePets[_rng.Next(alivePets.Count)] : -1;
+
+        if (caughtPet)
+            defender.pets[caughtPetIdx].netEnsnared = true;
+        else
+            defender.netEnsnared = true;
+
+        Emit(new CombatEvent { type = CombatEventType.NetThrow, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = caughtPet, targetPetIndex = caughtPetIdx });
         return true;
     }
 
@@ -1222,6 +1578,19 @@ public class CombatSimulator
             }
         }
 
+        // Pets vivos do defensor também são atingidos pela mesma explosão, com o mesmo
+        // rawDamage — sem Roll de esquiva (Bomb ignora evasão de qualquer alvo) e sem checar
+        // netEnsnared (Bomb NÃO liberta pets da rede, diferente do personagem acima).
+        var bombPetIndexes = new List<int>();
+        var bombPetHpList  = new List<int>();
+        for (int i = 0; i < defender.pets.Count; i++)
+        {
+            if (!defender.pets[i].isAlive) continue;
+            ApplyDamageToPet(defender.pets[i], rawDamage);
+            bombPetIndexes.Add(i);
+            bombPetHpList.Add(defender.pets[i].hp);
+        }
+
         Emit(new CombatEvent
         {
             // targetIndex = defender (1º alvo de GetEnemyTargets) — usado por CombatPlayer só
@@ -1238,10 +1607,16 @@ public class CombatSimulator
             bombTargetDamages = targetDamages,
             bombTargetHp      = targetHp,
             netFreedTargets   = netFreed,
+            bombPetIndexes    = bombPetIndexes,
+            bombPetHp         = bombPetHpList,
         });
 
         for (int i = 0; i < targetIndexes.Count; i++)
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = targetIndexes[i], newHp = targetHp[i], maxHp = targets[i].maxHp });
+
+        for (int i = 0; i < bombPetIndexes.Count; i++)
+            if (!defender.pets[bombPetIndexes[i]].isAlive)
+                Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = bombPetIndexes[i] });
 
         return true;
     }
@@ -1280,7 +1655,7 @@ public class CombatSimulator
     // inteiro quando ativa (retorna true) — mesma lógica de Bomb: a mordida É a própria
     // ação do turno, não um efeito que cai por cima e deixa Thief/pickup/throw/melee
     // continuarem.
-    private bool TryActivateVampirism(PlayerState attacker, PlayerState defender)
+    private bool TryActivateVampirism(PlayerState attacker, PlayerState defender, PetState targetPet = null)
     {
         if (attacker.vampirismUsesRemaining <= 0) return false;
         if (attacker.hp >= attacker.maxHp * 0.50f) return false;
@@ -1291,6 +1666,34 @@ public class CombatSimulator
         int missingHp = attacker.maxHp - attacker.hp;
         int damage    = Mathf.Max(1, Mathf.RoundToInt(missingHp * 0.25f));
         int heal      = damage;
+
+        // Pets como alvo válido: a mordida (garantida, sem Dodge) atinge o pet em vez do
+        // personagem — a cura do atacante continua igual (sempre soma na própria vida dele,
+        // independente de quem levou o dano).
+        if (targetPet != null)
+        {
+            int petIdx = defender.pets.IndexOf(targetPet);
+            ApplyDamageToPet(targetPet, damage);
+            attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal);
+
+            Emit(new CombatEvent
+            {
+                type          = CombatEventType.VampirismAttack,
+                playerIndex   = attacker.index,
+                targetIndex   = defender.index,
+                targetIsPet   = true,
+                targetPetIndex = petIdx,
+                damage        = damage,
+                healAmount    = heal,
+                newTargetHp   = targetPet.hp,
+                newTargetMaxHp = targetPet.maxHp,
+                newAttackerHp = attacker.hp,
+            });
+            Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = attacker.index, newHp = attacker.hp, maxHp = attacker.maxHp });
+            if (!targetPet.isAlive)
+                Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = petIdx });
+            return true;
+        }
 
         defender.hp = ApplyDamage(defender, damage);
         attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal);
@@ -1311,14 +1714,90 @@ public class CombatSimulator
         return true;
     }
 
-    // Alvos do lado inimigo do atacante — hoje só o defensor (1v1). Preparado pra Fase 3 (pets)
-    // e pra uma futura skill "Backup" (chama um aliado): quando existirem, adicionar aqui o pet
-    // do defensor / o backup dele à lista, sem precisar tocar em quem já chama este método
-    // (ex: TryActivateBomb).
+    private void TryActivateCryOfTheDamned(PlayerState attacker, PlayerState defender)
+    {
+        if (attacker.cryOfTheDamnedUsesRemaining <= 0) return;
+        if (!Roll(0.44f)) return;
+
+        attacker.cryOfTheDamnedUsesRemaining--;
+        Emit(new CombatEvent { type = CombatEventType.CryOfTheDamned, playerIndex = attacker.index });
+
+        for (int i = 0; i < defender.pets.Count; i++)
+        {
+            var pet = defender.pets[i];
+            if (!pet.isAlive) continue;
+            if (!Roll(0.50f)) continue;
+            pet.hp = 0;
+            Emit(new CombatEvent { type = CombatEventType.PetFlee, playerIndex = defender.index, petIndex = i });
+        }
+    }
+
+    private void TryActivateHypnosis(PlayerState attacker, PlayerState defender)
+    {
+        if (attacker.hypnosisUsesRemaining <= 0) return;
+        if (!Roll(0.38f)) return;
+
+        var livingPets = new List<int>();
+        for (int i = 0; i < defender.pets.Count; i++)
+            if (defender.pets[i].isAlive) livingPets.Add(i);
+        if (livingPets.Count == 0) return;
+
+        attacker.hypnosisUsesRemaining--;
+        Emit(new CombatEvent { type = CombatEventType.Hypnosis, playerIndex = attacker.index });
+
+        int idx = livingPets[_rng.Next(livingPets.Count)];
+        if (!Roll(0.90f)) return;
+
+        var pet = defender.pets[idx];
+        defender.pets.RemoveAt(idx);
+        attacker.pets.Add(pet);
+
+        Emit(new CombatEvent {
+            type        = CombatEventType.PetHypnotized,
+            playerIndex = defender.index,
+            petIndex    = idx,
+            targetIndex = attacker.index
+        });
+    }
+
+    // Alvos PERSONAGEM do lado inimigo do atacante — hoje só o defensor (1v1). Pets vivos do
+    // defensor (Fase 3) são tratados separadamente em TryActivateBomb (bombPetIndexes/
+    // bombPetHp) em vez de entrarem nesta lista — PetState não é um PlayerState, então
+    // misturar os dois tipos aqui exigiria um wrapper só pra isso. Preparado ainda pra uma
+    // futura skill "Backup" (chama um aliado personagem): esse sim poderia entrar nesta lista.
     private List<PlayerState> GetEnemyTargets(PlayerState attacker)
     {
         var defender = attacker == _p1 ? _p2 : _p1;
         return new List<PlayerState> { defender };
+    }
+
+    // Pets como alvo válido (ver chamada em SimulateTurn) — cada pet vivo do defensor rola sua
+    // própria chance independente; se 1 ou mais passarem, sorteia 1 entre eles. Sem efeito se o
+    // defensor não tiver pets vivos.
+    private PetState RollPetTarget(PlayerState defender)
+    {
+        if (defender.pets.Count == 0) return null;
+
+        var passed = new List<PetState>();
+        foreach (var pet in defender.pets)
+        {
+            if (!pet.isAlive) continue;
+            float chance = PetTargetChance(pet.type);
+            if (chance > 0f && Roll(chance)) passed.Add(pet);
+        }
+        if (passed.Count == 0) return null;
+        return passed[_rng.Next(passed.Count)];
+    }
+
+    private static float PetTargetChance(PetType type)
+    {
+        switch (type)
+        {
+            case PetType.Boar:   return 0.75f;
+            case PetType.Monkey: return 0.50f;
+            case PetType.Mouse:  return 0.50f;
+            default: return 0f;
+        }
     }
 
     // Embaralha a lista in-place (Fisher-Yates) usando o mesmo _rng do simulador — determinístico
@@ -1500,11 +1979,6 @@ public class CombatSimulator
         float sharpMult        = (attacker.weaponsMaster && isSharp) ? 1.5f : 1f;
         float result            = (weaponBaseDamage + attacker.str) * critMult * sharpMult;
 
-        // Diagnóstico temporário: confirma os componentes exatos de cada hit. Remover quando confirmado.
-        string weaponLabel = attacker.currentWeaponData != null ? attacker.currentWeaponData.weaponName : "Unarmed";
-        Debug.Log($"[CalcDamage] {attacker.name} arma={weaponLabel} weaponBaseDamage={weaponBaseDamage} " +
-                  $"str={attacker.str} critMult={critMult:F2} isCrit={isCrit} resultado={result:F1}");
-
         return result;
     }
 
@@ -1575,12 +2049,7 @@ public class CombatSimulator
     private int CalcThrowDamage(PlayerState attacker, WeaponData data)
     {
         int weaponDamage = data == null ? 2 : RollWeaponDamage(data);
-        int result       = weaponDamage + attacker.str;
-
-        // Diagnóstico temporário: confirma que o throw agora soma STR (era só weaponBaseDamage,
-        // bug reportado pelo usuário — esperava o mesmo componente aditivo de STR do dano normal).
-        Debug.Log($"[CalcThrowDamage] arma={data?.weaponName ?? "?"} weaponDamage={weaponDamage} str={attacker.str} resultado={result}");
-        return result;
+        return weaponDamage + attacker.str;
     }
 
     // --- Utilities ---

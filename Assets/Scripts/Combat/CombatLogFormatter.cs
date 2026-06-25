@@ -5,9 +5,21 @@ using System.Text;
 // printed once before CombatPlayer starts replaying the events as animation.
 public static class CombatLogFormatter
 {
-    public static string Format(string p1Name, string p2Name, List<CombatEvent> events)
+    public static string Format(string p1Name, string p2Name, List<CombatEvent> events,
+        List<PetType> p1Pets = null, List<PetType> p2Pets = null)
     {
         string Name(int idx) => idx == 0 ? p1Name : p2Name;
+
+        // Pets (Fase 3) — nome de exibição (Rato/Macaco/Javali) resolvido pelo tipo na lista do
+        // dono (p1Pets/p2Pets, passadas pelo CombatSceneLoader a partir de profile.pets); sem
+        // essas listas (chamadas antigas, sem os 2 parâmetros novos) cai no fallback "Pet".
+        string PetName(int ownerIdx, int petIdx)
+        {
+            var list = ownerIdx == 0 ? p1Pets : p2Pets;
+            if (list != null && petIdx >= 0 && petIdx < list.Count)
+                return PetState.DisplayName(list[petIdx]);
+            return "Pet";
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine($"========== LOG DE COMBATE: {p1Name} (P1) vs {p2Name} (P2) ==========");
@@ -40,6 +52,20 @@ public static class CombatLogFormatter
                 case CombatEventType.Hit:
                 {
                     string tag = e.isCrit ? " [CRÍTICO]" : e.isCombo ? " [COMBO]" : "";
+
+                    // Pets como alvo válido (Ajuste 1): targetIndex aqui é sempre o DONO do pet,
+                    // não o pet em si (mesma convenção de PetAttack) — sem isso, o log mostrava
+                    // "{Atacante} acerta {Dono}" mesmo quando o alvo real era o pet, e nunca
+                    // achava o HealthChanged emparelhado (pets não emitem esse evento — o Hit já
+                    // carrega newTargetHp/newTargetMaxHp direto), então a linha saía sem HP
+                    // nenhum, parecendo que o golpe não tinha efeito.
+                    if (e.targetIsPet)
+                    {
+                        string petTargetName = PetName(e.targetIndex, e.targetPetIndex);
+                        sb.AppendLine($"  {Name(e.playerIndex)} acerta [{petTargetName}] (pet de {Name(e.targetIndex)}): {e.damage} dano{tag} (HP: {e.newTargetHp}/{e.newTargetMaxHp})");
+                        break;
+                    }
+
                     string hp  = "";
                     if (i + 1 < events.Count
                         && events[i + 1].type == CombatEventType.HealthChanged
@@ -70,7 +96,9 @@ public static class CombatLogFormatter
                 }
 
                 case CombatEventType.Dodge:
-                    sb.AppendLine($"  {Name(e.targetIndex)} esquiva do ataque de {Name(e.playerIndex)}");
+                    sb.AppendLine(e.targetIsPet
+                        ? $"  [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)}) esquiva do ataque de {Name(e.playerIndex)}"
+                        : $"  {Name(e.targetIndex)} esquiva do ataque de {Name(e.playerIndex)}");
                     break;
 
                 case CombatEventType.Block:
@@ -80,7 +108,9 @@ public static class CombatLogFormatter
                     break;
 
                 case CombatEventType.Miss:
-                    sb.AppendLine($"  {Name(e.playerIndex)} erra o arremesso contra {Name(e.targetIndex)}");
+                    sb.AppendLine(e.targetIsPet
+                        ? $"  {Name(e.playerIndex)} erra o arremesso contra [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)})"
+                        : $"  {Name(e.playerIndex)} erra o arremesso contra {Name(e.targetIndex)}");
                     break;
 
                 case CombatEventType.Disarm:
@@ -121,16 +151,23 @@ public static class CombatLogFormatter
                 }
 
                 case CombatEventType.HasteAttack:
+                {
+                    string hasteTargetName = e.targetIsPet ? $"[{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)})" : Name(e.targetIndex);
                     if (e.isDodged)
-                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE — {Name(e.targetIndex)} esquiva do dash");
+                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE — {hasteTargetName} esquiva do dash");
                     else if (e.isBlocked)
-                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE — {Name(e.targetIndex)} bloqueia o dash");
+                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE — {hasteTargetName} bloqueia o dash");
+                    else if (e.targetIsPet)
+                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE e acerta {hasteTargetName}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newTargetHp}/{e.newTargetMaxHp})");
                     else
-                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE e acerta {Name(e.targetIndex)}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newHp}/{e.maxHp})");
+                        sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE e acerta {hasteTargetName}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newHp}/{e.maxHp})");
                     break;
+                }
 
                 case CombatEventType.PiledriverAttack:
-                    sb.AppendLine($"  {Name(e.playerIndex)} ativa PILEDRIVER e acerta {Name(e.targetIndex)}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newHp}/{e.maxHp})");
+                    sb.AppendLine(e.targetIsPet
+                        ? $"  {Name(e.playerIndex)} ativa PILEDRIVER e acerta [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)}): {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newTargetHp}/{e.newTargetMaxHp})"
+                        : $"  {Name(e.playerIndex)} ativa PILEDRIVER e acerta {Name(e.targetIndex)}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newHp}/{e.maxHp})");
                     break;
 
                 case CombatEventType.NetThrow:
@@ -191,14 +228,73 @@ public static class CombatLogFormatter
                     break;
 
                 case CombatEventType.VampirismAttack:
-                    sb.AppendLine($"  {Name(e.playerIndex)} ativa VAMPIRISM e morde {Name(e.targetIndex)} (mordida garantida): {e.damage} dano (HP: {e.newDefenderHp}) e cura {e.healAmount} HP (HP: {e.newAttackerHp})");
+                    sb.AppendLine(e.targetIsPet
+                        ? $"  {Name(e.playerIndex)} ativa VAMPIRISM e morde [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)}, mordida garantida): {e.damage} dano (HP: {e.newTargetHp}/{e.newTargetMaxHp}) e cura {e.healAmount} HP (HP: {e.newAttackerHp})"
+                        : $"  {Name(e.playerIndex)} ativa VAMPIRISM e morde {Name(e.targetIndex)} (mordida garantida): {e.damage} dano (HP: {e.newDefenderHp}) e cura {e.healAmount} HP (HP: {e.newAttackerHp})");
                     break;
 
                 case CombatEventType.CombatEnd:
                     sb.AppendLine($"========== VENCEDOR: {Name(e.playerIndex)} ==========");
                     break;
 
-                // RunToDefender, TurnEnd, and any unconsumed HealthChanged carry no line of their own.
+                case CombatEventType.PetTurnStart:
+                    sb.AppendLine($"--- Turno de {PetName(e.playerIndex, e.petIndex)} (pet de {Name(e.playerIndex)}) ---");
+                    break;
+
+                case CombatEventType.PetAttack:
+                {
+                    string petName = PetName(e.playerIndex, e.petIndex);
+                    if (e.shieldIntercept)
+                    {
+                        sb.AppendLine($"  [{petName}] intercepta o golpe (escudo vivo) e sofre {e.damage} dano (HP: {e.newTargetHp}/{e.newTargetMaxHp})");
+                        break;
+                    }
+                    string targetName = e.targetIsPet ? PetName(e.targetIndex, e.targetPetIndex) : Name(e.targetIndex);
+                    if (e.isDodged)
+                        sb.AppendLine($"  [{petName}] ataque esquivado por {targetName}");
+                    else
+                    {
+                        int newHp = e.targetIsPet ? e.newTargetHp : e.newHp;
+                        int maxHp = e.targetIsPet ? e.newTargetMaxHp : e.maxHp;
+                        sb.AppendLine($"  [{petName}] {e.damage} de dano em {targetName} (HP: {newHp}/{maxHp})");
+                    }
+                    break;
+                }
+
+                case CombatEventType.PetNetSkip:
+                    sb.AppendLine($"  [{PetName(e.playerIndex, e.petIndex)}] preso na rede — turno pulado");
+                    break;
+
+                case CombatEventType.PetDeath:
+                    sb.AppendLine($"  [{PetName(e.playerIndex, e.petIndex)}] foi nocauteado!");
+                    break;
+
+                case CombatEventType.PetDisarm:
+                    sb.AppendLine($"  [{PetName(e.playerIndex, e.petIndex)}] desarmou {Name(e.targetIndex)}!");
+                    break;
+
+                case CombatEventType.CryOfTheDamned:
+                    sb.AppendLine($"  {Name(e.playerIndex)} soltou o Grito dos Condenados!");
+                    break;
+
+                case CombatEventType.PetFlee:
+                    sb.AppendLine($"  [{PetName(e.playerIndex, e.petIndex)}] fugiu apavorado e abandonou a partida!");
+                    break;
+
+                case CombatEventType.Hypnosis:
+                    sb.AppendLine($"  {Name(e.playerIndex)} ativou HIPNOSE!");
+                    break;
+
+                case CombatEventType.PetHypnotized:
+                    sb.AppendLine($"  [{PetName(e.playerIndex, e.petIndex)}] foi hipnotizado e trocou de lado para {Name(e.targetIndex)}!");
+                    break;
+
+                case CombatEventType.TamerEat:
+                    sb.AppendLine($"  {Name(e.playerIndex)} (TAMER) come [{PetName(e.targetIndex, e.petIndex)}] e recupera {e.healAmount} HP (HP: {e.newHp}/{e.maxHp})");
+                    break;
+
+                // RunToDefender, TurnEnd, PetTurnEnd, and any unconsumed HealthChanged carry no
+                // line of their own.
                 default:
                     break;
             }

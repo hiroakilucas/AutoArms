@@ -47,6 +47,8 @@ public class PlayerState
     public int  bombUsesRemaining = 2;
     public int  tragicPotionUsesRemaining = 1;
     public int  vampirismUsesRemaining = 1;
+    public int  cryOfTheDamnedUsesRemaining = 2;
+    public int  hypnosisUsesRemaining = 1;
 
     // Fast Metabolism — regeneração passiva de 1%/turno (sem campos próprios, sempre ativa
     // enquanto HasSkill for true) + burst de cura intensa (10x 5%, todas no mesmo turno) ao
@@ -88,6 +90,10 @@ public class PlayerState
 
     // Speed debt accumulation across rounds
     public int speedDebt;
+
+    // Pets (Fase 3) — instâncias independentes, construídas em BuildState a partir de
+    // PlayerProfile.pets. Ver CombatSimulator.SimulatePetActions/SimulatePetTurn.
+    public List<PetState> pets = new List<PetState>();
 
     public bool isAlive => hp > 0;
 

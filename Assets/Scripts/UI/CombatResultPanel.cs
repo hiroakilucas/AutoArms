@@ -109,16 +109,21 @@ public class CombatResultPanel : MonoBehaviour
 
     private struct LevelUpOption
     {
-        public enum Kind { Attribute, Skill, Weapon }
+        public enum Kind { Attribute, Skill, Weapon, Pet }
         public Kind kind;
         public int attrIndex;
         public SkillData skill;
         public WeaponData weapon;
+        public PetType petType;
 
         public string Name() => kind switch {
-            Kind.Attribute => new[] { "+8 HP", "+2 STR", "+2 AGI", "+2 SPD" }[attrIndex],
+            Kind.Attribute => new[] {
+                "+8 HP", "+2 STR", "+2 AGI", "+2 SPD",
+                "+1 STR / +1 AGI", "+1 AGI / +1 SPD", "+1 STR / +1 SPD"
+            }[attrIndex],
             Kind.Skill     => skill?.skillName ?? "?",
             Kind.Weapon    => weapon?.weaponName ?? "?",
+            Kind.Pet       => PetState.DisplayName(petType),
             _              => "?"
         };
 
@@ -127,10 +132,15 @@ public class CombatResultPanel : MonoBehaviour
                 "Vida máxima +8",
                 "Força +2",
                 "Agilidade +2",
-                "Velocidade +2"
+                "Velocidade +2",
+                "Força +1, Agilidade +1",
+                "Agilidade +1, Velocidade +1",
+                "Força +1, Velocidade +1"
             }[attrIndex],
             Kind.Skill  => skill?.description ?? "",
             Kind.Weapon => weapon != null ? $"{string.Join(", ", weapon.types)} • {weapon.damage} dano" : "",
+            // -HP do dono (HpCost) entra logo na escolha — ApplyBonus já garante maxHealth >= 1.
+            Kind.Pet    => $"Luta junto. -{PetState.HpCost(petType)} HP máximo do dono",
             _           => ""
         };
 
@@ -139,23 +149,34 @@ public class CombatResultPanel : MonoBehaviour
             1 => new Color(1f,   0.6f, 0.1f),
             2 => new Color(0.2f, 0.7f, 0.2f),
             3 => new Color(0.3f, 0.5f, 1f),
+            4 => new Color(0.9f, 0.7f, 0.1f),
+            5 => new Color(0.2f, 0.8f, 0.6f),
+            6 => new Color(0.7f, 0.4f, 0.9f),
             _ => Color.white
         } : Color.white;
     }
+
+    // Pool de pets sempre disponível (sem restrição de duplicatas — o mesmo tipo pode sair de
+    // novo mesmo que o jogador já tenha um igual), por isso wPet não degrada a 0 como
+    // wSkill/wWeapon quando o pool correspondente está vazio.
+    private static readonly PetType[] PetPool = { PetType.Mouse, PetType.Monkey, PetType.Boar };
 
     private static LevelUpOption DrawOption(List<SkillData> skills, List<WeaponData> weapons)
     {
         float wAttr   = 0.60f;
         float wSkill  = skills.Count  > 0 ? 0.30f : 0f;
         float wWeapon = weapons.Count > 0 ? 0.10f : 0f;
-        float total   = wAttr + wSkill + wWeapon;
+        float wPet    = 0.10f;
+        float total   = wAttr + wSkill + wWeapon + wPet;
         float r       = Random.value * total;
 
         if (r < wAttr)
-            return new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = Random.Range(0, 4) };
+            return new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = Random.Range(0, 7) };
         if (r < wAttr + wSkill)
             return new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = skills[Random.Range(0, skills.Count)] };
-        return new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = weapons[Random.Range(0, weapons.Count)] };
+        if (r < wAttr + wSkill + wWeapon)
+            return new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = weapons[Random.Range(0, weapons.Count)] };
+        return new LevelUpOption { kind = LevelUpOption.Kind.Pet, petType = PetPool[Random.Range(0, PetPool.Length)] };
     }
 
     private static bool SameOption(LevelUpOption a, LevelUpOption b)
@@ -165,6 +186,7 @@ public class CombatResultPanel : MonoBehaviour
             LevelUpOption.Kind.Attribute => a.attrIndex == b.attrIndex,
             LevelUpOption.Kind.Skill     => a.skill     == b.skill,
             LevelUpOption.Kind.Weapon    => a.weapon    == b.weapon,
+            LevelUpOption.Kind.Pet       => a.petType   == b.petType,
             _                            => false
         };
     }
@@ -180,6 +202,9 @@ public class CombatResultPanel : MonoBehaviour
                     case 1: profile.str       += 2; break;
                     case 2: profile.agility   += 2; break;
                     case 3: profile.speed     += 2; break;
+                    case 4: profile.str += 1; profile.agility += 1; break;
+                    case 5: profile.agility += 1; profile.speed += 1; break;
+                    case 6: profile.str += 1; profile.speed += 1; break;
                 }
                 break;
             case LevelUpOption.Kind.Skill:
@@ -212,6 +237,11 @@ public class CombatResultPanel : MonoBehaviour
                     UnityEditor.EditorUtility.SetDirty(profile.weaponLoadout);
 #endif
                 }
+                break;
+            case LevelUpOption.Kind.Pet:
+                // Sem restrição de duplicatas — o mesmo tipo pode aparecer de novo (ex: 2º Rato).
+                profile.pets.Add(opt.petType);
+                profile.maxHealth = Mathf.Max(1, profile.maxHealth - PetState.HpCost(opt.petType));
                 break;
         }
 #if UNITY_EDITOR
@@ -312,12 +342,14 @@ public class CombatResultPanel : MonoBehaviour
         List<SkillData> availableSkills, List<WeaponData> availableWeapons, System.Action onChosen)
     {
         var allOptions = new List<LevelUpOption>();
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 7; i++)
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = i });
         foreach (var s in availableSkills)
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = s });
         // foreach (var w in availableWeapons)
         //     allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = w });
+        foreach (var pt in PetPool)
+            allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Pet, petType = pt });
 
         var root = new GameObject("LevelUpChoiceRoot");
         root.transform.SetParent(canvasRoot, false);
@@ -419,6 +451,12 @@ public class CombatResultPanel : MonoBehaviour
         {
             iconImg.sprite = iconSprite;
             iconImg.color  = Color.white;
+        }
+        else if (opt.kind == LevelUpOption.Kind.Pet)
+        {
+            // Sem sprite de preview próprio ainda — cor sólida só pra diferenciar visualmente
+            // das demais categorias na grade de teste.
+            iconImg.color = new Color(0.55f, 0.35f, 0.18f);
         }
         else
         {
