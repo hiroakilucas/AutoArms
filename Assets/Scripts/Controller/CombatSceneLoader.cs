@@ -568,6 +568,11 @@ public class CombatSceneLoader : MonoBehaviour
     {
         if (petTypes == null) yield break;
 
+        // Rastreia posições de spawn já escolhidas pra evitar sobreposição entre pets do mesmo lado.
+        var chosenPositions = new List<UnityEngine.Vector2>();
+        const float SpawnMinSep = 1.5f;
+        const int   SpawnTries  = 12;
+
         foreach (var petType in petTypes)
         {
             var prefab = PetPrefabFor(petType);
@@ -577,8 +582,21 @@ public class CombatSceneLoader : MonoBehaviour
                 continue;
             }
 
-            float x = isPlayer1 ? UnityEngine.Random.Range(-5f, -1f) : UnityEngine.Random.Range(1f, 5f);
-            Vector3 landPos = new Vector3(x, ownerLand.y, ownerLand.z);
+            // Sorteia posição espalhada (X + Y) para o pet não nascer agrupado com os outros.
+            // Mesma faixa de Y usada pelo RollPetSpawnPosition do CombatPlayer em combate.
+            float spawnX = 0f, spawnY = 0f;
+            for (int attempt = 0; attempt < SpawnTries; attempt++)
+            {
+                spawnX = isPlayer1 ? UnityEngine.Random.Range(-5f, -1f) : UnityEngine.Random.Range(1f, 5f);
+                spawnY = UnityEngine.Random.Range(-3.90f, -0.81f);
+                bool tooClose = false;
+                foreach (var prev in chosenPositions)
+                    if (UnityEngine.Vector2.Distance(new UnityEngine.Vector2(spawnX, spawnY), prev) < SpawnMinSep)
+                    { tooClose = true; break; }
+                if (!tooClose) break;
+            }
+            chosenPositions.Add(new UnityEngine.Vector2(spawnX, spawnY));
+            Vector3 landPos = new Vector3(spawnX, spawnY, ownerLand.z);
 
             var petObj = Instantiate(prefab);
             petObj.name = PetState.DisplayName(petType);
