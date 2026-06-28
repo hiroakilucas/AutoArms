@@ -60,6 +60,10 @@ public class CombatPlayer : MonoBehaviour
     // runtime, mesmo padrão das folhas do Fast Metabolism.
     [HideInInspector] public RuntimeAnimatorController vampirismEffectController;
 
+    // Skill Treat — sprite da coxa de frango (Assets/Data/UI/SkillEffect/Treat/treat.png);
+    // wireado em CombatSceneLoader e copiado pra aqui na criação. Arremessado em arco até o pet.
+    [HideInInspector] public Sprite treatSprite;
+
     // Skill Chef — mesmo motivo/padrão de bombPrefab acima: wireado em
     // CombatSceneLoader.chefPizzaPrefab e copiado pra aqui na criação. Um único prefab
     // combinando SpriteRenderer (sprite "chef", usado durante o voo) + Animator (controller da
@@ -1305,21 +1309,30 @@ public class CombatPlayer : MonoBehaviour
                         }
 
                         Vector3 petPopupPos = hitPet.transform.position + Vector3.up * 0.8f;
-                        hitPet.healthBar?.UpdateBar(evt.newTargetHp, hitPet.maxHp);
-                        if (evt.isFierceBrute)
+                        if (evt.petShieldAbsorb)
                         {
-                            // Fierce Brute conectou num pet — mesmo dobro de dano já aplicado
-                            // pelo simulador; só a aura/popup diferenciados, sem flash de tela
-                            // nem ghost trail extra (mantém o caso pet mais discreto).
-                            DamagePopup.SpawnFierceBrute(petPopupPos, evt.damage, evt.isCrit);
-                            attacker?.HideFierceBruteAura(0.2f);
+                            // Escudo do Treat absorveu o golpe — destroi o visual, sem dano.
+                            if (hitPet.shieldVisual != null) { Destroy(hitPet.shieldVisual); hitPet.shieldVisual = null; }
+                            DamagePopup.SpawnBlock(petPopupPos);
                         }
                         else
                         {
-                            DamagePopup.Spawn(petPopupPos, evt.damage, evt.isCrit);
+                            hitPet.healthBar?.UpdateBar(evt.newTargetHp, hitPet.maxHp);
+                            if (evt.isFierceBrute)
+                            {
+                                // Fierce Brute conectou num pet — mesmo dobro de dano já aplicado
+                                // pelo simulador; só a aura/popup diferenciados, sem flash de tela
+                                // nem ghost trail extra (mantém o caso pet mais discreto).
+                                DamagePopup.SpawnFierceBrute(petPopupPos, evt.damage, evt.isCrit);
+                                attacker?.HideFierceBruteAura(0.2f);
+                            }
+                            else
+                            {
+                                DamagePopup.Spawn(petPopupPos, evt.damage, evt.isCrit);
+                            }
+                            hitPet.animController.PlayHurt();
+                            if (evt.newTargetHp <= 0) hitPet.PlayDeath();
                         }
-                        hitPet.animController.PlayHurt();
-                        if (evt.newTargetHp <= 0) hitPet.PlayDeath();
 
                         if (!evt.isThrow)
                         {
@@ -1843,9 +1856,16 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.PetDeath:
-                GetPet(evt.playerIndex, evt.petIndex)?.PlayDeath();
+            {
+                var deadPet = GetPet(evt.playerIndex, evt.petIndex);
+                if (deadPet != null)
+                {
+                    deadPet.PlayDeath();
+                    if (deadPet.shieldVisual != null) { Destroy(deadPet.shieldVisual); deadPet.shieldVisual = null; }
+                }
                 yield return null;
                 break;
+            }
 
             case CombatEventType.PetDisarm:
             {
@@ -1913,6 +1933,59 @@ public class CombatPlayer : MonoBehaviour
                 }
                 else
                     yield return null;
+                break;
+            }
+
+            case CombatEventType.TreatFeed:
+            {
+                var feeder = GetCombat(evt.playerIndex);
+                var fedPet = GetPet(evt.playerIndex, evt.petIndex);
+
+                if (feeder != null && fedPet != null)
+                {
+                    float feedSpeed = (feeder.settings?.runSpeed ?? 35f) * t;
+                    Vector3 feedPos = CalcPetStopPosition(feeder.transform.position, fedPet.transform.position, CharacterPetReach(fedPet.petType));
+                    yield return StartCoroutine(feeder.animationController.PlayRun(feedPos, feedSpeed, feeder.movement));
+
+                    // Arremessa o petisco em arco parabólico até o pet
+                    float tossTime = 0.4f * t;
+                    if (treatSprite != null)
+                    {
+                        var treatGO = new GameObject("TreatItem");
+                        var sr = treatGO.AddComponent<SpriteRenderer>();
+                        sr.sprite           = treatSprite;
+                        sr.sortingLayerName = "Weapons";
+                        treatGO.transform.localScale = Vector3.one * 0.25f;
+                        Vector3 tossStart = feeder.transform.position + Vector3.up * 0.4f;
+                        Vector3 tossEnd   = fedPet.transform.position + Vector3.up * 0.4f;
+                        treatGO.transform.position = tossStart;
+
+                        float elapsed = 0f;
+                        while (elapsed < tossTime)
+                        {
+                            elapsed += Time.deltaTime;
+                            float p = Mathf.Clamp01(elapsed / tossTime);
+                            treatGO.transform.position = Vector3.Lerp(tossStart, tossEnd, p) + Vector3.up * (Mathf.Sin(p * Mathf.PI) * 0.7f);
+                            yield return null;
+                        }
+                        Destroy(treatGO);
+                    }
+                    else
+                    {
+                        yield return new WaitForSeconds(tossTime);
+                    }
+
+                    // Cura HP do pet + barra de vida + popup
+                    fedPet.healthBar?.UpdateBar(evt.newTargetHp, fedPet.maxHp);
+                    DamagePopup.SpawnHeal(fedPet.transform.position + Vector3.up * 1f, evt.healAmount);
+
+                    // Escudo visual dourado ao redor do pet
+                    if (fedPet.shieldVisual != null) Destroy(fedPet.shieldVisual);
+                    fedPet.shieldVisual = CreatePetShieldVisual(fedPet);
+
+                    yield return new WaitForSeconds(0.25f * t);
+                }
+                yield return new WaitForSeconds((feeder?.settings?.comboDelay ?? 0.15f) * t);
                 break;
             }
 
@@ -1995,6 +2068,35 @@ public class CombatPlayer : MonoBehaviour
         attacker.animationController.SetIdle(true);
     }
 
+    // Cria o glow dourado de escudo do Treat ao redor do pet. O chamador é responsável por
+    // guardar a referência em pet.shieldVisual e destruí-la quando o escudo absorver um hit.
+    private GameObject CreatePetShieldVisual(PetCombatController pet)
+    {
+        var go = new GameObject("PetShieldVisual");
+        go.transform.position = pet.transform.position;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite           = PlayerCombat.GetGlowSprite();
+        sr.color            = new Color(1f, 0.85f, 0.1f, 0.55f); // dourado, semi-transparente
+        sr.sortingLayerName = "Characters";
+        sr.sortingOrder     = 5;
+        float baseScale = 3.5f * PetState.Scale(pet.petType);
+        go.transform.localScale = Vector3.one * baseScale;
+        StartCoroutine(PulseAndFollowPet(go, pet, baseScale));
+        return go;
+    }
+
+    private IEnumerator PulseAndFollowPet(GameObject go, PetCombatController pet, float baseScale)
+    {
+        float elapsed = 0f;
+        while (go != null && pet != null)
+        {
+            go.transform.position   = pet.transform.position;
+            go.transform.localScale = Vector3.one * (baseScale + Mathf.Sin(elapsed * 4f) * 0.15f);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+    }
+
     // Callback de impacto do case PetAttack — lê só dos campos _petImpact* (setados ali,
     // imediatamente antes de StartCoroutine(PlayAttackSequence(...))), nunca de uma closure, pra
     // _onPetImpact poder ser cacheado 1x (ver campo acima) em vez de uma lambda nova por ataque.
@@ -2022,10 +2124,19 @@ public class CombatPlayer : MonoBehaviour
         }
         else if (targetPetCombat != null)
         {
-            targetPetCombat.healthBar?.UpdateBar(evt.newTargetHp, targetPetCombat.maxHp);
-            DamagePopup.Spawn(targetPetCombat.transform.position + Vector3.up * 0.8f, evt.damage, evt.isCrit);
-            targetPetCombat.animController.PlayHurt();
-            if (evt.newTargetHp <= 0) targetPetCombat.PlayDeath();
+            if (evt.petShieldAbsorb)
+            {
+                // Escudo do Treat absorveu o ataque do pet — sem dano ao alvo.
+                if (targetPetCombat.shieldVisual != null) { Destroy(targetPetCombat.shieldVisual); targetPetCombat.shieldVisual = null; }
+                DamagePopup.SpawnBlock(targetPetCombat.transform.position + Vector3.up * 0.8f);
+            }
+            else
+            {
+                targetPetCombat.healthBar?.UpdateBar(evt.newTargetHp, targetPetCombat.maxHp);
+                DamagePopup.Spawn(targetPetCombat.transform.position + Vector3.up * 0.8f, evt.damage, evt.isCrit);
+                targetPetCombat.animController.PlayHurt();
+                if (evt.newTargetHp <= 0) targetPetCombat.PlayDeath();
+            }
         }
         else if (targetCharacter != null)
         {

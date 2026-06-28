@@ -40,6 +40,10 @@ public class PetCombatController : MonoBehaviour
     // original (-5 a -1 pro P1, 1 a 5 pro P2).
     public bool isPlayer1;
 
+    // Glow dourado do Treat — criado em CombatPlayer.TreatFeed, destruído ao absorver um golpe
+    // ou quando o pet morre. Null quando o pet não está com escudo ativo.
+    public GameObject shieldVisual;
+
     private float _initialForwardSign = 1f;
 
     // Pequeno offset de Z (não de sortingLayer) usado pra profundidade visual contra o

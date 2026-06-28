@@ -62,6 +62,10 @@ public enum CombatEventType
 
     // Tamer (Super) — come um pet morto na arena (próprio ou inimigo) e cura HP.
     TamerEat,        // playerIndex = comedeiro (Tamer), targetIndex = dono do pet comido, petIndex = índice na lista do dono, healAmount = HP curado, newHp/maxHp = HP do Tamer pós-cura
+
+    // Treat (Super) — alimenta um pet vivo do próprio time: cura 50% do HP máximo do pet,
+    // aplica escudo imunidade ao próximo ataque e força o pet a atacar imediatamente.
+    TreatFeed,       // playerIndex = dono da skill Treat, petIndex = pet alimentado (lista do dono), healAmount = HP curado, newTargetHp/newTargetMaxHp = HP do pet após cura
 }
 
 public class CombatEvent
@@ -114,4 +118,7 @@ public class CombatEvent
     public int  newTargetHp;
     public int  newTargetMaxHp;
     public bool shieldIntercept;
+    // Hit (targetIsPet=true) / PetAttack (targetIsPet=true) — escudo do Treat absorveu o golpe:
+    // damage = 0, pet não é ferido, shield visual destruído no lado visual.
+    public bool petShieldAbsorb;
 }

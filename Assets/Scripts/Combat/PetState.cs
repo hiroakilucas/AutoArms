@@ -22,6 +22,9 @@ public class PetState
     // true após ser comido pelo Tamer — não pode ser consumido duas vezes.
     public bool isConsumed;
 
+    // Escudo do Treat — imune ao próximo ataque recebido (1 golpe); removido ao absorver.
+    public bool shielded;
+
     // Preso em Net — PERMANENTE para pets (nunca volta a false, diferente de
     // PlayerState.netEnsnared, que se solta no próximo hit que o personagem sofrer).
     public bool netEnsnared;

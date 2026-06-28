@@ -560,6 +560,8 @@ public class CombatSimulator
             supers.Add(() => { TryActivateHypnosis(attacker, defender); return false; });
         if (attacker.HasSkill("Tamer") && attacker.tamerUsesRemaining > 0)
             supers.Add(() => { TryActivateTamer(attacker, defender); return false; });
+        if (attacker.HasSkill("Treat") && attacker.treatUsesRemaining > 0)
+            supers.Add(() => { TryActivateTreat(attacker, defender); return false; });
         // futuros Supers entram aqui
 
         ShuffleList(supers);
@@ -764,6 +766,13 @@ public class CombatSimulator
 
         if (targetIsPet)
         {
+            // Escudo do Treat: absorve o ataque do pet sem dano.
+            if (targetPet.shielded)
+            {
+                targetPet.shielded = false;
+                Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, damage = 0, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp, petShieldAbsorb = true });
+                return false;
+            }
             ApplyDamageToPet(targetPet, damage);
             Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, damage = damage, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
 
@@ -928,6 +937,14 @@ public class CombatSimulator
                 attacker.fierceBruteActive = false;
             }
             int finalDamagePet = Mathf.Max(1, Mathf.RoundToInt(dmgPet));
+            // Escudo do Treat: absorve o golpe sem causar dano ao pet.
+            if (targetPet.shielded)
+            {
+                targetPet.shielded = false;
+                damageDealt = false;
+                Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = 0, isCombo = isCombo, isFierceBrute = fierceBruteThisPetHit, targetIsPet = true, targetPetIndex = petIdx, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp, petShieldAbsorb = true });
+                return false;
+            }
             ApplyDamageToPet(targetPet, finalDamagePet);
 
             Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = finalDamagePet, isCrit = isCritPet, isCombo = isCombo, isFierceBrute = fierceBruteThisPetHit, targetIsPet = true, targetPetIndex = petIdx, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
@@ -1809,6 +1826,58 @@ public class CombatSimulator
             newHp       = attacker.hp,
             maxHp       = attacker.maxHp,
         });
+    }
+
+    private void TryActivateTreat(PlayerState attacker, PlayerState defender)
+    {
+        if (attacker.treatUsesRemaining <= 0) return;
+
+        // Prioridade: pet enredado (liberar Net é crítico) → menor HP relativo entre vivos.
+        PetState targetPet   = null;
+        int      targetPetIdx = -1;
+        bool     foundEnsnared = false;
+        float    lowestRatio  = 1f;
+
+        for (int i = 0; i < attacker.pets.Count; i++)
+        {
+            var p = attacker.pets[i];
+            if (!p.isAlive || p.isConsumed || p.shielded) continue;
+
+            bool  ensnared = p.netEnsnared;
+            float ratio    = (float)p.hp / p.maxHp;
+
+            if      (ensnared && !foundEnsnared)                       { targetPet = p; targetPetIdx = i; foundEnsnared = true; lowestRatio = ratio; }
+            else if (ensnared && ratio < lowestRatio)                  { targetPet = p; targetPetIdx = i; lowestRatio = ratio; }
+            else if (!ensnared && !foundEnsnared && ratio < lowestRatio){ targetPet = p; targetPetIdx = i; lowestRatio = ratio; }
+        }
+
+        if (targetPet == null || !Roll(0.33f)) return;
+
+        attacker.treatUsesRemaining--;
+
+        int heal = targetPet.maxHp / 2;
+        targetPet.hp          = System.Math.Min(targetPet.hp + heal, targetPet.maxHp);
+        targetPet.shielded    = true;
+        targetPet.netEnsnared = false;
+
+        Emit(new CombatEvent
+        {
+            type           = CombatEventType.TreatFeed,
+            playerIndex    = attacker.index,
+            petIndex       = targetPetIdx,
+            healAmount     = heal,
+            newTargetHp    = targetPet.hp,
+            newTargetMaxHp = targetPet.maxHp,
+        });
+
+        // Ataque forçado: o pet alimentado ataca imediatamente.
+        var aliveEnemyPetIdx = new List<int>();
+        for (int i = 0; i < defender.pets.Count; i++)
+            if (defender.pets[i].isAlive) aliveEnemyPetIdx.Add(i);
+        bool forceTargetIsPet  = aliveEnemyPetIdx.Count > 0 && Roll(0.5f);
+        int  forceTargetPetIdx = forceTargetIsPet ? aliveEnemyPetIdx[_rng.Next(aliveEnemyPetIdx.Count)] : -1;
+
+        SimulatePetHit(attacker, targetPetIdx, defender, defender.pets, forceTargetIsPet, forceTargetPetIdx, comboCount: 0);
     }
 
     // Alvos PERSONAGEM do lado inimigo do atacante — hoje só o defensor (1v1). Pets vivos do

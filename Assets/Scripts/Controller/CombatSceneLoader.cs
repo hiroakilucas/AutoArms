@@ -56,6 +56,10 @@ public class CombatSceneLoader : MonoBehaviour
     [Tooltip("Prefab da pizza (Assets/Data/UI/SkillEffect/Chef/ChefPizzaPrefab.prefab, gerado por Tools > AutoArms > Generate Chef Effect Prefab) — GameObject com SpriteRenderer (sprite \"chef\") + Animator (controller da explosão verde). Usado tanto na fase de voo (sprite estático) quanto na explosão (2ª instância, Animator religado), mesmo padrão do Bomb Prefab.")]
     [SerializeField] private GameObject chefPizzaPrefab;
 
+    [Header("Treat")]
+    [Tooltip("Sprite da coxa de frango (Assets/Data/UI/SkillEffect/Treat/treat.png) — arremessada em arco até o pet alimentado.")]
+    [SerializeField] private Sprite treatSprite;
+
     [Header("Pets")]
     // NÃO usar o prefab em "Vector Parts/<Tipo>.prefab" (rig multi-bone do Spriter) — ele não
     // tem SpriteRenderer na própria raiz, e as animações dos pets são flipbooks simples que
@@ -278,6 +282,7 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.fastMetabolismController = fastMetabolismController;
             combatPlayer.vampirismEffectController = vampirismEffectController;
             combatPlayer.chefPizzaPrefab = chefPizzaPrefab;
+            combatPlayer.treatSprite = treatSprite;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);
