@@ -49,6 +49,7 @@ public class PlayerState
     public int  vampirismUsesRemaining = 1;
     public int  cryOfTheDamnedUsesRemaining = 2;
     public int  hypnosisUsesRemaining = 1;
+    public int  tamerUsesRemaining = 4; // pode comer até 4 carcaças por luta
 
     // Fast Metabolism — regeneração passiva de 1%/turno (sem campos próprios, sempre ativa
     // enquanto HasSkill for true) + burst de cura intensa (10x 5%, todas no mesmo turno) ao

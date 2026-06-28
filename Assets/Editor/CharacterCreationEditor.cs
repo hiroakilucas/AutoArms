@@ -3,25 +3,11 @@ using UnityEditor;
 
 public static class CharacterCreationEditor
 {
-    // Armas iniciais padrão (Satyr1, Golem3, Succubus, Zombie) — mesmas 4 que cada
-    // Loadout_<Personagem>.asset já começa com. Usado para restaurar o loadout de cada
-    // personagem ao estado inicial, descartando qualquer arma ganha em level-up.
-    private static readonly string[] DefaultWeaponGuids = {
-        "af40afb8bb8443e4d8943e5fc48bfb25", // Satyr1 (Dagger)
-        "f027d5453540da84fa7b171f2f781ee0", // Golem3 (Heavy)
-        "19ea5491d0fb4ee41b2857c3f55495cd", // Succubus (Sword)
-        "455a2591cb26eb94ab312d7b69629227", // Zombie (Sword)
-    };
-
     [MenuItem("Tools/AutoArms/Reset All Profiles to Level 1")]
     public static void ResetAllProfilesToLevel1()
     {
         string[] guids = AssetDatabase.FindAssets("t:PlayerProfile",
             new[] { "Assets/ScriptableObjects/PlayerProfiles" });
-
-        var defaultWeapons = new WeaponData[DefaultWeaponGuids.Length];
-        for (int i = 0; i < DefaultWeaponGuids.Length; i++)
-            defaultWeapons[i] = AssetDatabase.LoadAssetAtPath<WeaponData>(AssetDatabase.GUIDToAssetPath(DefaultWeaponGuids[i]));
 
         foreach (string guid in guids)
         {
@@ -34,7 +20,6 @@ public static class CharacterCreationEditor
             profile.battlesRemaining  = 6;
             profile.xpRequired        = XpSystem.XpRequired(1);
 
-            // Re-sorteia status de level 1 (mesma lógica de "Randomize Level 1 Stats").
             CharacterStats s  = CharacterCreation.GenerateLevel1Stats();
             profile.maxHealth = s.maxHealth;
             profile.str       = s.str;
@@ -42,29 +27,21 @@ public static class CharacterCreationEditor
             profile.speed     = s.speed;
 
             profile.skills.Clear();
-
-            // Pets (Fase 3) — ganhos só por level-up (CombatResultPanel.ApplyBonus), igual a
-            // skills/armas; sem isso, o reset zerava level/HP/STR/AGI/SPD mas o profile
-            // continuava com os pets antigos (e o profile.maxHealth já recém-resetado pra
-            // s.maxHealth, sem o custo de HP deles descontado de novo — descontaria 2x numa
-            // próxima escolha se o pet não fosse removido daqui).
             profile.pets.Clear();
 
-            // Cada profile tem seu próprio WeaponLoadout (não é mais compartilhado entre
-            // personagens) — resetar aqui não afeta os outros.
             if (profile.weaponLoadout != null)
             {
-                profile.weaponLoadout.weapons = (WeaponData[])defaultWeapons.Clone();
+                profile.weaponLoadout.weapons = new WeaponData[0];
                 EditorUtility.SetDirty(profile.weaponLoadout);
             }
 
             EditorUtility.SetDirty(profile);
-            Debug.Log($"[Debug] Profile {profile.profileName} resetado para Level 1 " +
-                      $"(HP={s.maxHealth} STR={s.str} AGI={s.agility} SPD={s.speed}, skills, armas e pets resetados)");
+            Debug.Log($"[Reset] {profile.profileName} → Level 1 " +
+                      $"HP={s.maxHealth} STR={s.str} AGI={s.agility} SPD={s.speed} | skills/pets/armas zerados");
         }
 
         AssetDatabase.SaveAssets();
-        Debug.Log("[Debug] Todos os profiles resetados para Level 1.");
+        Debug.Log("[Reset] Todos os profiles resetados para Level 1.");
     }
 
     [MenuItem("Tools/AutoArms/Randomize Level 1 Stats")]

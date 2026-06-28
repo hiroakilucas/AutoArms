@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_cry_of_the_damned
   m_EditorClassIdentifier: 
   skillName: Cry of the Damned
-  description: "Reduz stats do advers\xE1rio (1x por luta)"
-  icon: {fileID: 0}
+  description: "44% por turno: grito sobrenatural expulsa cada pet inimigo vivo com
+    50% de chance \u2014 o pet abandona a partida para sempre (2x por luta)"
+  icon: {fileID: 21300000, guid: 4d6c1cd324960fc43a3f1f41a058cd8d, type: 3}
   category: 4
   activationType: 1
-  usesPerFight: 1
+  usesPerFight: 2

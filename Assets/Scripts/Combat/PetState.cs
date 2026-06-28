@@ -15,11 +15,12 @@ public class PetState
     public float counter;
     public float reversal;
 
-    // false quando hp <= 0 — diferente de PlayerState.isAlive (propriedade computada), aqui é
-    // um campo setado explicitamente em CombatSimulator.ApplyDamageToPet: o pet cai e FICA NO
-    // LUGAR (GameObject nunca destruído) em vez de desaparecer, preparação pra skill futura
-    // Tamer ("comer" pets caídos).
+    // false quando hp <= 0 — campo setado explicitamente em CombatSimulator.ApplyDamageToPet.
+    // Pet cai e FICA NO LUGAR (GameObject nunca destruído) — carcaça disponível pro Tamer.
     public bool isAlive = true;
+
+    // true após ser comido pelo Tamer — não pode ser consumido duas vezes.
+    public bool isConsumed;
 
     // Preso em Net — PERMANENTE para pets (nunca volta a false, diferente de
     // PlayerState.netEnsnared, que se solta no próximo hit que o personagem sofrer).

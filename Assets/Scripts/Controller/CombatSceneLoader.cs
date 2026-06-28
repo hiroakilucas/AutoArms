@@ -590,6 +590,9 @@ public class CombatSceneLoader : MonoBehaviour
             var petCombat = petObj.AddComponent<PetCombatController>();
             petCombat.petType = petType;
             petCombat.isPlayer1 = isPlayer1;
+            // P1 fica no lado esquerdo (X negativo) → pet vira pra direita (+1).
+            // P2 fica no lado direito (X positivo) → pet vira pra esquerda (-1).
+            petCombat.SetInitialFacing(isPlayer1 ? 1f : -1f);
             outList.Add(petCombat);
 
             // Mesmo escalonamento por nível do dono aplicado em CombatSimulator.BuildState

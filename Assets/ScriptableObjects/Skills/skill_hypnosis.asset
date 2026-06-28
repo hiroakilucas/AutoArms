@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_hypnosis
   m_EditorClassIdentifier: 
   skillName: Hypnosis
-  description: "Advers\xE1rio ataca a si mesmo (1x por luta)"
-  icon: {fileID: 0}
+  description: "38% por turno: hipnotiza um pet inimigo vivo (90% de chance) \u2014
+    o pet troca permanentemente para o seu time (1x por luta)"
+  icon: {fileID: 21300000, guid: 602aab165733fce4f9cc138f8278a287, type: 3}
   category: 4
   activationType: 1
   usesPerFight: 1

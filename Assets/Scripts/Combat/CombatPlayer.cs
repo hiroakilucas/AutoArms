@@ -167,30 +167,21 @@ public class CombatPlayer : MonoBehaviour
     // espelhamento de X (ver ApplyPetOffsetRaw abaixo) — o usuário calibra olhando direto pra
     // cena com P2 sempre do mesmo lado, então "direita"/"esquerda" aqui é literal, não relativo
     // ao sentido do ataque.
+    // X negativo: ApplyPetOffset espelha pelo sentido do ataque (dirSign). P2 ataca P1's pet
+    // → dirSign=-1 → basePos.x += X*(-1) = +|X| (empurra direita ✓). P1 ataca P2's pet
+    // → dirSign=+1 → basePos.x += X*(+1) = -|X| (empurra esquerda ✓).
     private static readonly Dictionary<PetType, Vector2> UnarmedAttacksPetOffset = new Dictionary<PetType, Vector2>
     {
-        // X recalculado pelo usuário: resultado bateu em +0.7551482, devia bater em -0.7551482
-        // (mesma magnitude, sinal invertido) — delta de -1.5102964 sobre o valor anterior (2.1).
-        { PetType.Monkey, new Vector2(0.5897036f, -0.8f) },
-        // 1º teste: muito em cima do Javali (1.0107) → +0.7 ficou muito afastado (1.7107) —
-        // bisseção entre as duas tentativas: 1.3607.
-        { PetType.Boar, new Vector2(1.3607f, -0.8f * 1.714f) },
-        // Rato ainda não testado — chute inicial escalado pela proporção de tamanho contra o
-        // Macaco (Mouse 0.30 vs Monkey 0.35, fator ~0.857). Ajustar depois de testar em jogo.
-        { PetType.Mouse, new Vector2(0.5897036f * 0.857f, -0.8f * 0.857f) },
+        { PetType.Monkey, new Vector2(-0.5897036f, -0.8f) },
+        { PetType.Boar,   new Vector2(-1.3607f,    -0.8f * 1.714f) },
+        { PetType.Mouse,  new Vector2(-0.5897036f * 0.857f, -0.8f * 0.857f) },
     };
 
-    // Mesma calibração de UnarmedAttacksPetOffset, mas pra quando o personagem ataca o pet
-    // COM arma equipada — reportado pelo usuário que o alcance armado contra o Javali batia na
-    // mesma posição (muito em cima) que o desarmado batia antes do offset acima existir; a
-    // fórmula geométrica de CharacterPetReach por si só não é suficiente pra nenhum pet com
-    // arma. Macaco/Rato ainda não testados armados — chute inicial = mesmo valor calibrado/
-    // estimado do desarmado de cada um (única referência que existe até alguém testar).
     private static readonly Dictionary<PetType, Vector2> ArmedAttacksPetOffset = new Dictionary<PetType, Vector2>
     {
-        { PetType.Boar,   new Vector2(1.3607f, -0.8f * 1.714f) },
-        { PetType.Monkey, new Vector2(0.5897036f, -0.8f) },
-        { PetType.Mouse,  new Vector2(0.5897036f * 0.857f, -0.8f * 0.857f) },
+        { PetType.Boar,   new Vector2(-1.3607f,    -0.8f * 1.714f) },
+        { PetType.Monkey, new Vector2(-0.5897036f, -0.8f) },
+        { PetType.Mouse,  new Vector2(-0.5897036f * 0.857f, -0.8f * 0.857f) },
     };
 
     private static Vector3 ApplyPetOffset(Vector3 basePos, Vector3 fromPos, Vector3 towardPos, Dictionary<PetType, Vector2> table, PetType type)
@@ -485,7 +476,7 @@ public class CombatPlayer : MonoBehaviour
                     if (attacker != null && runTargetPet != null)
                     {
                         Vector3 runStopPos = CalcPetStopPosition(attacker.transform.position, runTargetPet.transform.position, CharacterPetReach(runTargetPet.petType));
-                        runStopPos = ApplyPetOffsetRaw(runStopPos,
+                        runStopPos = ApplyPetOffset(runStopPos, attacker.transform.position, runTargetPet.transform.position,
                             attacker.weaponHandler.CurrentWeapon == null ? UnarmedAttacksPetOffset : ArmedAttacksPetOffset,
                             runTargetPet.petType);
                         yield return StartCoroutine(
@@ -1301,7 +1292,7 @@ public class CombatPlayer : MonoBehaviour
                             if (distToPet > 1.0f)
                             {
                                 Vector3 hitPetStopPos = CalcPetStopPosition(attacker.transform.position, hitPet.transform.position, CharacterPetReach(hitPet.petType));
-                                hitPetStopPos = ApplyPetOffsetRaw(hitPetStopPos,
+                                hitPetStopPos = ApplyPetOffset(hitPetStopPos, attacker.transform.position, hitPet.transform.position,
                                     attacker.weaponHandler.CurrentWeapon == null ? UnarmedAttacksPetOffset : ArmedAttacksPetOffset,
                                     hitPet.petType);
                                 yield return StartCoroutine(attacker.animationController.PlayRun(hitPetStopPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
@@ -1883,8 +1874,7 @@ public class CombatPlayer : MonoBehaviour
             {
                 var fleeingPet = GetPet(evt.playerIndex, evt.petIndex);
                 if (fleeingPet != null)
-                    StartCoroutine(PlayPetFlee(fleeingPet, t));
-                yield return new WaitForSeconds(0.4f * t);
+                    yield return StartCoroutine(PlayPetFlee(fleeingPet, t));
                 break;
             }
 
@@ -1911,11 +1901,50 @@ public class CombatPlayer : MonoBehaviour
                 }
                 if (hypnotizedPet != null)
                 {
+                    // Atualiza ownership visual do pet: RollPetSpawnPosition usa isPlayer1 para
+                    // decidir o lado do spawn; sem isso o pet continuaria aparecendo no campo do
+                    // dono antigo após hipnose, atacando o alvo certo mas do lugar errado.
+                    bool newIsP1 = evt.targetIndex == 0;
+                    hypnotizedPet.isPlayer1 = newIsP1;
+                    hypnotizedPet.SetInitialFacing(newIsP1 ? 1f : -1f);
+
                     var newOwner = GetCombat(evt.targetIndex);
                     yield return StartCoroutine(PlayPetHypnotized(hypnotizedPet, newOwner, t));
                 }
                 else
                     yield return null;
+                break;
+            }
+
+            case CombatEventType.TamerEat:
+            {
+                var tamer   = GetCombat(evt.playerIndex);
+                var carcass = GetPet(evt.targetIndex, evt.petIndex);
+
+                if (tamer != null && carcass != null)
+                {
+                    // Corre até a carcaça (mesma lógica de distância do caso Hit→pet)
+                    float eatSpeed = (tamer.settings?.runSpeed ?? 35f) * t;
+                    Vector3 eatPos = CalcPetStopPosition(tamer.transform.position, carcass.transform.position, CharacterPetReach(carcass.petType));
+                    yield return StartCoroutine(tamer.animationController.PlayRun(eatPos, eatSpeed, tamer.movement));
+
+                    // Swing rápido simulando o Tamer comendo a carcaça
+                    float slashHalf = (tamer.settings?.slashingDuration ?? 0.5f) * 0.25f * t;
+                    string eatTrigger = SwingTrigger(tamer);
+                    tamer.GetComponent<Animator>()?.SetTrigger(eatTrigger);
+                    yield return new WaitForSeconds(slashHalf);
+
+                    // Cura e popup verde
+                    ApplyHealthDelta(evt.playerIndex, evt.newHp);
+                    DamagePopup.SpawnHeal(tamer.transform.position + Vector3.up * 1.5f, evt.healAmount);
+
+                    // Carcaça consumida — destroi o GameObject
+                    if (carcass.healthBar != null) carcass.healthBar.FadeOutAndDestroy(0.2f);
+                    Destroy(carcass.gameObject);
+
+                    yield return new WaitForSeconds(slashHalf);
+                }
+                yield return new WaitForSeconds((tamer?.settings?.comboDelay ?? 0.15f) * t);
                 break;
             }
 
@@ -1936,7 +1965,11 @@ public class CombatPlayer : MonoBehaviour
     {
         var list = ownerIndex == 0 ? p1Pets : p2Pets;
         if (list == null || petIndex < 0 || petIndex >= list.Count) return null;
-        return list[petIndex];
+        var pet = list[petIndex];
+        // Unity's operator== retorna true para objetos destruídos (fake-null) — garante que
+        // callers que usam ?. (C# null-conditional, não Unity-aware) não acessem animadores
+        // de pets cujo GameObject foi destruído (ex: carcaça comida pelo Tamer).
+        return pet != null ? pet : null;
     }
 
     // Pets como alvo válido (Ajuste 1) — versão simplificada de Haste/Piledriver/Vampirism
@@ -2009,65 +2042,95 @@ public class CombatPlayer : MonoBehaviour
 
     private IEnumerator PlayCryOfTheDamned(PlayerCombat crier, float t)
     {
-        var animator  = crier.GetComponent<Animator>();
+        var animator     = crier.GetComponent<Animator>();
         float savedSpeed = animator != null ? animator.speed : 1f;
         if (animator != null) animator.speed = 0f;
 
-        // Boca: mesma fórmula do TragicPotion — offset à frente do rosto do personagem
         float   forwardSign = Mathf.Sign(crier.transform.localScale.x);
         Vector3 mouthPos    = crier.transform.position
                             + new Vector3(0.38f * forwardSign, 0.38f, 0f);
 
-        var glow  = PlayerCombat.GetGlowSprite();
-        int count = UnityEngine.Random.Range(9, 13);
-        for (int i = 0; i < count; i++)
+        // Direção do vento: aponta para o pet inimigo mais próximo vivo; fallback = frente.
+        var enemyPets = crier == p1Combat ? p2Pets : p1Pets;
+        Vector2 windDir  = new Vector2(forwardSign, 0f);
+        float   distToPet = 8f; // fallback razoável (largura da arena)
+        foreach (var ep in enemyPets)
         {
-            StartCoroutine(SpawnBreathParticle(mouthPos, forwardSign, glow));
-            if (i < count - 1)
-                yield return new WaitForSeconds(0.06f * t);
+            if (ep != null)
+            {
+                Vector2 toPet = (Vector2)ep.transform.position - (Vector2)mouthPos;
+                distToPet = toPet.magnitude;
+                windDir   = toPet / distToPet;
+                break;
+            }
         }
 
-        yield return new WaitForSeconds(0.55f * t);
+        var glow = PlayerCombat.GetGlowSprite();
+
+        // 3 rajadas curtas em sequência; partículas continuam voando em background
+        for (int wave = 0; wave < 3; wave++)
+        {
+            int count = UnityEngine.Random.Range(3, 6);
+            for (int i = 0; i < count; i++)
+            {
+                StartCoroutine(SpawnWindParticle(mouthPos, windDir, glow, distToPet));
+                yield return new WaitForSeconds(0.045f * t);
+            }
+            if (wave < 2)
+                yield return new WaitForSeconds(0.13f * t);
+        }
+
+        yield return new WaitForSeconds(0.30f * t);
 
         if (animator != null) animator.speed = savedSpeed;
     }
 
-    private IEnumerator SpawnBreathParticle(Vector3 origin, float dirSign, Sprite glow)
+    // Partícula de vento alongada na direção do alvo. Life calculado para chegar até o pet.
+    private IEnumerator SpawnWindParticle(Vector3 origin, Vector2 windDir, Sprite glow, float targetDist)
     {
-        var go = new GameObject("CryBreath");
+        var go = new GameObject("WindPuff");
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite           = glow;
         sr.sortingLayerName = "Characters";
         sr.sortingOrder     = 28;
-        // Cor espectral: verde-fantasmagórico com toque azulado
-        sr.color = new Color(
-            UnityEngine.Random.Range(0.3f, 0.55f),
-            UnityEngine.Random.Range(0.85f, 1.0f),
-            UnityEngine.Random.Range(0.65f, 1.0f),
-            UnityEngine.Random.Range(0.70f, 0.90f));
-        Color  startColor = sr.color;
-        float  scale      = UnityEngine.Random.Range(0.10f, 0.28f);
-        float  speed      = UnityEngine.Random.Range(1.8f, 3.8f);
-        float  waveFreq   = UnityEngine.Random.Range(3.5f, 7.5f);
-        float  waveAmp    = UnityEngine.Random.Range(0.07f, 0.20f);
-        float  life       = UnityEngine.Random.Range(0.45f, 0.80f);
-        float  elapsed    = 0f;
 
-        go.transform.position = origin + new Vector3(
-            UnityEngine.Random.Range(-0.12f, 0.12f),
-            UnityEngine.Random.Range(-0.10f, 0.10f), 0f);
-        go.transform.localScale = Vector3.one * scale;
+        sr.color = new Color(
+            UnityEngine.Random.Range(0.75f, 1.00f),
+            UnityEngine.Random.Range(0.88f, 1.00f),
+            1.0f,
+            UnityEngine.Random.Range(0.55f, 0.82f));
+        Color startColor = sr.color;
+
+        Vector2 perp    = new Vector2(-windDir.y, windDir.x);
+        float   speed   = UnityEngine.Random.Range(4.0f, 7.0f);
+        // Life calculado para que a partícula percorra targetDist ± 10% — alcança o pet.
+        float   life    = (targetDist / speed) * UnityEngine.Random.Range(0.90f, 1.10f);
+        float   waveFreq = UnityEngine.Random.Range(4f, 9f);
+        float   waveAmp  = UnityEngine.Random.Range(0.04f, 0.14f);
+        float   scaleW   = UnityEngine.Random.Range(0.18f, 0.30f);
+        float   elapsed  = 0f;
+
+        go.transform.position = origin + (Vector3)(perp * UnityEngine.Random.Range(-0.18f, 0.18f))
+                                       + new Vector3(0f, UnityEngine.Random.Range(-0.06f, 0.06f), 0f);
+        float angle = Mathf.Atan2(windDir.y, windDir.x) * Mathf.Rad2Deg;
+        go.transform.rotation   = Quaternion.Euler(0f, 0f, angle);
+        go.transform.localScale = new Vector3(scaleW * 2.8f, scaleW, 1f);
 
         Vector3 pos = go.transform.position;
         while (elapsed < life && go != null)
         {
             elapsed += Time.deltaTime;
-            float p  = elapsed / life;
-            pos.x   += dirSign * speed * Time.deltaTime;
-            pos.y   += Mathf.Sin(elapsed * waveFreq) * waveAmp * Time.deltaTime;
-            go.transform.position   = pos;
-            go.transform.localScale = Vector3.one * scale * Mathf.Lerp(1f, 0.6f, p);
-            if (sr != null) sr.color = new Color(startColor.r, startColor.g, startColor.b, startColor.a * (1f - p));
+            float p = elapsed / life;
+
+            pos += (Vector3)(windDir * speed * Time.deltaTime);
+            pos += (Vector3)(perp * Mathf.Sin(elapsed * waveFreq) * waveAmp * Time.deltaTime);
+            go.transform.position = pos;
+
+            float s = Mathf.Lerp(1f, 0.3f, p * p);
+            go.transform.localScale = new Vector3(scaleW * 2.8f * s, scaleW * s, 1f);
+
+            if (sr != null)
+                sr.color = new Color(startColor.r, startColor.g, startColor.b, startColor.a * (1f - p));
             yield return null;
         }
         if (go != null) Destroy(go);
@@ -2084,7 +2147,7 @@ public class CombatPlayer : MonoBehaviour
         Vector3 startPos   = pet.transform.position;
         Vector3 startScale = pet.transform.localScale;
 
-        pet.animController?.PlayRun();
+        pet.animController?.PlayRun(true);
         pet.FlipToward(new Vector3(targetX, 0f, 0f));
 
         float duration = 0.60f * t;
@@ -2109,6 +2172,39 @@ public class CombatPlayer : MonoBehaviour
 
     // --- Hypnosis ---
 
+    // Espiral de Arquimedes em P&B — gerada 1x e cacheada. Raio interno vazio (sem alpha),
+    // faixas B&W em 4 voltas, fade suave na borda.
+    private static Sprite _hypnoSpiralSprite;
+    private static Sprite GetHypnoSpiralSprite()
+    {
+        if (_hypnoSpiralSprite != null) return _hypnoSpiralSprite;
+        const int size = 512;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        float cx = size * 0.5f, cy = size * 0.5f, maxR = size * 0.5f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - cx, dy = y - cy;
+                float r  = Mathf.Sqrt(dx * dx + dy * dy);
+                if (r >= maxR) { tex.SetPixel(x, y, Color.clear); continue; }
+                float angle  = Mathf.Atan2(dy, dx);
+                float norm   = r / maxR;
+                float phase  = angle - norm * Mathf.PI * 8f;   // 4 voltas completas
+                float stripe = Mathf.Sin(phase);
+                // Alpha: zero no centro, 1 no meio, zero na borda
+                float alpha  = Mathf.SmoothStep(0f, 1f, norm * 6f)
+                             * Mathf.SmoothStep(1f, 0f, (norm - 0.72f) * 3.6f);
+                alpha = Mathf.Clamp01(alpha);
+                float bright = stripe * 0.5f + 0.5f;
+                tex.SetPixel(x, y, new Color(bright, bright, bright, alpha));
+            }
+        }
+        tex.Apply();
+        _hypnoSpiralSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        return _hypnoSpiralSprite;
+    }
+
     private IEnumerator PlayHypnosisScreenEffect(PlayerCombat hypnotizer, float t)
     {
         var canvasGO = new GameObject("HypnosisOverlay");
@@ -2116,46 +2212,49 @@ public class CombatPlayer : MonoBehaviour
         canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 50;
 
-        float duration = 1.5f * t;
+        // Camada de branqueamento full-screen — simula P&B lavando as cores
+        var bwGO  = new GameObject("BWOverlay");
+        bwGO.transform.SetParent(canvas.transform, false);
+        var bwRT  = bwGO.AddComponent<RectTransform>();
+        bwRT.anchorMin = Vector2.zero;
+        bwRT.anchorMax = Vector2.one;
+        bwRT.offsetMin = bwRT.offsetMax = Vector2.zero;
+        var bwImg = bwGO.AddComponent<UnityEngine.UI.Image>();
+        bwImg.color = new Color(0.88f, 0.88f, 0.88f, 0f);
+
+        // Espiral — 2300px cobre a diagonal da tela (1920×1080 → diagonal ≈ 2202px)
+        var spiralGO  = new GameObject("HypnoSpiral");
+        spiralGO.transform.SetParent(canvas.transform, false);
+        var spiralRT  = spiralGO.AddComponent<RectTransform>();
+        spiralRT.anchorMin = spiralRT.anchorMax = new Vector2(0.5f, 0.5f);
+        spiralRT.pivot     = new Vector2(0.5f, 0.5f);
+        spiralRT.sizeDelta = new Vector2(2300f, 2300f);
+        var spiralImg = spiralGO.AddComponent<UnityEngine.UI.Image>();
+        spiralImg.sprite = GetHypnoSpiralSprite();
+        spiralImg.color  = new Color(1f, 1f, 1f, 0f);
+
+        float duration = 1.8f * t;
         float elapsed  = 0f;
-
-        var rings = new List<GameObject>();
-        var colors = new Color[]
-        {
-            new Color(0.6f, 0f, 0.9f, 0f),
-            new Color(0f,  0.8f, 0.8f, 0f),
-            new Color(0.5f, 0f, 0.7f, 0f),
-            new Color(0f,  0.6f, 0.7f, 0f),
-        };
-
-        for (int i = 0; i < 4; i++)
-        {
-            var ringGO = new GameObject($"Ring{i}");
-            var rt     = ringGO.AddComponent<RectTransform>();
-            ringGO.transform.SetParent(canvas.transform, false);
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = Vector2.one * (200f + i * 150f);
-            var img = ringGO.AddComponent<UnityEngine.UI.Image>();
-            img.sprite = PlayerCombat.GetGlowSprite();
-            img.color  = colors[i];
-            rings.Add(ringGO);
-        }
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            float p     = elapsed / duration;
-            float alpha = p < 0.4f ? (p / 0.4f) * 0.5f : (1f - p) * 0.5f;
-            for (int i = 0; i < rings.Count; i++)
-            {
-                var img = rings[i].GetComponent<UnityEngine.UI.Image>();
-                var c   = colors[i];
-                c.a     = alpha;
-                img.color = c;
-                rings[i].transform.rotation   = Quaternion.Euler(0f, 0f, elapsed * (60f + i * 40f));
-                float scale = 1f + 0.2f * Mathf.Sin(elapsed * 4f + i);
-                rings[i].transform.localScale = Vector3.one * scale;
-            }
+            float p = elapsed / duration;
+
+            // Envelope: sobe em 30%, plateau, desce nos últimos 35%
+            float alpha;
+            if      (p < 0.30f) alpha = p / 0.30f;
+            else if (p < 0.65f) alpha = 1f;
+            else                alpha = (1f - p) / 0.35f;
+            alpha = Mathf.Clamp01(alpha);
+
+            bwImg.color    = new Color(0.88f, 0.88f, 0.88f, alpha * 0.78f);
+            spiralImg.color = new Color(1f, 1f, 1f, alpha);
+
+            // Rotação: acelera na entrada, auge no meio, desacelera na saída
+            float rotSpeed = Mathf.Lerp(20f, 260f, Mathf.Sin(p * Mathf.PI));
+            spiralGO.transform.Rotate(0f, 0f, rotSpeed * Time.deltaTime);
+
             yield return null;
         }
 
@@ -2193,7 +2292,7 @@ public class CombatPlayer : MonoBehaviour
             pet.transform.position.z);
 
         pet.FlipToward(targetPos);
-        pet.animController?.PlayRun();
+        pet.animController?.PlayRun(true);
 
         float   runDuration = 0.8f * t;
         Vector3 startPos    = pet.transform.position;
@@ -2207,7 +2306,10 @@ public class CombatPlayer : MonoBehaviour
         if (pet != null)
         {
             pet.transform.position = targetPos;
+            pet.spawnPosition      = targetPos;   // próximo PetAttack já começa no lado certo
+            pet.animController?.PlayRun(false);
             pet.animController?.SetIdle(true);
+            pet.FlipToInitial();
         }
     }
 

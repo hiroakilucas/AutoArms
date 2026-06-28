@@ -120,6 +120,17 @@ public class PetCombatController : MonoBehaviour
         transform.localScale = scale;
     }
 
+    // Define a direção de repouso do pet (e já aplica no localScale) — chamado por
+    // CombatSceneLoader depois do Instantiate, já que _initialForwardSign é capturado
+    // no Awake com o valor do prefab antes de qualquer flip externo.
+    public void SetInitialFacing(float forwardSign)
+    {
+        _initialForwardSign = forwardSign;
+        var scale = transform.localScale;
+        scale.x = Mathf.Abs(scale.x) * _initialForwardSign;
+        transform.localScale = scale;
+    }
+
     // Restaura a direção inicial (a que o pet tinha antes deste ataque) — chamado antes de
     // correr de volta ao spawn.
     public void FlipToInitial()

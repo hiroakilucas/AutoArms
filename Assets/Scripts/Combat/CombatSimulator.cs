@@ -558,12 +558,19 @@ public class CombatSimulator
             supers.Add(() => { TryActivateCryOfTheDamned(attacker, defender); return false; });
         if (attacker.HasSkill("Hypnosis") && attacker.hypnosisUsesRemaining > 0)
             supers.Add(() => { TryActivateHypnosis(attacker, defender); return false; });
+        if (attacker.HasSkill("Tamer") && attacker.tamerUsesRemaining > 0)
+            supers.Add(() => { TryActivateTamer(attacker, defender); return false; });
         // futuros Supers entram aqui
 
         ShuffleList(supers);
         bool turnConsumed = false;
         foreach (var trySuper in supers)
             if (trySuper()) turnConsumed = true;
+
+        // Re-valida: CryOfTheDamned pode ter fugado o pet que foi sorteado ANTES dos supers.
+        // Sem isso o simulador emite Run/Hit targeteando um pet que já fugiu.
+        if (targetPet != null && !targetPet.isAlive)
+            targetPet = null;
 
         if (turnConsumed)
         {
@@ -1757,6 +1764,50 @@ public class CombatSimulator
             playerIndex = defender.index,
             petIndex    = idx,
             targetIndex = attacker.index
+        });
+    }
+
+    private void TryActivateTamer(PlayerState attacker, PlayerState defender)
+    {
+        if (attacker.tamerUsesRemaining <= 0) return;
+
+        // Coleta carcaças disponíveis: pets mortos e ainda não consumidos, de ambos os lados.
+        var ownerIdxs = new List<int>();
+        var petIdxs   = new List<int>();
+        var pets      = new List<PetState>();
+
+        for (int i = 0; i < attacker.pets.Count; i++)
+        {
+            var p = attacker.pets[i];
+            if (!p.isAlive && !p.isConsumed) { ownerIdxs.Add(attacker.index); petIdxs.Add(i); pets.Add(p); }
+        }
+        for (int i = 0; i < defender.pets.Count; i++)
+        {
+            var p = defender.pets[i];
+            if (!p.isAlive && !p.isConsumed) { ownerIdxs.Add(defender.index); petIdxs.Add(i); pets.Add(p); }
+        }
+        if (pets.Count == 0) return;
+        if (!Roll(0.67f)) return;
+
+        attacker.tamerUsesRemaining--;
+
+        int choice  = _rng.Next(pets.Count);
+        var carcass = pets[choice];
+
+        int healMin = carcass.maxHp * 20 / 100;
+        int healMax = carcass.maxHp * 50 / 100;
+        int heal    = healMin + _rng.Next(System.Math.Max(1, healMax - healMin + 1));
+        attacker.hp = System.Math.Min(attacker.hp + heal, attacker.maxHp);
+        carcass.isConsumed = true;
+
+        Emit(new CombatEvent {
+            type        = CombatEventType.TamerEat,
+            playerIndex = attacker.index,
+            targetIndex = ownerIdxs[choice],
+            petIndex    = petIdxs[choice],
+            healAmount  = heal,
+            newHp       = attacker.hp,
+            maxHp       = attacker.maxHp,
         });
     }
 

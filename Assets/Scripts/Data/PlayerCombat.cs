@@ -62,8 +62,14 @@ public class PlayerCombat : MonoBehaviour
         debugProfile.xpCurrent        = 0;
         debugProfile.battlesRemaining = 6;
         debugProfile.xpRequired       = XpSystem.XpRequired(1);
+        debugProfile.skills.Clear();
+        debugProfile.pets.Clear();
+        if (debugProfile.weaponLoadout != null)
+            debugProfile.weaponLoadout.weapons = new WeaponData[0];
 #if UNITY_EDITOR
         UnityEditor.EditorUtility.SetDirty(debugProfile);
+        if (debugProfile.weaponLoadout != null)
+            UnityEditor.EditorUtility.SetDirty(debugProfile.weaponLoadout);
         UnityEditor.AssetDatabase.SaveAssets();
 #endif
     }
@@ -75,7 +81,7 @@ public class PlayerCombat : MonoBehaviour
     private Animator animator;
     private List<SpriteRenderer> bodyRenderers;
     private string defaultSortingLayer;
-    private Vector2 spawnPosition;
+    public Vector2 spawnPosition;
     private SpriteRenderer faceRenderer;
     private Sprite[]       faceSprites;
     private GameObject stunLabel;
@@ -440,7 +446,7 @@ public class PlayerCombat : MonoBehaviour
 
     // Círculo branco com fade radial (alpha caindo do centro pra borda, "blur" pobre) gerado uma
     // única vez e cacheado — evita depender de um asset de glow que não existe no projeto ainda.
-    private static Sprite GetGlowSprite()
+    public static Sprite GetGlowSprite()
     {
         if (_glowSprite != null) return _glowSprite;
 
