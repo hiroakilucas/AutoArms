@@ -118,8 +118,9 @@ public class CombatResultPanel : MonoBehaviour
 
         public string Name() => kind switch {
             Kind.Attribute => new[] {
-                "+8 HP", "+2 STR", "+2 AGI", "+2 SPD",
-                "+1 STR / +1 AGI", "+1 AGI / +1 SPD", "+1 STR / +1 SPD"
+                "+12 HP", "+2 STR", "+2 AGI", "+2 SPD",
+                "+1 STR / +1 AGI", "+1 AGI / +1 SPD", "+1 STR / +1 SPD",
+                "+6 HP / +1 STR", "+6 HP / +1 AGI", "+6 HP / +1 SPD"
             }[attrIndex],
             Kind.Skill     => skill?.skillName ?? "?",
             Kind.Weapon    => weapon?.weaponName ?? "?",
@@ -129,13 +130,16 @@ public class CombatResultPanel : MonoBehaviour
 
         public string Desc() => kind switch {
             Kind.Attribute => new[] {
-                "Vida máxima +8",
+                "Vida máxima +12",
                 "Força +2",
                 "Agilidade +2",
                 "Velocidade +2",
                 "Força +1, Agilidade +1",
                 "Agilidade +1, Velocidade +1",
-                "Força +1, Velocidade +1"
+                "Força +1, Velocidade +1",
+                "Vida máxima +6, Força +1",
+                "Vida máxima +6, Agilidade +1",
+                "Vida máxima +6, Velocidade +1"
             }[attrIndex],
             Kind.Skill  => skill?.description ?? "",
             Kind.Weapon => weapon != null ? $"{string.Join(", ", weapon.types)} • {weapon.damage} dano" : "",
@@ -152,6 +156,9 @@ public class CombatResultPanel : MonoBehaviour
             4 => new Color(0.9f, 0.7f, 0.1f),
             5 => new Color(0.2f, 0.8f, 0.6f),
             6 => new Color(0.7f, 0.4f, 0.9f),
+            7 => new Color(0.9f, 0.4f, 0.2f),  // HP+STR — laranja-avermelhado
+            8 => new Color(0.4f, 0.7f, 0.3f),  // HP+AGI — verde-médio
+            9 => new Color(0.4f, 0.6f, 0.9f),  // HP+SPD — azul-médio
             _ => Color.white
         } : Color.white;
     }
@@ -171,7 +178,7 @@ public class CombatResultPanel : MonoBehaviour
         float r       = Random.value * total;
 
         if (r < wAttr)
-            return new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = Random.Range(0, 7) };
+            return new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = Random.Range(0, 10) };
         if (r < wAttr + wSkill)
             return new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = skills[Random.Range(0, skills.Count)] };
         if (r < wAttr + wSkill + wWeapon)
@@ -198,13 +205,16 @@ public class CombatResultPanel : MonoBehaviour
             case LevelUpOption.Kind.Attribute:
                 switch (opt.attrIndex)
                 {
-                    case 0: profile.maxHealth += 8; break;
+                    case 0: profile.maxHealth += 12; break;
                     case 1: profile.str       += 2; break;
                     case 2: profile.agility   += 2; break;
                     case 3: profile.speed     += 2; break;
                     case 4: profile.str += 1; profile.agility += 1; break;
                     case 5: profile.agility += 1; profile.speed += 1; break;
                     case 6: profile.str += 1; profile.speed += 1; break;
+                    case 7: profile.maxHealth += 6; profile.str     += 1; break;
+                    case 8: profile.maxHealth += 6; profile.agility += 1; break;
+                    case 9: profile.maxHealth += 6; profile.speed   += 1; break;
                 }
                 break;
             case LevelUpOption.Kind.Skill:
@@ -342,7 +352,7 @@ public class CombatResultPanel : MonoBehaviour
         List<SkillData> availableSkills, List<WeaponData> availableWeapons, System.Action onChosen)
     {
         var allOptions = new List<LevelUpOption>();
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < 10; i++)
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = i });
         foreach (var s in availableSkills)
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = s });
