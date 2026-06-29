@@ -720,11 +720,8 @@ public class PlayerCombat : MonoBehaviour
     // Quando desarmado: usa "Slashing" (soco) com dano calculado por STR.
     private IEnumerator HitRoutine(bool applyKnockback = true, bool isCombo = false)
     {
-        // Prioridade Heavy > Fast > default — uma arma só tem uma animação de swing, ainda que
-        // tenha múltiplas tags (ex: Heavy|Blunt entra em SlashingHeavy; Sharp|Fast em SlashingDagger).
         string slashTrigger =
-            WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Heavy) ? "SlashingHeavy" :
-            WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Fast)  ? "SlashingDagger" :
+            WeaponData.HasType(weaponHandler.CurrentWeaponData, WeaponType.Fast) ? "SlashingDagger" :
             "Slashing";
 
         // Ballet Shoes: primeiro golpe da luta automaticamente esquivado

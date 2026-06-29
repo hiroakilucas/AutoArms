@@ -1,8 +1,10 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 121 tarefas | Concluídas: 56
+- Total: 121 tarefas | Concluídas: 57
 
+- 2026-06-29: Adicionadas 4 armas: Pio Pio, Noodle Bowl, Frying Pan, Racquet (ScriptableObjects em Assets/Data/Weapons/)
+- 2026-06-29: Implementados ScriptableObjects de 22 armas com stats completos T1/T2/T3 (Knife, Sai, Mug, Fan, Keyboard, Leek, Broadsword, Scimitar, Sword, Axe, Halberd, Baton, Lance, Trident, Whip, Bumps, Flail, Morning Star, Mammoth Bone, Hammer, Trombone, Shuriken); dropOdds e Ranged adicionados ao WeaponData.cs
 - 2026-06-29: Mimic implementada — copia a última Super do oponente (25%/turno, 1x/luta); filtragem inteligente (Treat sem pet, Thief sem arma, Tamer sem carcaça, Hypnosis/Cry sem pets vivos inimigos, Flash Flood sem 3 armas, Tragic Potion/Vampirism por HP); lastSuperUsed rastreado em todos os TryActivate*; SkillsHUD criado (band Y 0.700–0.810, 80px por ícone, contador de usos some quando esgota); Tamer usesPerFight=4 corrigido; CombatPlayer.Mimic popup magenta + UseSkill em todos os Super cases
 - 2026-06-29: Repulse implementada — 30% de chance de deflectir throw de volta ao lançador (sempre acerta, +5% crit, dano com STR do lançador); bloqueado por netEnsnared; CombatEventType.Repulse, SimulateRepulse, case Repulse em CombatPlayer (Slashing + FlyWeapon + SpawnRepulse cyan), CombatLogFormatter, SKILLS_PASSIVE.md
 - 2026-06-29: Roadmap de skills enxugado — removidas 8 skills não implementadas (Impact, Pugnacious, Iron Skin, Strong Arm, Master of Arms, Weapon Tampering, Hammer, Treat); Hypnosis/Cry of the Damned/Tamer mantidas como [x] em Relacionadas a Pets; adicionadas 4 novas: Repulse (30% deflect de throw, +5% crit no deflect), Garimpeiro (pega arma do chão), Mimic (copia última Super do oponente, 1x), Magneto (levita armas do chão e solta tudo de uma vez, 1x); SkillAssetGenerator atualizado

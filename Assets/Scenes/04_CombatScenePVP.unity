@@ -221,6 +221,7 @@ MonoBehaviour:
   hasShield: 0
   skills: []
   debugProfile: {fileID: 0}
+  spawnPosition: {x: 0, y: 0}
 --- !u!114 &45243677
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -404,11 +405,32 @@ MonoBehaviour:
   player1Profile: {fileID: 0}
   skillDatabase: {fileID: 11400000, guid: ae7a17cba55b6e2489c8da3b2597907a, type: 2}
   allWeapons:
-  - {fileID: 11400000, guid: af40afb8bb8443e4d8943e5fc48bfb25, type: 2}
-  - {fileID: 11400000, guid: f027d5453540da84fa7b171f2f781ee0, type: 2}
-  - {fileID: 11400000, guid: 19ea5491d0fb4ee41b2857c3f55495cd, type: 2}
-  - {fileID: 11400000, guid: 5b6ce6b9f1ad8d941aaa6628bb79451b, type: 2}
-  - {fileID: 11400000, guid: 455a2591cb26eb94ab312d7b69629227, type: 2}
+  - {fileID: 11400000, guid: bb20000000000000000000000000000a, type: 2}
+  - {fileID: 11400000, guid: bb20000000000000000000000000000c, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000007, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000010, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000004, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000011, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000019, type: 2}
+  - {fileID: 11400000, guid: bb20000000000000000000000000000b, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000014, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000005, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000001, type: 2}
+  - {fileID: 11400000, guid: bb20000000000000000000000000000d, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000006, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000013, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000012, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000003, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000018, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000017, type: 2}
+  - {fileID: 11400000, guid: bb20000000000000000000000000001a, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000002, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000008, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000016, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000009, type: 2}
+  - {fileID: 11400000, guid: bb20000000000000000000000000000e, type: 2}
+  - {fileID: 11400000, guid: bb200000000000000000000000000015, type: 2}
+  - {fileID: 11400000, guid: bb20000000000000000000000000000f, type: 2}
   interTurnDelay: 0.2
 --- !u!4 &904002942
 Transform:
@@ -595,7 +617,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212246469648006048, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212246469648006048, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -607,7 +629,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212294565902258606, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212294565902258606, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -619,7 +641,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212363710105003096, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212363710105003096, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -631,7 +653,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212403537765433302, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212403537765433302, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -643,7 +665,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212410433639361048, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212410433639361048, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -655,7 +677,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212690636219013952, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212690636219013952, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -667,7 +689,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212695510617298844, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212695510617298844, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -679,7 +701,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212770290252432790, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212770290252432790, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -691,7 +713,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212853362453837900, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212853362453837900, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -703,7 +725,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 212881246353870058, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingLayer
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 212881246353870058, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
       propertyPath: m_SortingOrder
@@ -749,6 +771,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1332891506}
   - component: {fileID: 1332891505}
+  - component: {fileID: 1332891507}
   m_Layer: 0
   m_Name: CombatInitializer
   m_TagString: Untagged
@@ -784,6 +807,7 @@ MonoBehaviour:
   fastMetabolismController: {fileID: 9100000, guid: 6954878f82258454aa7b00ea03605ab9, type: 2}
   vampirismEffectController: {fileID: 9100000, guid: 40160fb26abe36b47bd62325622e8de1, type: 2}
   chefPizzaPrefab: {fileID: 7151401749815861614, guid: 41f6c7be1bf97cf4698fa683938d2837, type: 3}
+  treatSprite: {fileID: 21300000, guid: 9fef392975844d64f8ca9dd944b28f79, type: 3}
   boarPetPrefab: {fileID: 4642219262792097894, guid: ea59611035a96da4eb12d82e54165603, type: 3}
   monkeyPetPrefab: {fileID: 4266016345014175842, guid: 47eb3ba8ce353ab4b8791fa2bbefa199, type: 3}
   mousePetPrefab: {fileID: 2778780671687473689, guid: c41c9e8b03ec9cc4d9c1d1664e3dee24, type: 3}
@@ -802,6 +826,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1332891507
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1332891504}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0787831b1fc8c304eb37947fe63f1cc2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  bloodEffectPrefab: {fileID: 4401934144039312981, guid: bae7f19efba1e6f4f97c93dd32bf756a, type: 3}
+  hit1Controller: {fileID: 9100000, guid: 425c1a6d4d2e40643a992ff23ac5bd63, type: 2}
+  hit2Controller: {fileID: 9100000, guid: 301869a4ef232bb4492c682bbe07ea3c, type: 2}
+  hitCritController: {fileID: 9100000, guid: 1e3fdcdec3037de468102f0f88b2809a, type: 2}
 --- !u!4 &2012125569 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4808958749903386, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}

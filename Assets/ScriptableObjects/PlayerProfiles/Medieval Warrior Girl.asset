@@ -19,9 +19,9 @@ MonoBehaviour:
   weaponLoadout: {fileID: 11400000, guid: 210d3d7a7d490f934cebc5566269e80d, type: 2}
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 65
-  str: 4
-  agility: 6
+  maxHealth: 75
+  str: 3
+  agility: 5
   speed: 3
   armor: 0
   evasion: 0

@@ -19,6 +19,7 @@ public class WeaponData : ScriptableObject
     public float scale = 1f;      // tamanho arma
 
     [Header("My Brute — Propriedades da Arma")]
+    public float dropOdds = 0f;              // % de chance de drop no level-up
     public float hitSpeed = 1.0f;            // multiplicador de velocidade de ataque
     public float drawChance = 0f;            // % chance de pegar esta arma ao pick up
     public int   reach = 0;                  // alcance — soma à distância base de AttackPosition
@@ -71,6 +72,7 @@ public enum WeaponType
     Heavy,
     Fast,
     Thrown,
+    Ranged,
 }
 
 // Propriedades do combate desarmado (sem WeaponData associado) — valores do My Brute.
