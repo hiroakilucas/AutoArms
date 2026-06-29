@@ -143,31 +143,36 @@ public static class PetAnimatorSetup
         runToIdle.AddCondition(AnimatorConditionMode.IfNot, 0, "Running");
 
         // AnyState -> Slashing/Hurt/Jumping/Dying via trigger, sem exit time — dispara
-        // imediatamente, CanTransitionToSelf=true só em Slashing (permite re-entrar pra
-        // sustentar combo/hits extras de pet, mesmo padrão dos personagens principais).
+        // imediatamente. Slashing e Hurt têm canTransitionToSelf=true para poderem re-entrar
+        // no próprio estado (Slashing: combo/hits extras; Hurt: cada hit de combo reinicia a
+        // reação de dano em vez de acumular triggers pendentes que causam engasgo).
         void AnyStateTo(AnimatorState target, string trigger, bool canSelf)
         {
             var t = sm.AddAnyStateTransition(target);
             t.hasExitTime = false;
-            t.duration = 0.05f;
+            t.duration = 0f;   // 0 = sem blend; 0.05 causava freeze visual de 50ms no início do Hurt
             t.canTransitionToSelf = canSelf;
             t.AddCondition(AnimatorConditionMode.If, 0, trigger);
         }
         AnyStateTo(slashingState, "Slashing", true);
-        AnyStateTo(hurtState, "Hurt", false);
+        AnyStateTo(hurtState, "Hurt", true);   // true: hit de combo reinicia Hurt em vez de acumular trigger
         AnyStateTo(jumpingState, "Jumping", false);
         AnyStateTo(dyingState, "Dying", false);
 
-        // Slashing/Hurt/Jumping voltam pro Idle automaticamente depois de tocar quase tudo do
-        // clipe (sem precisar de nenhum bool/trigger extra do lado de fora).
-        void ExitToIdle(AnimatorState from)
+        // Hurt/Jumping voltam pro Idle automaticamente em ExitTime=0.9 (reação momentânea,
+        // sem precisar de bool externo). Slashing exige Idle=true explícito para sair —
+        // sem isso o pet voltava pra Idle ANTES do impacto (ExitTime=0.9 disparava antes do
+        // comboDelay terminar), desconectando o golpe visualmente do momento de dano.
+        void ExitToIdle(AnimatorState from, bool requireIdleBool = false)
         {
             var t = from.AddTransition(idleState);
             t.hasExitTime = true;
             t.exitTime = 0.9f;
-            t.duration = 0.05f;
+            t.duration = 0f;   // 0 = sem blend na saída; 0.05 causava freeze visual de 50ms no fim do Hurt
+            if (requireIdleBool)
+                t.AddCondition(AnimatorConditionMode.If, 0, "Idle");
         }
-        ExitToIdle(slashingState);
+        ExitToIdle(slashingState, requireIdleBool: true);
         ExitToIdle(hurtState);
         ExitToIdle(jumpingState);
         // Dying: SEM transição de saída — trava no último frame (Loop Time=false já garante

@@ -691,10 +691,10 @@ public class CombatSimulator
     // --- Pets (Fase 3) ---
 
     // Turno de um pet. Alvo é decidido uma única vez (não re-sorteado a cada hit extra de
-    // combo) — 40% de chance de atacar um pet inimigo vivo aleatório em vez do personagem
-    // principal, se houver algum vivo. Combo do pet usa o mesmo decaimento ×0.5 do personagem
-    // (ComboChance), mas sem clamp/bônus de tag de arma — é só pet.comboRate puro — e com um
-    // teto fixo de 3 hits extras (em vez de decair até ficar irrelevante como no personagem).
+    // combo) — usa o mesmo RollPetTarget do turno de personagem (Javali=75%, Macaco/Rato=50%
+    // de chance individual de interceptar em vez do personagem principal). Combo do pet usa o
+    // mesmo decaimento ×0.5 do personagem (ComboChance), mas sem clamp/bônus de tag de arma
+    // — é só pet.comboRate puro — e com um teto fixo de 3 hits extras.
     private void SimulatePetTurn(PetState pet, PlayerState petOwner, PlayerState enemy, List<PetState> enemyPets)
     {
         int petIndex = petOwner.pets.IndexOf(pet);
@@ -707,12 +707,9 @@ public class CombatSimulator
             return;
         }
 
-        var aliveEnemyPetIdx = new List<int>();
-        for (int i = 0; i < enemyPets.Count; i++)
-            if (enemyPets[i].isAlive) aliveEnemyPetIdx.Add(i);
-
-        bool targetIsPet  = aliveEnemyPetIdx.Count > 0 && Roll(0.40f);
-        int  targetPetIdx = targetIsPet ? aliveEnemyPetIdx[_rng.Next(aliveEnemyPetIdx.Count)] : -1;
+        PetState targetPetState = RollPetTarget(enemy);
+        bool targetIsPet  = targetPetState != null;
+        int  targetPetIdx = targetIsPet ? enemy.pets.IndexOf(targetPetState) : -1;
 
         bool interrupted = SimulatePetHit(petOwner, petIndex, enemy, enemyPets, targetIsPet, targetPetIdx, comboCount: 0);
 
@@ -1522,15 +1519,16 @@ public class CombatSimulator
 
         attacker.netUsesRemaining--;
 
-        // Alvo decidido ANTES de imobilizar: se o defensor tem pets vivos (e ainda não
-        // enredados), 50% de chance de pegar um deles em vez do personagem. netEnsnared de pet
-        // é PERMANENTE (PetState.netEnsnared nunca é solto de volta, ver SimulatePetTurn) —
-        // diferente do personagem, que se liberta no próximo hit que sofrer.
+        // Alvo: prioridade total nos pets — se houver qualquer pet vivo e não-enredado do
+        // defensor, a rede SEMPRE pega um deles (aleatório entre os disponíveis). Só vai no
+        // personagem quando todos os pets já estão mortos ou enredados. netEnsnared de pet é
+        // PERMANENTE (PetState.netEnsnared nunca é solto, ver SimulatePetTurn) — diferente do
+        // personagem, que se liberta no próximo hit que sofrer.
         var alivePets = new List<int>();
         for (int i = 0; i < defender.pets.Count; i++)
             if (defender.pets[i].isAlive && !defender.pets[i].netEnsnared) alivePets.Add(i);
 
-        bool caughtPet    = alivePets.Count > 0 && Roll(0.50f);
+        bool caughtPet    = alivePets.Count > 0;
         int  caughtPetIdx = caughtPet ? alivePets[_rng.Next(alivePets.Count)] : -1;
 
         if (caughtPet)
@@ -1901,7 +1899,7 @@ public class CombatSimulator
         var passed = new List<PetState>();
         foreach (var pet in defender.pets)
         {
-            if (!pet.isAlive) continue;
+            if (!pet.isAlive || pet.netEnsnared) continue;  // enredado: invisível como alvo
             float chance = PetTargetChance(pet.type);
             if (chance > 0f && Roll(chance)) passed.Add(pet);
         }

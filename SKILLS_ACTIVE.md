@@ -118,8 +118,14 @@ Diferente de toda outra Super, **não tem método `Simulate*` dedicado** — a l
 
 Novos `CombatEventType.NetThrow` (playerIndex = atacante, targetIndex = defensor — sem dano), `NetEnsnaredSkip` (playerIndex = enredado cujo turno é pulado — distinto de `StunSkip`, que representa 1 ação só; Net repete a cada turno até libertar) e `NetFreed` (playerIndex = quem acabou de se libertar).
 
+**Interação com pets**: `TryActivateNet` monta `alivePets` = pets vivos e não-enredados do
+defensor. Quando `alivePets.Count > 0`, **sempre pega um pet** (`caughtPet = alivePets.Count > 0`
+— sem Roll, 100% de prioridade). Pet capturado: `PetState.netEnsnared = true`, excluído
+permanentemente de `RollPetTarget` (não pode ser alvo de nenhum ataque enquanto enredado).
+Personagem só é alvo quando todos os pets do defensor estão mortos ou já enredados.
+
 **Visual** (`CombatPlayer.ExecuteEvent`):
-1. **`NetThrow`** — trigger `Throwing` no atacante (mesmo de qualquer arremesso), `net1.png` arremessado em arco via `PlayerCombat.FlyWeapon` (helper genérico já usado por `ThrowWeapon`) do `handBone` até a posição do defensor. Ao chegar, chama `defender.ShowNetEnsnared(netLandedSprite)`.
+1. **`NetThrow`** — trigger `Throwing` no atacante (mesmo de qualquer arremesso), `net1.png` arremessado em arco via `PlayerCombat.FlyWeapon` do `handBone`. Destino: posição do pet alvo (`netTargetPet.transform.position + Vector3.up * 0.3f`) quando `targetIsPet = true`, ou posição do personagem defensor quando `targetIsPet = false`. Ao chegar: `netTargetPet.animController.ShowNetEnsnared(netLandedSprite, Net2LandedScale)` no pet, ou `defender.ShowNetEnsnared(netLandedSprite)` no personagem.
 2. **`PlayerCombat.ShowNetEnsnared`** (novo método): liga 2 loops por coroutine que rodam *através* de qualquer número de `NetEnsnaredSkip` seguintes, sem precisar de nada extra em cada um deles — `NetFaceLoop` (reforça `faceSprites[1]`/Face 02 todo frame, mesmo padrão de `StunDazedLoop`/Face 03) e `NetOscillateLoop` (`net2.png` parented ao personagem, `localPosition.x = Mathf.Sin(Time.time * 2f) * 0.05f` todo frame — vaivém lateral suave).
 3. **`NetEnsnaredSkip`** — só aguarda a duração de 1 turno normal; os 2 loops acima continuam de boa.
 4. **`NetFreed`** — `PlayerCombat.ReleaseNet()` para os 2 loops, restaura Face 01, devolve o próprio `GameObject` da rede (sem destruir ainda); `CombatPlayer` anima scale-up rápido (~1.3x, ~0.1s) e estoura em **5 fragmentos** distribuídos radialmente (0°/72°/144°/216°/288°, reaproveitando o mesmo sprite de `net2` em ~0.25x — sem asset novo), cada um voando na própria direção a ~3 unid/s com fade de alpha em ~0.35s antes de se destruir.

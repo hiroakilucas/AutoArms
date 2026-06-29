@@ -883,6 +883,12 @@ public class CombatPlayer : MonoBehaviour
                     attacker.animationController.SetIdle(false);
                     attacker.GetComponent<Animator>()?.SetTrigger("Throwing");
 
+                    // Destino da rede: pet alvo (prioridade) ou personagem principal.
+                    var netTargetPet = evt.targetIsPet ? GetPet(evt.targetIndex, evt.targetPetIndex) : null;
+                    Vector3 netDest = netTargetPet != null
+                        ? netTargetPet.transform.position + Vector3.up * 0.3f
+                        : defender.transform.position;
+
                     if (netFlyingSprite != null)
                     {
                         var net1 = new GameObject("NetFlying");
@@ -894,7 +900,7 @@ public class CombatPlayer : MonoBehaviour
                         sr.sortingOrder     = 10;
 
                         yield return StartCoroutine(attacker.FlyWeapon(
-                            net1.transform, netLaunchPos, defender.transform.position, 0.4f * t, rotate: false, arc: 0.5f));
+                            net1.transform, netLaunchPos, netDest, 0.4f * t, rotate: false, arc: 0.5f));
                         Destroy(net1);
                     }
                     else
@@ -903,13 +909,11 @@ public class CombatPlayer : MonoBehaviour
                     }
                     attacker.animationController.SetIdle(true);
 
-                    // Se a rede pegou um pet do defensor em vez do personagem (50% de chance,
-                    // ver CombatSimulator.TryActivateNet), o personagem nunca mostra a pose de
-                    // enredado — só o pet alvo fica "preso" (sem clip dedicado no Animator de 6
-                    // estados dos pets; o efeito visual real é só nunca mais agir, ver
-                    // PetNetSkip abaixo, que se repete pra sempre — netEnsnared de pet é
-                    // permanente).
-                    if (!evt.targetIsPet)
+                    // Rede sempre prioriza pets (100% quando há pet vivo, ver TryActivateNet).
+                    // Personagem só fica enredado quando não há pets vivos disponíveis.
+                    if (evt.targetIsPet && netTargetPet != null)
+                        netTargetPet.animController.ShowNetEnsnared(netLandedSprite, Net2LandedScale);
+                    else if (!evt.targetIsPet)
                         defender.ShowNetEnsnared(netLandedSprite, Net2LandedScale);
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
@@ -1979,6 +1983,9 @@ public class CombatPlayer : MonoBehaviour
                     fedPet.healthBar?.UpdateBar(evt.newTargetHp, fedPet.maxHp);
                     DamagePopup.SpawnHeal(fedPet.transform.position + Vector3.up * 1f, evt.healAmount);
 
+                    // Se o pet estava enredado, disipa a rede (scale-up + fragmentos radiais)
+                    yield return StartCoroutine(PlayNetBreakEffect(fedPet, t));
+
                     // Escudo visual dourado ao redor do pet
                     if (fedPet.shieldVisual != null) Destroy(fedPet.shieldVisual);
                     fedPet.shieldVisual = CreatePetShieldVisual(fedPet);
@@ -2016,6 +2023,19 @@ public class CombatPlayer : MonoBehaviour
                     Destroy(carcass.gameObject);
 
                     yield return new WaitForSeconds(slashHalf);
+
+                    // Volta ao spawn antes de continuar o turno (RunToDefender + ataque normal)
+                    // — mesmo padrão do TurnEnd: só pula se estiver fora da zona de spawn.
+                    if (!InSpawnZone(tamer.transform.position, tamer.isPlayer1))
+                    {
+                        float jsDur = tamer.settings?.jumpStartDuration ?? 0.02f;
+                        float jh    = tamer.settings?.jumpHeight ?? 2f;
+                        float spd   = (tamer.settings?.runSpeed ?? 35f) * t;
+                        Vector2 spawnPos = RandomSpawnPos(tamer.isPlayer1);
+                        yield return StartCoroutine(tamer.animationController.PlayJumpStart(jsDur * t));
+                        yield return StartCoroutine(tamer.movement.JumpTo(spawnPos, spd, jh));
+                    }
+                    tamer.animationController.SetIdle(true);
                 }
                 yield return new WaitForSeconds((tamer?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -2567,7 +2587,18 @@ public class CombatPlayer : MonoBehaviour
     private IEnumerator PlayNetBreakEffect(PlayerCombat character, float t)
     {
         if (character == null) yield break;
-        var net2 = character.ReleaseNet();
+        yield return StartCoroutine(PlayNetBreakEffect(character.ReleaseNet(), t));
+    }
+
+    // Overload para pet — mesmo efeito de dissipação (scale-up + fragmentos radiais).
+    private IEnumerator PlayNetBreakEffect(PetCombatController pet, float t)
+    {
+        if (pet == null) yield break;
+        yield return StartCoroutine(PlayNetBreakEffect(pet.animController.ReleaseNet(), t));
+    }
+
+    private IEnumerator PlayNetBreakEffect(GameObject net2, float t)
+    {
         if (net2 == null) yield break;
 
         var net2Renderer = net2.GetComponent<SpriteRenderer>();

@@ -11,6 +11,46 @@ public class PetAnimationController : MonoBehaviour
     private Animator _animator;
     private bool _hasIdle, _hasRunning, _hasSlashing, _hasHurt, _hasJumping, _hasDying;
 
+    // Net visual — rede caída sobre o pet, oscilando lateralmente (mesma lógica de
+    // PlayerCombat.ShowNetEnsnared / NetOscillateLoop, mas sem loop de face).
+    private GameObject _netVisual;
+    private Coroutine  _netOscillateRoutine;
+
+    public void ShowNetEnsnared(Sprite netSprite, float scale = 1f)
+    {
+        if (_netVisual != null) return;
+        _netVisual = new GameObject("NetVisual");
+        _netVisual.transform.SetParent(transform);
+        _netVisual.transform.localPosition = Vector3.zero;
+        _netVisual.transform.localScale = new Vector3(Mathf.Sign(transform.localScale.x) * scale, scale, 1f);
+        var sr = _netVisual.AddComponent<SpriteRenderer>();
+        sr.sprite           = netSprite;
+        sr.sortingLayerName = "Characters";  // acima dos sprites do pet (Default/Weapons)
+        sr.sortingOrder     = 100;
+        _netOscillateRoutine = StartCoroutine(NetOscillateLoop());
+    }
+
+    // Para oscilação e devolve o GameObject da rede sem destruí-lo — o chamador
+    // (CombatPlayer) anima a dissipação antes de chamar Destroy, igual ao PlayerCombat.
+    public GameObject ReleaseNet()
+    {
+        if (_netOscillateRoutine != null) { StopCoroutine(_netOscillateRoutine); _netOscillateRoutine = null; }
+        var go = _netVisual;
+        _netVisual = null;
+        return go;
+    }
+
+    private IEnumerator NetOscillateLoop()
+    {
+        while (_netVisual != null)
+        {
+            var lp = _netVisual.transform.localPosition;
+            lp.x = Mathf.Sin(Time.time * 2f) * 0.05f;
+            _netVisual.transform.localPosition = lp;
+            yield return null;
+        }
+    }
+
     private void Awake()
     {
         _animator = GetComponent<Animator>();
@@ -58,7 +98,9 @@ public class PetAnimationController : MonoBehaviour
 
     public void PlayHurt()
     {
-        if (_hasHurt) _animator.SetTrigger("Hurt");
+        if (!_hasHurt) return;
+        _animator.ResetTrigger("Hurt");
+        _animator.SetTrigger("Hurt");
     }
 
     // Esquiva — usa o trigger "Jumping" (não "Jump_Loop"; ver nota no topo do arquivo).

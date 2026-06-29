@@ -3,6 +3,12 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 56
 
+- 2026-06-29: Net — pet enredado exclui rede visual do pet (sorting layer Characters/100, voa até posição do pet); Treat libera pet com PlayNetBreakEffect (scale-up + fragmentos radiais)
+- 2026-06-29: Net — RollPetTarget exclui pets netEnsnared como alvo; prioridade 100% nos pets (caughtPet = alivePets.Count > 0)
+- 2026-06-28: Tamer — volta ao spawn (InSpawnZone + JumpTo) depois de comer carcaça, antes do próximo ataque
+- 2026-06-28: Pets — SimulatePetTurn usa RollPetTarget (Javali 75%/Macaco 50%/Rato 50%) em vez de Roll(40%) com pet aleatório
+- 2026-06-28: Pets — PetAnimationController: ShowNetEnsnared/ReleaseNet/NetOscillateLoop (rede visual oscilante no pet)
+- 2026-06-28: Pets — PetAnimatorSetup: canTransitionToSelf=true no Hurt, duration=0f em todas transições, Slashing→Idle exige Idle=true (fix stutter e desconexão visual do golpe)
 - 2026-06-25: 5 tasks novas roadmap — chibi, slot extra pago, redes sociais, login email/Google/Apple/Facebook
 - 2026-06-24: Pets — 4 ajustes: targeting como alvo válido, escala visual, fix animação (sample rate 12→30fps), dano Monkey (9-12)
 - 2026-06-24: Pets implementados (Mouse, Monkey, Boar) — PetState, PetCombatController, HealthBarPet, CombatSceneLoader.SpawnPets

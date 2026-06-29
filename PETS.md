@@ -30,8 +30,10 @@ Ordem simplificada por round: ações do Player1 → pets do Player1 → ações
 Player2 (`SimulateRound`).
 
 **Turno do pet** (`CombatSimulator.SimulatePetTurn`/`SimulatePetHit`) — alvo decidido 1x por
-turno (não re-sorteado a cada hit de combo): 40% de chance de atacar um pet inimigo vivo
-aleatório em vez do personagem principal, se houver algum vivo. Dano `Random.Range(min, max+1)`
+turno (não re-sorteado a cada hit de combo): usa `RollPetTarget(enemy)` (Javali=75%,
+Macaco=50%, Rato=50% de interceptar; pula pets `netEnsnared`) — se retornar `null`, ataca o
+personagem principal. Antes era `Roll(0.40f)` com pet aleatório, sem respeitar as chances
+por tipo nem excluir enredados. Dano `Random.Range(min, max+1)`
 da tabela acima. Esquiva contra personagem usa a mesma fórmula de `DodgeChance` mas sem o termo
 `accuracy` do atacante (pet não tem esse stat, ver `PetDodgeChanceOnCharacter`); esquiva contra
 pet usa só o `evasionBase` do alvo. Combo do pet: `pet.comboRate × 0.5^comboCount`, decaimento
@@ -43,10 +45,23 @@ a esquiva do alvo, sem recursão de Counter/Reversal. **Javali** desarma o perso
 1º hit do turno, nunca contra outro pet) via `CombatEventType.PetDisarm`.
 
 **Interações com skills existentes**:
-- **Net** — alvo decidido ANTES de imobilizar: se o defensor tem pets vivos (e ainda não
-  enredados), 50% de chance de pegar um deles em vez do personagem. `PetState.netEnsnared` é
-  **permanente** — nunca solto de volta (diferente do personagem, que se liberta no próximo hit
-  que sofrer) — `SimulatePetTurn` checa isso no topo, mesmo padrão de skip do personagem.
+- **Net** — alvo decidido ANTES de imobilizar: se o defensor tem pets vivos e não-enredados,
+  a rede **SEMPRE pega um deles** (100% de prioridade, aleatório entre os elegíveis) — nunca
+  vai no personagem enquanto houver qualquer pet vivo e não-enredado. `PetState.netEnsnared`
+  é setado no pet capturado; `SimulatePetTurn` checa isso no topo (skip completo do turno,
+  mesmo padrão do personagem). Pet enredado **não pode ser alvo de nenhum ataque** —
+  `RollPetTarget` (usado tanto pelo turno de personagem quanto pelo turno de pet inimigo)
+  exclui `pet.netEnsnared`; a rede em si também já filtra `!netEnsnared` ao montar `alivePets`
+  (evita reenredar o mesmo pet). **Visual**: a rede voa até a posição do pet (não do
+  personagem) e chama `PetAnimationController.ShowNetEnsnared` ao pousar — mesmo sprite
+  `net2`, sorting layer `Characters`/order 100 (acima de todos os sprites do corpo do pet),
+  com `NetOscillateLoop` igual ao do personagem. `ReleaseNet()` para o loop e devolve o
+  `GameObject` pro chamador.
+- **Treat** — liberta o pet enredado: `TryActivateTreat` prioriza pet com `netEnsnared=true`
+  (menor HP relativo entre os enredados, depois entre os não-enredados), seta
+  `targetPet.netEnsnared = false`, e o visual (`TreatFeed`) chama
+  `PlayNetBreakEffect(fedPet, t)` — mesmo efeito de scale-up + 5 fragmentos radiais que
+  acontece quando o personagem é atacado enquanto enredado.
 - **Bomb** — pets vivos do defensor são atingidos pela mesma explosão (mesmo dano bruto, sem
   esquiva/crítico/STR/armadura, igual ao personagem) — `CombatEvent.bombPetIndexes`/
   `bombPetHp` (paralelas), tratadas separado de `GetEnemyTargets`/`bombTargets` porque
