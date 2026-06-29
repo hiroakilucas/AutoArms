@@ -88,6 +88,18 @@ public class DamagePopup : MonoBehaviour
     public static void SpawnReversal(Vector3 worldPos, int damage, bool isCrit) =>
         SpawnRetaliation(worldPos, "REVERSAL!", damage, isCrit);
 
+    public static void SpawnMimic(Vector3 worldPos, string skillName)
+    {
+        string text = string.IsNullOrEmpty(skillName) ? "MIMIC!" : $"MIMIC!\n{skillName}";
+        Rent(worldPos).Begin(text, 4f, new Color(0.85f, 0.35f, 0.95f)); // magenta
+    }
+
+    public static void SpawnRepulse(Vector3 worldPos, int damage, bool isCrit)
+    {
+        string text = isCrit ? $"REPULSE!\nCRIT! {damage}" : $"REPULSE!\n{damage}";
+        Rent(worldPos).Begin(text, 4f, new Color(0.2f, 0.85f, 0.95f)); // cyan
+    }
+
     private static void SpawnRetaliation(Vector3 worldPos, string title, int damage, bool isCrit)
     {
         string text = isCrit ? $"{title}\nCRIT! {damage}" : $"{title}\n{damage}";

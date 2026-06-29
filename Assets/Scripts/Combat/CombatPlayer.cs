@@ -12,6 +12,8 @@ public class CombatPlayer : MonoBehaviour
     [HideInInspector] public AttackSequencer sequencer;
     [HideInInspector] public WeaponHUD       p1WeaponHUD;
     [HideInInspector] public WeaponHUD       p2WeaponHUD;
+    [HideInInspector] public SkillsHUD       p1SkillsHUD;
+    [HideInInspector] public SkillsHUD       p2SkillsHUD;
 
     // Pets (Fase 3) — instanciados e populados por CombatSceneLoader antes de PlayCombat ser
     // chamado (mesmo padrão de p1Combat/p2Combat). Índice na lista = petIndex dos eventos.
@@ -94,6 +96,9 @@ public class CombatPlayer : MonoBehaviour
     // duração do voo em pêndulo até o defensor.
     private const float BombExplosionScale = 2.5f;
     private const float BombFlightDuration = 0.5f;
+
+    // Repulse: arma lançada que será deflectida — capturada no case ThrowWeapon e lida no case Repulse.
+    private WeaponData _lastThrownWeaponData;
 
     private List<CombatEvent> _events;
     private float             _playbackSpeed = 1f;
@@ -532,6 +537,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.FlashFlood:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Flash Flood");
                 // Super "Flash Flood": pula até o próprio WeaponHUD (mesma conversão tela→mundo
                 // do Saboteur, ScreenToWorldPoint sobre a posição do ícone da 1ª arma sorteada),
                 // depois arremessa as armas escolhidas em sequência rápida — cada uma SEMPRE
@@ -651,6 +657,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.HasteAttack:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Haste");
                 // Pets como alvo válido: dash simplificado (PlayPetTargetedSuper) em vez da
                 // coreografia cheia de atravessar a tela — ver CombatSimulator.SimulateHaste.
                 if (evt.targetIsPet)
@@ -754,6 +761,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.PiledriverAttack:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Piledriver");
                 // Pets como alvo válido: sem o grab/salto cheio (não faz sentido erguer um pet
                 // pequeno em arco até o topo da tela) — PlayPetTargetedSuper cobre a abordagem +
                 // impacto. Nunca esquivado, mesmo padrão do personagem (ver SimulatePiledriver).
@@ -851,6 +859,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.NetThrow:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Net");
                 // Super "Net": SEMPRE acerta (sem swing/reposicionamento condicionado a
                 // dodge/block, igual ao Flash Flood) — arremessa net1 (mesmo trigger Throwing
                 // de qualquer arremesso) e, ao chegar, liga a Fase 2 (rede caída + pose
@@ -918,6 +927,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.FierceBruteActivated:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Fierce Brute");
                 // Super "Fierce Brute": NÃO consome o turno (ver CombatSimulator.SimulateTurn,
                 // item "0e") — só liga o ghost trail + aura persistente aqui. A pose de braço
                 // levantado NÃO toca neste evento (1ª versão tocava aqui, na posição de spawn,
@@ -947,6 +957,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.BombThrow:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Bomb");
                 // Super "Bomb": arremesso em pêndulo (arco parabólico, mesma base de FlyWeapon)
                 // até o defensor, seguido de explosão em área que atinge todos os alvos do lado
                 // inimigo (evt.bombTargets — hoje só o defensor, ver CombatSimulator.
@@ -1064,6 +1075,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.TragicPotionUse:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Tragic Potion");
                 // Super "Tragic Potion": auto-cura, não ataca ninguém — não rola Dodge/Block/
                 // Counter/Reversal, e o simulador já resolveu o resultado (evt.healAmount/newHp);
                 // aqui só toca a sequência visual (pegar/beber a poção, partículas de cura,
@@ -1120,6 +1132,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.VampirismAttack:
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Vampirism");
                 // Pets como alvo válido: sem a coreografia de "montar nas costas" (StealWeapon-
                 // like), não faz sentido contra um pet — PlayPetTargetedSuper resolve a mordida
                 // de forma simplificada; cura do atacante continua igual (sempre na vida dele).
@@ -1610,6 +1623,75 @@ public class CombatPlayer : MonoBehaviour
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
+            case CombatEventType.Repulse:
+            {
+                // attacker = deflector (evt.playerIndex), defender = lançador original que toma o impacto (evt.targetIndex)
+                float repSlashMult = SwingSpeedMultiplier(attacker);
+                float repSlashHalf = (attacker?.settings?.slashingDuration ?? 0.4f) * 0.5f * t / repSlashMult;
+                float repJumpDur   = (attacker?.settings?.jumpStartDuration ?? 0.02f) * t;
+
+                // 1. Slashing no deflector (rebate a arma de volta)
+                if (repSlashMult != 1f) attacker?.animationController.SetSpeed(repSlashMult);
+                attacker?.animationController.SetIdle(false);
+                attacker?.GetComponent<Animator>()?.SetTrigger(SwingTrigger(attacker));
+                yield return new WaitForSeconds(repSlashHalf);
+
+                // 2. Arma voa de volta para o lançador original
+                var repWeaponData = _lastThrownWeaponData;
+                if (repWeaponData?.inHandSprite != null && attacker != null && defender != null)
+                {
+                    Vector3 repLaunchPos = attacker.weaponHandler?.handBone?.position
+                        ?? attacker.transform.position + Vector3.up * 0.5f;
+                    Vector3 repTargetPos  = defender.transform.position;
+                    Vector3 repFlightDir  = (repTargetPos - repLaunchPos).normalized;
+
+                    var repFlyGo = new GameObject("RepulseWeapon");
+                    repFlyGo.transform.position = repLaunchPos;
+                    repFlyGo.transform.rotation = Quaternion.Euler(0, 0, Mathf.Atan2(repFlightDir.y, repFlightDir.x) * Mathf.Rad2Deg);
+                    Vector3 repHandLossy = attacker.weaponHandler?.handBone?.lossyScale ?? Vector3.one * 0.3f;
+                    repFlyGo.transform.localScale = new Vector3(
+                        Mathf.Abs(repHandLossy.x) * repWeaponData.scale,
+                        Mathf.Abs(repHandLossy.y) * repWeaponData.scale,
+                        Mathf.Abs(repHandLossy.z) * repWeaponData.scale);
+                    var repSr = repFlyGo.AddComponent<SpriteRenderer>();
+                    repSr.sprite           = repWeaponData.inHandSprite;
+                    repSr.sortingLayerName = "Weapons";
+                    repSr.sortingOrder     = 10;
+
+                    bool repRotate = WeaponData.HasType(repWeaponData, WeaponType.Thrown);
+                    yield return StartCoroutine(attacker.FlyWeapon(repFlyGo.transform, repLaunchPos, repTargetPos, 0.45f * t, repRotate, repRotate ? 0.5f : 0f));
+                    Destroy(repFlyGo);
+                }
+                else
+                {
+                    yield return new WaitForSeconds(0.45f * t);
+                }
+
+                // 3. Impacto no lançador original: popup + dano + hurt + knockback
+                if (defender != null)
+                {
+                    Vector3 repPopupPos = defender.transform.position + Vector3.up * 1.5f
+                        + Vector3.right * Random.Range(-0.3f, 0.3f);
+                    DamagePopup.SpawnRepulse(repPopupPos, evt.damage, evt.isCrit);
+                    ApplyHealthDelta(evt.targetIndex, evt.newHp);
+                    Vector2 repPushDir = ComputePushDir(attacker, defender);
+                    float   repKbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
+                    float   repKbDur   = (attacker?.settings?.hurtDuration ?? 0.07f) * t;
+                    StartCoroutine(defender.Knockback(repPushDir, repKbDist, repKbDur));
+                    yield return StartCoroutine(defender.animationController.PlayHurt(repKbDur));
+                }
+
+                yield return new WaitForSeconds(repSlashHalf);
+                if (repSlashMult != 1f) attacker?.animationController.SetSpeed(1f);
+
+                // Sair do estado Slashing — mesmo padrão de Counter/Reversal (PlayJumpStart sem JumpTo)
+                if (attacker != null)
+                    yield return StartCoroutine(attacker.animationController.PlayJumpStart(repJumpDur));
+
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
+                break;
+            }
+
             case CombatEventType.Disarm:
                 // PlayerCombat.DropWeapon já cobre popup + UnequipPermanent + a queda em
                 // pêndulo amortecido até o chão (ver Drop de Arma no CLAUDE.md) — antes este
@@ -1652,6 +1734,7 @@ public class CombatPlayer : MonoBehaviour
 
                     // Capture sprite/position/scale before Unequip destroys the in-hand weapon object.
                     var weaponData   = attacker.weaponHandler.CurrentWeaponData;
+                    _lastThrownWeaponData = weaponData; // lido pelo case Repulse que segue imediatamente
                     var inHandWeapon = attacker.weaponHandler.CurrentWeapon;
                     Vector3 launchPos = attacker.weaponHandler.handBone != null
                         ? attacker.weaponHandler.handBone.position
@@ -1873,6 +1956,7 @@ public class CombatPlayer : MonoBehaviour
 
             case CombatEventType.CryOfTheDamned:
             {
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Cry of the Damned");
                 var crier = GetCombat(evt.playerIndex);
                 if (crier != null)
                     yield return StartCoroutine(PlayCryOfTheDamned(crier, t));
@@ -1891,6 +1975,7 @@ public class CombatPlayer : MonoBehaviour
 
             case CombatEventType.Hypnosis:
             {
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Hypnosis");
                 var hypnotizer = GetCombat(evt.playerIndex);
                 if (hypnotizer != null)
                     yield return StartCoroutine(PlayHypnosisScreenEffect(hypnotizer, t));
@@ -1929,6 +2014,7 @@ public class CombatPlayer : MonoBehaviour
 
             case CombatEventType.TreatFeed:
             {
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Treat");
                 var feeder = GetCombat(evt.playerIndex);
                 var fedPet = GetPet(evt.playerIndex, evt.petIndex);
 
@@ -1985,6 +2071,7 @@ public class CombatPlayer : MonoBehaviour
 
             case CombatEventType.TamerEat:
             {
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Tamer");
                 var tamer   = GetCombat(evt.playerIndex);
                 var carcass = GetPet(evt.targetIndex, evt.petIndex);
 
@@ -2028,6 +2115,21 @@ public class CombatPlayer : MonoBehaviour
                 break;
             }
 
+            case CombatEventType.Mimic:
+            {
+                // Mostra popup MIMIC! no usuário; os eventos da skill copiada seguem imediatamente
+                // na lista e são tratados pelos seus próprios cases existentes.
+                GetSkillHUD(evt.playerIndex)?.UseSkill("Mimic");
+                if (attacker != null)
+                {
+                    Vector3 mimicPos = attacker.transform.position + Vector3.up * 2f
+                        + Vector3.right * Random.Range(-0.3f, 0.3f);
+                    DamagePopup.SpawnMimic(mimicPos, evt.weaponName);
+                }
+                yield return new WaitForSeconds(0.4f * t);
+                break;
+            }
+
             default:
                 yield return null;
                 break;
@@ -2037,6 +2139,7 @@ public class CombatPlayer : MonoBehaviour
     // --- Helpers ---
 
     private PlayerCombat GetCombat(int index) => index == 0 ? p1Combat : p2Combat;
+    private SkillsHUD    GetSkillHUD(int index) => index == 0 ? p1SkillsHUD : p2SkillsHUD;
     private WeaponHUD GetWeaponHUD(int index) => index == 0 ? p1WeaponHUD : p2WeaponHUD;
 
     // Pets (Fase 3) — ownerIndex = índice do DONO (0/1, mesma convenção de evt.playerIndex/

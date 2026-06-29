@@ -14,6 +14,8 @@ public enum CombatEventType
     Dodge,           // playerIndex = attacker, targetIndex = dodger. targetIsPet/targetPetIndex setados quando o alvo esquivado é um pet (ver Hit acima).
     Block,           // playerIndex = attacker, targetIndex = blocker (50% knockback, no damage)
     Miss,            // playerIndex = attacker, targetIndex = missed (defender DodgeLeaps). targetIsPet/targetPetIndex setados quando o arremesso errado era contra um pet (toca Jumping em vez de DodgeLeap).
+    Repulse,         // playerIndex = deflector (quem tem a skill), targetIndex = original thrower (toma o impacto de volta). weaponName = arma deflectida, damage, isCrit, newHp/maxHp do lançador original.
+    Mimic,           // playerIndex = quem usa Mimic. weaponName = nome da skill copiada (ex: "Flash Flood"). A skill copiada dispara seus próprios eventos logo a seguir na lista.
     Disarm,          // playerIndex = attacker, targetIndex = disarmed, weaponName
     WeaponDrop,      // playerIndex = player who dropped, weaponName
     ShieldDisarm,    // playerIndex = attacker, targetIndex = defender who loses the Shield on a landed hit (independent of weapon Disarm)

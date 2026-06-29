@@ -51,6 +51,11 @@ public class PlayerState
     public int  hypnosisUsesRemaining = 1;
     public int  tamerUsesRemaining = 4; // pode comer até 4 carcaças por luta
     public int  treatUsesRemaining = 4; // alimenta até 4 pets por luta
+    public int  mimicUsesRemaining = 1; // copia a última Super do oponente, 1x por luta
+
+    // Mimic: nome da última Super que ESTE jogador ativou — lido pelo oponente que tem Mimic.
+    // Setado por cada TryActivate*/SimulateFlashFlood/Haste/Piledriver quando dispara.
+    public string lastSuperUsed = "";
 
     // Fast Metabolism — regeneração passiva de 1%/turno (sem campos próprios, sempre ativa
     // enquanto HasSkill for true) + burst de cura intensa (10x 5%, todas no mesmo turno) ao

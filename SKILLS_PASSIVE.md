@@ -80,6 +80,30 @@ Sorting layer promovida temporariamente (`Characters`/`Characters2`, mesmo padr�
 
 Aplicado nos 3 pontos onde dano é calculado antes de `ApplyDamage` (mesmo padrão de Survival acima): hit normal (`SimulateHit`), retaliação de Counter/Reversal (`SimulateRetaliation`), e arremesso (`SimulateThrow`) — nos três, a chamada vem imediatamente depois de `CalcDamage`/`CalcThrowDamage`, antes de qualquer outra mitigação. Não tem flag cacheada em `ApplySkillStats` — checado vivo via `HasSkill("Resistant")`, mesmo padrão de Iron Head.
 
+### Repulse
+
+`CombatSimulator.SimulateThrow` verifica a skill logo após o check de pet-target e antes de `hitChance`, apenas quando o defensor **não** está enredado (`!defender.netEnsnared`): `if (!defender.netEnsnared && defender.HasSkill("Repulse") && Roll(0.30f))` → chama `SimulateRepulse` e faz `return`.
+
+**Mecânica do deflect** (`SimulateRepulse(deflector, originalThrower, weaponData)`):
+
+- Crit chance: `CritChance(deflector) + 0.05f` (base do deflector + **+5% de Repulse**).
+- Dano: `CalcThrowDamage(originalThrower, weaponData)` — usa a **STR do lançador original**, não do deflector (a força do arremesso volta contra quem arremessou).
+- Se crítico: aplica `critDamageMultiplier` (da arma deflectida) + `deflector.critDamageBonus`.
+- Mitigação do lançador original: `ApplyResistantCap` + armadura do lançador (é ele quem sofre o impacto).
+- Sempre acerta — sem Roll de Dodge/Block/Counter do lançador.
+- Emite `CombatEventType.Repulse` (playerIndex = deflector, targetIndex = lançador original) + `HealthChanged`.
+
+**Visual** (`CombatPlayer`, case `Repulse`):
+
+1. Deflector toca animação `SwingTrigger` (Slashing) — mesma que melee, 50% da duração antes do impacto.
+2. Arma voa de `handBone` do deflector até a posição do lançador original (mesma coroutine `FlyWeapon`; `rotate = HasType(Thrown)`).
+3. No impacto: `DamagePopup.SpawnRepulse` (cyan, "REPULSE!\n{damage}") na posição do lançador + `ApplyHealthDelta` + `Knockback` + `PlayHurt`.
+4. Restante do `slashHalf` + `PlayJumpStart` (sem `JumpTo`) — mesmo padrão de Counter/Reversal pra sair do estado Slashing.
+
+`_lastThrownWeaponData` (campo privado em `CombatPlayer`) é setado no case `ThrowWeapon` logo após capturar `CurrentWeaponData`, antes do `Unequip`. Como o case `Repulse` imediatamente sucede `ThrowWeapon` na lista de eventos, o campo sempre contém a arma correta.
+
+Não tem flag cacheada em `ApplySkillStats` — checado vivo via `HasSkill("Repulse")`, mesmo padrão de Iron Head/Resistant/Hideaway.
+
 ### Chaining
 
 `PlayerState.chainHitStreak` (int, default 0) conta golpes **melee** consecutivos que o atacante **acerta de verdade** (mesmo ponto de `SimulateHit` onde o dano normal é aplicado ao defensor — vale tanto pro primeiro golpe do turno quanto pra cada hit extra de Combo) sem que o próprio atacante tenha tomado **nenhum** dano nesse intervalo. Ao chegar em **3**, zera o streak e estuna o defensor por **1 ação dele** (`defender.stunnedActions++`, novo `CombatEventType.Stunned`).

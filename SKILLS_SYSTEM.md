@@ -85,8 +85,6 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 - [x] Relentless — +30% accuracy, reduz a esquiva do adversário (accuracy += 0.30, oposto de evasion — era +15% combo chance/comboChanceBonus += 0.15, redefinida pelo usuário; Fists of Fury herdou o papel de dar combo chance)
 - [x] Fists of Fury — +20% combo chance (comboChanceBonus += 0.20 — não é mais "combo de socos desarmado melhorado", movida de Passivas de Armas pra aqui, mecânica definida pelo usuário)
 - [x] Counter Attack — +10% block, +90% reversal exclusivo de depois de bloquear (blockBonus += 0.10, reversalAfterBlock += 0.90 — era +40% counter rate/cancela hit antes de conectar, redefinida pelo usuário; ver Counter e Reversal)
-- [ ] Impact — +15% disarm (ajustar DisarmChance())
-- [ ] Pugnacious — chance de contra-atacar após levar dano (mecânica já existe via `reversal`/Reversal — ver Counter e Reversal acima; só falta criar o SkillData "Pugnacious" que soma nesse campo, mesmo padrão da Deity)
 - [x] Sixth Sense — +10% counter rate (counter += 0.10, mesma mecânica do Monk — não é mais esquiva, mecânica definida pelo usuário)
 - [x] Hostility — +30% reversal (reversal += 0.30, mecânica definida pelo usuário — não é mais "equipa a arma mais forte primeiro", movida de Passivas de Armas pra aqui por ser uma mecânica de combate, não de arma)
 - [x] Monk — +40% counter rate, -200 iniciativa, ataca normalmente (counter += 0.40, initiative -= 200; era "nunca ataca/guarda" via hitSpeed = 0, redefinido pelo usuário — ver seção própria **Monk** em Combat Systems), aura laranja persistente durante a luta
@@ -103,7 +101,6 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 #### Passivas de Defesa
 - [x] Shield — +45% block rate (`blockBonus += 0.45`), +25% armor (`armor += 0.25`), visual permanente no braço oposto (`WeaponHandler.EquipShield`, fora do `WeaponLoadout`), desarme próprio com chance fixa de 10% que não soma `disarmChanceBonus`/`disarmBonus` (ver **Desarmar do Escudo** em Combat Systems)
 - [x] Armour — +25% armor, -15% velocidade (era armor += 0.30 sem penalidade nenhuma; rebalanceada pelo usuário pra ter um trade-off)
-- [ ] Iron Skin — reduz dano fixo por hit
 - [x] Lead Skeleton — -15% dano de armas Heavy (leadSkeleton = true)
 - [x] Extra Thick Skin — armor += 0.50 (50% redução de dano)
 - [x] Toughened Skin — +10% armor (armor += 0.10, mecânica definida pelo usuário; skill não tinha SkillDef no gerador antes, adicionada do zero junto da implementação)
@@ -112,6 +109,7 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 - [x] Resistant — nenhum hit isolado reduz mais que 25% do HP máximo (cap no dano bruto, antes de Lead Skeleton/armadura — não tinha essa entrada no roadmap, adicionada agora; ver seção própria **Resistant** em Combat Systems)
 - [x] Sticky Hands — stickyHands = 0.50, reduz 50% chance de ser desarmado e 50% chance de throw acidental (próprio); ver seção própria **Sticky Hands** em Combat Systems
 - [x] Fast Metabolism — regenera 1% do HP máximo todo turno + burst de 10x 5% (todas no mesmo turno, não mais uma por turno) abaixo de 50% HP enquanto não levar dano antes do burst rodar; -50% hit speed, -5% crítico; ver seção própria **Fast Metabolism** em Combat Systems
+- [x] Repulse — 30% de chance de deflectir (refletir) o throw do oponente de volta para ele mesmo; o deflect tem +5% de crítico adicional
 
 #### Passivas de Stats
 - [x] Vitality — +18 HP permanente, +50% HP
@@ -127,25 +125,25 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 #### Passivas de Armas
 - [x] Weapon Master — +50% dano com arma afiada (tag Sharp) (`weaponsMaster = true`, ver `sharpMult` em **Fórmula de Dano**; era "+dano com qualquer arma" no roadmap original, redefinida pra só Sharp)
 - [x] Martial Arts — +100% dano desarmado (`martialArts = true`, dobra `UnarmedStats.Damage` em `WeaponBaseDamage()`; era "combo de socos desarmado melhorado" no roadmap original, redefinida pelo usuário)
-- [ ] Strong Arm — +dano com armas Heavy
-- [ ] Master of Arms — +dano com armas Melee
-- [ ] Weapon Tampering — reduz dano das armas inimigas
 - [x] Hideaway — 50% chance de arremesso fixa (mesmo gate de throw-ou-melee de todo mundo, sem branch forçado), +25% bloqueio contra arremessos recebidos (reduz hit de 80% pra 55%), arma some da mão mas continua no loadout (não desaparece); ver seção própria **Hideaway** em Combat Systems
 - [x] Spy — metade das armas do oponente (aleatórias) recebem -20% dano permanente antes do combate; os ícones das armas sabotadas ficam vermelhos no `WeaponHUD`. Skill exclusiva do LaBrute/eternaltwin, não existe no Muxxu original; ver seção própria **Spy** em Combat Systems
+- [ ] Garimpeiro — pega uma arma aleatória do chão (das `fallenWeapons`) adicionando-a ao loadout; funciona como pickup normal (início de turno, 40% de chance, animação CatchWeapon), mas a fonte é o chão em vez do loadout original
 
 #### Supers (ativas — usadas X vezes por luta)
 - [x] Fierce Brute — 33% por turno (não consome a ação): dobra o dano e +10% crítico no 1º hit melee do mesmo turno, usos escalam com STR (1 + 1 a cada 30); ver seção própria **Fierce Brute** em Combat Systems
 - [x] Tragic Potion — quando HP < 60% do máximo, 50% por turno de curar entre 25% e 50% do HP máximo (1x por luta) e curar o veneno do Chef (preparação, skill ainda não implementada); auto-uso, não ataca ninguém, não interage com dodge/block/counter/reversal, não consome o turno; ver seção própria **Tragic Potion** em Combat Systems
-- [ ] Hammer — golpe massivo de dano (1x por luta)
 - [x] Flash Flood — 17% de chance por ação; com >= 3 armas no inventário (excluindo a equipada), arremessa 3 aleatórias contra o oponente em sequência rápida, sempre acertando (ignora dodge/block/pet) (1x por luta); ver seção própria **Flash Flood** em Combat Systems
 - [x] Haste — 23% de chance por turno; dash que atravessa o oponente, dano baseado em Speed (sem arma/STR), +5% crítico, pode ser esquivado/bloqueado normalmente (1x por luta); ver seção própria **Haste** em Combat Systems
 - [x] Piledriver — 17% de chance por turno; agarra o defensor, pula com ele e cai por cima, dano baseado na STR do DEFENSOR (não do atacante), NUNCA esquivado/bloqueado (1x por luta); ver seção própria **Piledriver** em Combat Systems
 - [x] Net — 50% por turno, sempre acerta, sem dano: oponente perde o turno e não pode usar dodge/block/counter-attack/outras Supers até sofrer um hit (1x por luta); ver seção própria **Net** em Combat Systems
-- [ ] Hypnosis — adversário ataca a si mesmo (1x por luta)
 - [x] Bomb — 17% por turno: explosão entre 15-25 de dano em TODOS os alvos inimigos (hoje só o defensor, ver GetEnemyTargets), ignora dodge/block/crítico/STR/armor, quebra Net em quem estiver enredado (2x por luta), **consome o turno** (era `false`/nunca consumia, redefinido pelo usuário); ver seção própria **Bomb** em Combat Systems
 - [x] Vampirism — quando HP < 50%, 33% por turno: mordida garantida (nunca esquivada/bloqueada), causa 25% do HP que falta pro atacante como dano ao defensor e cura o atacante na mesma quantidade (mínimo 1 nos dois), **consome o turno** (1x por luta); ver seção própria **Vampirism** em Combat Systems
-- [ ] Cry of the Damned — reduz stats do adversário (1x por luta)
+- [x] Mimic — 1x por combate: copia e usa a última skill ativa do adversário (a última Super que ele ativou na luta); 25% por turno quando disponível; filtragem inteligente (Treat sem pet, Thief sem arma, etc.)
+- [ ] Magneto — levita TODAS as armas do chão (`fallenWeapons`) para as costas do personagem, aponta cada uma em direção ao inimigo, depois solta tudo de uma vez; cada arma causa seu próprio dano (mesmo valor de arremesso: weaponDamage + STR), sempre acertam (ignora dodge/block); NUNCA consome armas do loadout — só as do chão; 1x por luta
 
 #### Relacionadas a Pets
-- [ ] Tamer — pets mais fortes e com mais HP
+- [x] Hypnosis — 38% por turno: hipnotiza um pet inimigo vivo (90% de chance) — o pet troca permanentemente para o seu time (1x por luta); ver PETS.md
+- [x] Cry of the Damned — 44% por turno: grito sobrenatural expulsa cada pet inimigo vivo com 50% de chance — o pet abandona a partida para sempre (2x por luta); ver PETS.md
+- [x] Tamer — ver PETS.md
+- [x] Treat — ver PETS.md
 

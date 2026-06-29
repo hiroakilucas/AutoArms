@@ -113,6 +113,25 @@ public static class CombatLogFormatter
                         : $"  {Name(e.playerIndex)} erra o arremesso contra {Name(e.targetIndex)}");
                     break;
 
+                case CombatEventType.Mimic:
+                    sb.AppendLine($"  [MIMIC] {Name(e.playerIndex)} copia e usa a skill do oponente: {e.weaponName}");
+                    break;
+
+                case CombatEventType.Repulse:
+                {
+                    string repTag = e.isCrit ? " [CRÍTICO]" : "";
+                    string repHp  = "";
+                    if (i + 1 < events.Count
+                        && events[i + 1].type == CombatEventType.HealthChanged
+                        && events[i + 1].playerIndex == e.targetIndex)
+                    {
+                        repHp = $" (HP: {events[i + 1].newHp}/{events[i + 1].maxHp})";
+                        i++;
+                    }
+                    sb.AppendLine($"  [REPULSE] {Name(e.playerIndex)} deflecte {e.weaponName} de volta para {Name(e.targetIndex)}: {e.damage} dano{repTag}{repHp}");
+                    break;
+                }
+
                 case CombatEventType.Disarm:
                     sb.AppendLine($"  {Name(e.playerIndex)} desarma {Name(e.targetIndex)} (perdeu: {e.weaponName})");
                     break;

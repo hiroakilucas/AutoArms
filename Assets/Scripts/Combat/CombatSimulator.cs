@@ -436,6 +436,7 @@ public class CombatSimulator
         if (attacker.HasSkill("Flash Flood") && attacker.flashFloodUsesRemaining > 0
             && attacker.weaponLoadout.Count >= 3 && Roll(0.17f))
         {
+            defender.lastSuperUsed = "Flash Flood"; // Mimic tracking
             SimulateFlashFlood(attacker, defender);
             EmitTurnEnd(attacker);
             return;
@@ -446,6 +447,7 @@ public class CombatSimulator
         // Checado ANTES de Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno.
         if (attacker.HasSkill("Haste") && attacker.hasteUsesRemaining > 0 && Roll(0.23f))
         {
+            defender.lastSuperUsed = "Haste"; // Mimic tracking
             SimulateHaste(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
@@ -458,6 +460,7 @@ public class CombatSimulator
         // DEFENSOR, não do atacante — ver SimulatePiledriver.
         if (attacker.HasSkill("Piledriver") && attacker.piledriverUsesRemaining > 0 && Roll(0.17f))
         {
+            defender.lastSuperUsed = "Piledriver"; // Mimic tracking
             SimulatePiledriver(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
@@ -547,11 +550,21 @@ public class CombatSimulator
         if (attacker.HasSkill("Net") && attacker.netUsesRemaining > 0)
             supers.Add(() => TryActivateNet(attacker, defender));
         if (attacker.HasSkill("Fierce Brute") && attacker.fierceBruteUsesRemaining > 0)
-            supers.Add(() => { TryActivateFierceBrute(attacker); return false; });
+            supers.Add(() => {
+                int br = attacker.fierceBruteUsesRemaining;
+                TryActivateFierceBrute(attacker);
+                if (attacker.fierceBruteUsesRemaining < br) defender.lastSuperUsed = "Fierce Brute";
+                return false;
+            });
         if (attacker.HasSkill("Bomb") && attacker.bombUsesRemaining > 0)
             supers.Add(() => TryActivateBomb(attacker, defender));
         if (attacker.HasSkill("Tragic Potion") && attacker.tragicPotionUsesRemaining > 0)
-            supers.Add(() => { TryActivateTragicPotion(attacker); return false; });
+            supers.Add(() => {
+                int tp = attacker.tragicPotionUsesRemaining;
+                TryActivateTragicPotion(attacker);
+                if (attacker.tragicPotionUsesRemaining < tp) defender.lastSuperUsed = "Tragic Potion";
+                return false;
+            });
         if (attacker.HasSkill("Vampirism") && attacker.vampirismUsesRemaining > 0)
             supers.Add(() => TryActivateVampirism(attacker, defender, targetPet));
         if (attacker.HasSkill("Cry of the Damned") && attacker.cryOfTheDamnedUsesRemaining > 0)
@@ -562,6 +575,9 @@ public class CombatSimulator
             supers.Add(() => { TryActivateTamer(attacker, defender); return false; });
         if (attacker.HasSkill("Treat") && attacker.treatUsesRemaining > 0)
             supers.Add(() => { TryActivateTreat(attacker, defender); return false; });
+        if (attacker.HasSkill("Mimic") && attacker.mimicUsesRemaining > 0
+            && !string.IsNullOrEmpty(defender.lastSuperUsed))
+            supers.Add(() => TryActivateMimic(attacker, defender, targetPet));
         // futuros Supers entram aqui
 
         ShuffleList(supers);
@@ -1303,6 +1319,14 @@ public class CombatSimulator
             return;
         }
 
+        // Repulse: 30% de chance de deflectir o throw de volta para o lançador original.
+        // Não ativa se o defensor estiver enredado (Net — sem mobilidade pra rebater).
+        if (!defender.netEnsnared && defender.HasSkill("Repulse") && Roll(0.30f))
+        {
+            SimulateRepulse(defender, attacker, weaponData);
+            return;
+        }
+
         // Hideaway: +25% block contra arremessos recebidos — reduz direto a chance de acerto do
         // throw (80% → 55%, miss sobe de 20% pra 45%), em vez de um 3º resultado separado de
         // Block. Mais simples que a versão anterior (Roll(ThrowBlockChance) + evento Block
@@ -1335,6 +1359,38 @@ public class CombatSimulator
         // ocasionalmente "equipar" uma arma já no fim do turno (depois do hit/miss do arremesso),
         // sem nenhuma ação visível além da troca de ícone — bug real reportado pelo usuário: o
         // pickup deveria sempre acontecer no início do turno, nunca no meio/fim.
+    }
+
+    // --- Repulse (Passiva de Defesa) ---
+
+    private void SimulateRepulse(PlayerState deflector, PlayerState originalThrower, WeaponData weaponData)
+    {
+        // +5% de crítico adicional do Repulse; CritChance base usa o weapon atual do deflector
+        bool  isCrit   = Roll(CritChance(deflector) + 0.05f);
+        // Dano: weaponDamage + STR do lançador original (força do arremesso original)
+        int   dmg      = CalcThrowDamage(originalThrower, weaponData);
+        float critMult = (weaponData != null ? weaponData.critDamageMultiplier : UnarmedStats.CritDamageMultiplier)
+                       + deflector.critDamageBonus;
+        if (isCrit) dmg = Mathf.RoundToInt(dmg * critMult);
+        // Mitigação do lançador original (é ele quem recebe o impacto de volta)
+        dmg = Mathf.RoundToInt(ApplyResistantCap(originalThrower, dmg));
+        if (originalThrower.armor > 0f)
+            dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - originalThrower.armor)));
+
+        originalThrower.hp = ApplyDamage(originalThrower, dmg);
+        Emit(new CombatEvent
+        {
+            type        = CombatEventType.Repulse,
+            playerIndex = deflector.index,
+            targetIndex = originalThrower.index,
+            weaponName  = weaponData?.weaponName ?? "",
+            damage      = dmg,
+            isCrit      = isCrit,
+            newHp       = originalThrower.hp,
+            maxHp       = originalThrower.maxHp
+        });
+        Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = originalThrower.index, newHp = originalThrower.hp, maxHp = originalThrower.maxHp });
+        CheckNetFreed(originalThrower);
     }
 
     // --- Flash Flood (Super) ---
@@ -1518,6 +1574,7 @@ public class CombatSimulator
         if (attacker.netUsesRemaining <= 0 || !Roll(0.50f)) return false;
 
         attacker.netUsesRemaining--;
+        defender.lastSuperUsed = "Net";
 
         // Alvo: prioridade total nos pets — se houver qualquer pet vivo e não-enredado do
         // defensor, a rede SEMPRE pega um deles (aleatório entre os disponíveis). Só vai no
@@ -1574,6 +1631,7 @@ public class CombatSimulator
         if (attacker.bombUsesRemaining <= 0 || !Roll(0.17f)) return false;
 
         attacker.bombUsesRemaining--;
+        defender.lastSuperUsed = "Bomb";
         int rawDamage = _rng.Next(15, 26); // Next(min, max) é max-exclusivo: sorteia 15..25 inclusive
 
         var targets       = GetEnemyTargets(attacker);
@@ -1684,6 +1742,7 @@ public class CombatSimulator
         if (!Roll(0.33f)) return false;
 
         attacker.vampirismUsesRemaining--;
+        defender.lastSuperUsed = "Vampirism";
 
         int missingHp = attacker.maxHp - attacker.hp;
         int damage    = Mathf.Max(1, Mathf.RoundToInt(missingHp * 0.25f));
@@ -1742,6 +1801,7 @@ public class CombatSimulator
         if (!Roll(0.44f)) return;
 
         attacker.cryOfTheDamnedUsesRemaining--;
+        defender.lastSuperUsed = "Cry of the Damned";
         Emit(new CombatEvent { type = CombatEventType.CryOfTheDamned, playerIndex = attacker.index });
 
         for (int i = 0; i < defender.pets.Count; i++)
@@ -1765,6 +1825,7 @@ public class CombatSimulator
         if (livingPets.Count == 0) return;
 
         attacker.hypnosisUsesRemaining--;
+        defender.lastSuperUsed = "Hypnosis";
         Emit(new CombatEvent { type = CombatEventType.Hypnosis, playerIndex = attacker.index });
 
         int idx = livingPets[_rng.Next(livingPets.Count)];
@@ -1805,6 +1866,7 @@ public class CombatSimulator
         if (!Roll(0.67f)) return;
 
         attacker.tamerUsesRemaining--;
+        defender.lastSuperUsed = "Tamer";
 
         int choice  = _rng.Next(pets.Count);
         var carcass = pets[choice];
@@ -1852,6 +1914,7 @@ public class CombatSimulator
         if (targetPet == null || !Roll(0.33f)) return;
 
         attacker.treatUsesRemaining--;
+        defender.lastSuperUsed = "Treat";
 
         int heal = targetPet.maxHp / 2;
         targetPet.hp          = System.Math.Min(targetPet.hp + heal, targetPet.maxHp);
@@ -1876,6 +1939,217 @@ public class CombatSimulator
         int  forceTargetPetIdx = forceTargetIsPet ? aliveEnemyPetIdx[_rng.Next(aliveEnemyPetIdx.Count)] : -1;
 
         SimulatePetHit(attacker, targetPetIdx, defender, defender.pets, forceTargetIsPet, forceTargetPetIdx, comboCount: 0);
+    }
+
+    // --- Mimic (Super, 1x) ---
+
+    // Copia a última Super do oponente (defender.lastSuperUsed) e executa diretamente,
+    // ignorando HasSkill/usesRemaining/Roll da skill original — Mimic já passou pelo próprio Roll.
+    // Filtragem inteligente impede copias sem sentido (Treat sem pet, Thief sem arma, etc.).
+    private bool TryActivateMimic(PlayerState attacker, PlayerState defender, PetState targetPet = null)
+    {
+        if (attacker.mimicUsesRemaining <= 0) return false;
+        string copied = defender.lastSuperUsed;
+        if (string.IsNullOrEmpty(copied)) return false;
+        if (!Roll(0.25f)) return false;
+
+        // Filtragem: não copiar skills que não têm efeito no contexto atual
+        switch (copied)
+        {
+            case "Treat":
+                bool hasPet = false;
+                foreach (var p in attacker.pets) if (p.isAlive) { hasPet = true; break; }
+                if (!hasPet) return false;
+                break;
+            case "Thief":
+                if (defender.currentWeaponData == null
+                    && (defender.weaponLoadout == null || defender.weaponLoadout.Count == 0))
+                    return false;
+                break;
+            case "Tamer":
+                bool anyDead = false;
+                foreach (var p in attacker.pets) if (!p.isAlive && !p.isConsumed) { anyDead = true; break; }
+                foreach (var p in defender.pets) if (!p.isAlive && !p.isConsumed) { anyDead = true; break; }
+                if (!anyDead) return false;
+                break;
+            case "Hypnosis":
+            case "Cry of the Damned":
+                bool defHasPet = false;
+                foreach (var p in defender.pets) if (p.isAlive) { defHasPet = true; break; }
+                if (!defHasPet) return false;
+                break;
+            case "Flash Flood":
+                if (attacker.weaponLoadout == null || attacker.weaponLoadout.Count < 3) return false;
+                break;
+            case "Tragic Potion":
+                if (attacker.hp >= attacker.maxHp * 0.60f) return false;
+                break;
+            case "Vampirism":
+                if (attacker.hp >= attacker.maxHp * 0.50f) return false;
+                break;
+        }
+
+        attacker.mimicUsesRemaining--;
+        Emit(new CombatEvent { type = CombatEventType.Mimic, playerIndex = attacker.index, weaponName = copied });
+
+        switch (copied)
+        {
+            case "Flash Flood":  SimulateFlashFlood(attacker, defender); return true;
+            case "Haste":        SimulateHaste(attacker, defender, targetPet); return true;
+            case "Piledriver":   SimulatePiledriver(attacker, defender, targetPet); return true;
+
+            case "Net":
+            {
+                var alive = new List<int>();
+                for (int i = 0; i < defender.pets.Count; i++)
+                    if (defender.pets[i].isAlive && !defender.pets[i].netEnsnared) alive.Add(i);
+                bool caughtPet = alive.Count > 0;
+                int  caughtIdx = caughtPet ? alive[_rng.Next(alive.Count)] : -1;
+                if (caughtPet) defender.pets[caughtIdx].netEnsnared = true;
+                else           defender.netEnsnared = true;
+                Emit(new CombatEvent { type = CombatEventType.NetThrow, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = caughtPet, targetPetIndex = caughtIdx });
+                return true;
+            }
+
+            case "Fierce Brute":
+                attacker.fierceBruteActive = true;
+                Emit(new CombatEvent { type = CombatEventType.FierceBruteActivated, playerIndex = attacker.index });
+                return false;
+
+            case "Bomb":
+            {
+                int raw   = _rng.Next(15, 26);
+                var tgts  = GetEnemyTargets(attacker);
+                var tIdxs = new List<int>(); var tDmg = new List<int>();
+                var tHp   = new List<int>(); var nFr  = new List<int>();
+                foreach (var tgt in tgts)
+                {
+                    tgt.hp = ApplyDamage(tgt, raw);
+                    tIdxs.Add(tgt.index); tDmg.Add(raw); tHp.Add(tgt.hp);
+                    if (tgt.netEnsnared && !tgt.netEnsnaredPermanent) { tgt.netEnsnared = false; nFr.Add(tgt.index); }
+                }
+                var bpi = new List<int>(); var bph = new List<int>();
+                for (int i = 0; i < defender.pets.Count; i++)
+                {
+                    if (!defender.pets[i].isAlive) continue;
+                    ApplyDamageToPet(defender.pets[i], raw); bpi.Add(i); bph.Add(defender.pets[i].hp);
+                }
+                Emit(new CombatEvent { type = CombatEventType.BombThrow, playerIndex = attacker.index, targetIndex = defender.index, damage = raw, bombTargets = tIdxs, bombTargetDamages = tDmg, bombTargetHp = tHp, netFreedTargets = nFr, bombPetIndexes = bpi, bombPetHp = bph });
+                for (int i = 0; i < tIdxs.Count; i++)
+                    Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = tIdxs[i], newHp = tHp[i], maxHp = tgts[i].maxHp });
+                for (int i = 0; i < bpi.Count; i++)
+                    if (!defender.pets[bpi[i]].isAlive)
+                        Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = bpi[i] });
+                return true;
+            }
+
+            case "Tragic Potion":
+            {
+                float pct  = 0.25f + (float)_rng.NextDouble() * 0.25f;
+                int   heal = Mathf.RoundToInt(pct * attacker.maxHp);
+                attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal);
+                attacker.poisoned = false;
+                Emit(new CombatEvent { type = CombatEventType.TragicPotionUse, playerIndex = attacker.index, healAmount = heal, newHp = attacker.hp, maxHp = attacker.maxHp });
+                return false;
+            }
+
+            case "Vampirism":
+            {
+                int miss = attacker.maxHp - attacker.hp;
+                int dmg  = Mathf.Max(1, Mathf.RoundToInt(miss * 0.25f));
+                if (targetPet != null)
+                {
+                    int pi = defender.pets.IndexOf(targetPet);
+                    ApplyDamageToPet(targetPet, dmg);
+                    attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + dmg);
+                    Emit(new CombatEvent { type = CombatEventType.VampirismAttack, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = true, targetPetIndex = pi, damage = dmg, healAmount = dmg, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp, newAttackerHp = attacker.hp });
+                    Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = attacker.index, newHp = attacker.hp, maxHp = attacker.maxHp });
+                    if (!targetPet.isAlive) Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = defender.index, petIndex = pi });
+                }
+                else
+                {
+                    defender.hp = ApplyDamage(defender, dmg);
+                    attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + dmg);
+                    Emit(new CombatEvent { type = CombatEventType.VampirismAttack, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, healAmount = dmg, newDefenderHp = defender.hp, newAttackerHp = attacker.hp });
+                    Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+                    Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = attacker.index, newHp = attacker.hp, maxHp = attacker.maxHp });
+                    CheckNetFreed(defender);
+                }
+                return true;
+            }
+
+            case "Cry of the Damned":
+            {
+                Emit(new CombatEvent { type = CombatEventType.CryOfTheDamned, playerIndex = attacker.index });
+                for (int i = 0; i < defender.pets.Count; i++)
+                {
+                    var pet = defender.pets[i];
+                    if (!pet.isAlive || !Roll(0.50f)) continue;
+                    pet.hp = 0;
+                    Emit(new CombatEvent { type = CombatEventType.PetFlee, playerIndex = defender.index, petIndex = i });
+                }
+                return false;
+            }
+
+            case "Hypnosis":
+            {
+                var living = new List<int>();
+                for (int i = 0; i < defender.pets.Count; i++)
+                    if (defender.pets[i].isAlive) living.Add(i);
+                if (living.Count == 0) return false;
+                Emit(new CombatEvent { type = CombatEventType.Hypnosis, playerIndex = attacker.index });
+                int idx = living[_rng.Next(living.Count)];
+                if (!Roll(0.90f)) return false;
+                var hpet = defender.pets[idx];
+                defender.pets.RemoveAt(idx);
+                attacker.pets.Add(hpet);
+                Emit(new CombatEvent { type = CombatEventType.PetHypnotized, playerIndex = defender.index, petIndex = idx, targetIndex = attacker.index });
+                return false;
+            }
+
+            case "Tamer":
+            {
+                var oIdxs = new List<int>(); var pIdxs = new List<int>(); var pets = new List<PetState>();
+                for (int i = 0; i < attacker.pets.Count; i++) { var p = attacker.pets[i]; if (!p.isAlive && !p.isConsumed) { oIdxs.Add(attacker.index); pIdxs.Add(i); pets.Add(p); } }
+                for (int i = 0; i < defender.pets.Count; i++) { var p = defender.pets[i]; if (!p.isAlive && !p.isConsumed) { oIdxs.Add(defender.index); pIdxs.Add(i); pets.Add(p); } }
+                if (pets.Count == 0) return false;
+                int ch      = _rng.Next(pets.Count);
+                var carcass = pets[ch];
+                int hMin = carcass.maxHp * 20 / 100;
+                int hMax = carcass.maxHp * 50 / 100;
+                int heal = hMin + _rng.Next(System.Math.Max(1, hMax - hMin + 1));
+                attacker.hp = System.Math.Min(attacker.hp + heal, attacker.maxHp);
+                carcass.isConsumed = true;
+                Emit(new CombatEvent { type = CombatEventType.TamerEat, playerIndex = attacker.index, targetIndex = oIdxs[ch], petIndex = pIdxs[ch], healAmount = heal, newHp = attacker.hp, maxHp = attacker.maxHp });
+                return false;
+            }
+
+            case "Treat":
+            {
+                PetState tPet = null; int tIdx = -1; bool found = false; float low = 1f;
+                for (int i = 0; i < attacker.pets.Count; i++)
+                {
+                    var p = attacker.pets[i];
+                    if (!p.isAlive || p.isConsumed || p.shielded) continue;
+                    bool ens = p.netEnsnared; float rat = (float)p.hp / p.maxHp;
+                    if      (ens && !found)             { tPet = p; tIdx = i; found = true; low = rat; }
+                    else if (ens && rat < low)          { tPet = p; tIdx = i; low = rat; }
+                    else if (!ens && !found && rat < low){ tPet = p; tIdx = i; low = rat; }
+                }
+                if (tPet == null) return false;
+                int th = tPet.maxHp / 2;
+                tPet.hp = System.Math.Min(tPet.hp + th, tPet.maxHp);
+                tPet.shielded = true; tPet.netEnsnared = false;
+                Emit(new CombatEvent { type = CombatEventType.TreatFeed, playerIndex = attacker.index, petIndex = tIdx, healAmount = th, newTargetHp = tPet.hp, newTargetMaxHp = tPet.maxHp });
+                var epIdx = new List<int>();
+                for (int i = 0; i < defender.pets.Count; i++) if (defender.pets[i].isAlive) epIdx.Add(i);
+                bool fIsPet = epIdx.Count > 0 && Roll(0.5f);
+                int  fPetIdx = fIsPet ? epIdx[_rng.Next(epIdx.Count)] : -1;
+                SimulatePetHit(attacker, tIdx, defender, defender.pets, fIsPet, fPetIdx, comboCount: 0);
+                return false;
+            }
+        }
+        return false;
     }
 
     // Alvos PERSONAGEM do lado inimigo do atacante — hoje só o defensor (1v1). Pets vivos do

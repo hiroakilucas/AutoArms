@@ -196,6 +196,19 @@ public class CombatSceneLoader : MonoBehaviour
         if (p2Handler != null && player2Profile != null && player2Profile.HasSkill("Shield"))
             p2Handler.EquipShield(shieldWeaponData);
 
+        // Skills HUD: exibe skills ativas (Supers) com contador de usos abaixo do WeaponHUD.
+        SkillsHUD p1SkillsHUD = null, p2SkillsHUD = null;
+        if (profile != null)
+        {
+            p1SkillsHUD = gameObject.AddComponent<SkillsHUD>();
+            p1SkillsHUD.Initialize(profile.skills, true, combatHUD.CanvasTransform);
+        }
+        if (player2Profile != null)
+        {
+            p2SkillsHUD = gameObject.AddComponent<SkillsHUD>();
+            p2SkillsHUD.Initialize(player2Profile.skills, false, combatHUD.CanvasTransform);
+        }
+
         List<CombatEvent> events = null;
 
         if (useSimulator && player2Profile != null)
@@ -283,6 +296,8 @@ public class CombatSceneLoader : MonoBehaviour
             combatPlayer.vampirismEffectController = vampirismEffectController;
             combatPlayer.chefPizzaPrefab = chefPizzaPrefab;
             combatPlayer.treatSprite = treatSprite;
+            combatPlayer.p1SkillsHUD = p1SkillsHUD;
+            combatPlayer.p2SkillsHUD = p2SkillsHUD;
             combatPlayer.PlayCombat(events);
 
             combatHUD.AddSpeedControls(combatPlayer);
