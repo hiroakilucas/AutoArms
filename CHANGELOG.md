@@ -3,6 +3,10 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 56
 
+- 2026-06-29: Dying — animação de morte ao fim do combate; PlayDying() em AnimationController, TriggerCombatEndRoutine em CombatPlayer (0.5s ciclo + SetSpeed(0) congela no último frame + 0.4s pausa antes da tela de resultado); trigger Dying + transição AnyState→Dying (CanTransitionToSelf=0) nos 3 controllers; Assassin Guy ganhou novo AnimatorState Dying
+- 2026-06-29: SlashingHeavy removido — armas Heavy usam trigger Slashing padrão; parâmetro, estado e todas as transições removidos dos 3 controllers (Assassin Guy, Medieval Warrior, Medieval Warrior Girl)
+- 2026-06-29: Piledriver — nova animação EarthFissure substituiu Explosion_1; offset Y -0.049 em relação ao pivot do defensor, escala 0.5×0.5
+- 2026-06-29: BloodEffectPlayer — efeitos de sangue em hits normais (hit1/hit2 aleatório), críticos (hitcrit) e hits em pets; integrado no CombatPlayer (case Hit); singleton MonoBehaviour + 3 RuntimeAnimatorController SerializeField
 - 2026-06-29: Net — pet enredado exclui rede visual do pet (sorting layer Characters/100, voa até posição do pet); Treat libera pet com PlayNetBreakEffect (scale-up + fragmentos radiais)
 - 2026-06-29: Net — RollPetTarget exclui pets netEnsnared como alvo; prioridade 100% nos pets (caughtPet = alivePets.Count > 0)
 - 2026-06-28: Tamer — volta ao spawn (InSpawnZone + JumpTo) depois de comer carcaça, antes do próximo ataque

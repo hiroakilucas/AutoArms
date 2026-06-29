@@ -833,25 +833,8 @@ public class CombatPlayer : MonoBehaviour
 
                     if (piledriverEffectPrefab != null)
                     {
-                        // originalDefenderPos é o pivot do personagem (centro/torso), não os
-                        // pés — mesma convenção de groundY = position.y - 1.5f usada em
-                        // DropWeapon/DropShield/DropWeaponFromHud. Instancia ali primeiro, lê o
-                        // bounds real do SpriteRenderer (já considera o tamanho/escala de fato
-                        // do sprite no frame inicial) e sobe o efeito até a borda INFERIOR dele
-                        // encostar nos pés, em vez de cravar o centro da explosão nos pés.
-                        var fx = Instantiate(piledriverEffectPrefab, originalDefenderPos, Quaternion.identity);
-                        var fxRenderer = fx.GetComponent<SpriteRenderer>();
-                        if (fxRenderer != null)
-                        {
-                            // +0.6f extra por cima do cálculo de bounds — o offset puro de pés
-                            // (-1.5f) ainda deixava a explosão visualmente baixa demais (pedido
-                            // do usuário pra subir mais um pouco); ajustar este valor de novo se
-                            // precisar afinar mais.
-                            const float extraLift = 0.6f;
-                            float feetY   = originalDefenderPos.y - 1.5f + extraLift;
-                            float shiftUp = feetY - fxRenderer.bounds.min.y;
-                            fx.transform.position += new Vector3(0f, shiftUp, 0f);
-                        }
+                        var fx = Instantiate(piledriverEffectPrefab, originalDefenderPos + new Vector3(0f, -0.049f, 0f), Quaternion.identity);
+                        fx.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
                     }
 
                     ApplyHealthDelta(evt.targetIndex, evt.newHp);
@@ -1335,6 +1318,7 @@ public class CombatPlayer : MonoBehaviour
                                 DamagePopup.Spawn(petPopupPos, evt.damage, evt.isCrit);
                             }
                             hitPet.animController.PlayHurt();
+                            BloodEffectPlayer.PlayHit(hitPet.transform.position + Vector3.up * 0.3f);
                             if (evt.newTargetHp <= 0) hitPet.PlayDeath();
                         }
 
@@ -1401,6 +1385,10 @@ public class CombatPlayer : MonoBehaviour
                     {
                         DamagePopup.Spawn(popupPos, evt.damage, evt.isCrit);
                     }
+
+                    Vector3 bloodPos = defender.transform.position + Vector3.up * 0.3f;
+                    if (evt.isCrit) BloodEffectPlayer.PlayCrit(bloodPos);
+                    else            BloodEffectPlayer.PlayHit(bloodPos);
 
                     StartCoroutine(defender.Knockback(pushDir, kbDist, kbDur * t));
                     yield return StartCoroutine(defender.animationController.PlayHurt(kbDur * t));
@@ -1780,8 +1768,7 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.CombatEnd:
-                TriggerCombatEnd(evt);
-                yield return null;
+                yield return StartCoroutine(TriggerCombatEndRoutine(evt));
                 break;
 
             // --- Pets (Fase 3) ---
@@ -2491,6 +2478,30 @@ public class CombatPlayer : MonoBehaviour
         else if (delta < 0) hs.Heal(-delta);
     }
 
+    private IEnumerator TriggerCombatEndRoutine(CombatEvent evt)
+    {
+        StopLingeringLoops();
+
+        PlayerCombat loser = evt.playerIndex == 0 ? p2Combat : p1Combat;
+        if (loser != null)
+        {
+            loser.animationController.PlayDying();
+            yield return new WaitForSeconds(0.5f); // um ciclo da animação Dying (500ms no SCML)
+            loser.animationController.SetSpeed(0f); // congela no último frame
+            yield return new WaitForSeconds(0.4f); // pausa antes da tela de resultado
+        }
+        else
+        {
+            yield return new WaitForSeconds(0.9f);
+        }
+
+        if (sequencer != null)
+        {
+            PlayerCombat winner = evt.playerIndex == 0 ? p1Combat : p2Combat;
+            sequencer.OnCombatEnd(winner);
+        }
+    }
+
     private void TriggerCombatEnd(CombatEvent evt)
     {
         StopLingeringLoops();
@@ -2552,14 +2563,10 @@ public class CombatPlayer : MonoBehaviour
         return defPos - dir * reach;
     }
 
-    // Trigger de swing por prioridade Heavy > Fast > default — uma arma só toca uma animação,
-    // ainda que tenha múltiplas tags (ex: Heavy|Blunt entra em SlashingHeavy; Sharp|Fast em
-    // SlashingDagger). attacker null cai no default "Slashing".
     private static string SwingTrigger(PlayerCombat attacker)
     {
         var data = attacker?.weaponHandler.CurrentWeaponData;
-        if (WeaponData.HasType(data, WeaponType.Heavy)) return "SlashingHeavy";
-        if (WeaponData.HasType(data, WeaponType.Fast))  return "SlashingDagger";
+        if (WeaponData.HasType(data, WeaponType.Fast)) return "SlashingDagger";
         return "Slashing";
     }
 

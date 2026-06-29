@@ -62,5 +62,12 @@ public class AnimationController : MonoBehaviour
         anim.SetBool("Idle", state);
         if (state) anim.SetBool("Running", false);
     }
+    public void PlayDying()
+    {
+        anim.SetBool("Idle", false);
+        anim.SetBool("Running", false);
+        anim.SetTrigger("Dying");
+    }
+
     public void SetSpeed(float speed) => anim.speed = speed;
 }
