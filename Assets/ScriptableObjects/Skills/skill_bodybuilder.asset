@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: skill_bodybuilder
   m_EditorClassIdentifier: 
   skillName: Bodybuilder
-  description: "+10% dexterity (evasion) e +40% hit speed, s\xF3 com arma Heavy"
+  description: "+10% evasion e +40% hit speed, s\xF3 com arma Heavy"
   icon: {fileID: 21300000, guid: cb3f646a89e92be47a8a98f3fd12d234, type: 3}
   category: 3
   activationType: 0

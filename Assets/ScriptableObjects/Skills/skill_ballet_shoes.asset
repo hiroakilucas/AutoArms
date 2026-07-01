@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: skill_ballet_shoes
   m_EditorClassIdentifier: 
   skillName: Ballet Shoes
-  description: "Pula para tr\xE1s no in\xEDcio da luta"
+  description: +10% evasion, primeiro golpe automaticamente esquivado
   icon: {fileID: 21300000, guid: d5458481cb861244a9f52e0f8a9b188f, type: 3}
   category: 1
   activationType: 0

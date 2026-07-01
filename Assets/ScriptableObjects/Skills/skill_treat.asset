@@ -19,4 +19,4 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: d50c3d64cdaf78142b33e9599316b70b, type: 3}
   category: 4
   activationType: 1
-  usesPerFight: 0
+  usesPerFight: 4

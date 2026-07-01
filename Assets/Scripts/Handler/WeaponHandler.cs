@@ -63,16 +63,37 @@ public class WeaponHandler : MonoBehaviour
     // Equipa uma WeaponData específica (em vez de sortear) — usado pelo CombatPlayer para
     // que a arma exibida visualmente seja sempre a mesma que o CombatSimulator usou no cálculo
     // de dano daquele evento, em vez de um sorteio independente que podia divergir.
+    // Fallback de sprite: se este tier não tem inHandSprite (T2/T3 sem sprite atribuído ainda),
+    // sobe a cadeia previousTier até achar um — assim o personagem não aparece desarmado visualmente
+    // e CurrentWeaponData reflete a arma real (não null), permitindo SwingTrigger/CalcAttackPosition
+    // usar as stats corretas do tier equipado.
     public void EquipSpecific(WeaponData data)
     {
-        if (data?.inHandSprite == null)
+        if (data == null) { Unequip(); return; }
+
+        if (current) { Destroy(current); current = null; }
+
+        // Sobe a cadeia de tiers até encontrar um sprite válido
+        var spriteSource = data;
+        while (spriteSource != null && spriteSource.inHandSprite == null)
+            spriteSource = spriteSource.previousTier;
+
+        CurrentWeaponData = data; // sempre registra a arma real, mesmo sem sprite
+
+        if (spriteSource?.inHandSprite != null)
         {
-            Unequip();
-            return;
+            current = Instantiate(swordBasePrefab, handBone);
+            current.transform.localPosition  = positionOffset + new Vector3(0, 0, zOffset);
+            current.transform.localEulerAngles = rotationOffset;
+            current.transform.localScale     = Vector3.one * data.scale;
+
+            var sr = current.GetComponent<SpriteRenderer>();
+            sr.sprite           = spriteSource.inHandSprite;
+            sr.sortingLayerName = sortingLayer;
+            sr.sortingOrder     = sortingOrder;
         }
 
-        if (current) Destroy(current);
-        EquipData(data);
+        OnWeaponChanged?.Invoke(data);
     }
 
     private void EquipData(WeaponData data)

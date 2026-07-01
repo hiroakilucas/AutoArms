@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed0c7a0e125c40a42b05fdb965dc5526, type: 3}
+  m_Name: Broadsword T3
+  m_EditorClassIdentifier: 
+  weaponName: Broadsword T3
+  icon: {fileID: 0}
+  inHandSprite: {fileID: 0}
+  damage: 18
+  speedModifier: 1
+  types: 01000000
+  scale: 1
+  attackAnimation: 0
+  tier: 3
+  previousTier: {fileID: 11400000, guid: b981cd02ba42206469c187d56f50e9c3, type: 2}
+  dropOdds: 0
+  hitSpeed: 1
+  drawChance: 0.43
+  reach: 0
+  critChanceBonus: 0.36
+  critDamageMultiplier: 1.7
+  evasionBonus: 0
+  dexterityBonus: 0
+  reversalBonus: 0.16
+  blockBonus: 0.21000001
+  accuracyBonus: 0
+  disarmBonus: 0.21000001
+  comboBonus: 0
+  deflectBonus: 0

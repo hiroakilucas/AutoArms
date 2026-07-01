@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: skill_extra_thick_skin
   m_EditorClassIdentifier: 
   skillName: Extra Thick Skin
-  description: "Reduz % dano recebido (vers\xE3o mais forte do Armour)"
+  description: "+50% armor (redu\xE7\xE3o de dano)"
   icon: {fileID: 0}
   category: 1
   activationType: 0

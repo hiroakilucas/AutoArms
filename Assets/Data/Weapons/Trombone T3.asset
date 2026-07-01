@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed0c7a0e125c40a42b05fdb965dc5526, type: 3}
+  m_Name: Trombone T3
+  m_EditorClassIdentifier: 
+  weaponName: Trombone T3
+  icon: {fileID: 0}
+  inHandSprite: {fileID: 0}
+  damage: 35
+  speedModifier: 1
+  types: 0400000002000000
+  scale: 1
+  attackAnimation: 0
+  tier: 3
+  previousTier: {fileID: 11400000, guid: 8f1df6011e134974e9619d8e10504c76, type: 2}
+  dropOdds: 0
+  hitSpeed: 0.48
+  drawChance: 0.27
+  reach: 2
+  critChanceBonus: -0.1
+  critDamageMultiplier: 1.7
+  evasionBonus: 0
+  dexterityBonus: -0.3
+  reversalBonus: 0
+  blockBonus: 0.26
+  accuracyBonus: 0.26
+  disarmBonus: 0.56
+  comboBonus: 0.4
+  deflectBonus: 0

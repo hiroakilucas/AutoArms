@@ -497,12 +497,15 @@ MonoBehaviour:
   runSpeedMultiplier: 1
   comboChanceBonus: 0
   disarmChanceBonus: 0
+  stickyHands: 0
   leadSkeleton: 0
   firstHitAvoided: 0
   martialArts: 0
   weaponsMaster: 0
+  hasShield: 0
   skills: []
   debugProfile: {fileID: 0}
+  spawnPosition: {x: 0, y: 0}
 --- !u!114 &4350329976388066680
 MonoBehaviour:
   m_ObjectHideFlags: 0

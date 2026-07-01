@@ -12,4 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 16891fce19c2afd4f96c75c5323e83d4, type: 3}
   m_Name: Loadout_MedievalWarrior
   m_EditorClassIdentifier: 
-  weapons: []
+  weapons:
+  - {fileID: 11400000, guid: cfc3237e388d416418fbc83c97706971, type: 2}

@@ -13,8 +13,7 @@ MonoBehaviour:
   m_Name: skill_saboteur
   m_EditorClassIdentifier: 
   skillName: Saboteur
-  description: "Antes da luta, destr\xF3i 1 arma aleat\xF3ria do oponente e d\xE1
-    -100 iniciativa nele"
+  description: "A 1\xAA arma que o oponente puxar na luta quebra com 100% de certeza"
   icon: {fileID: 21300000, guid: 221737d811801ac4ebcf4fa34255f6bd, type: 3}
   category: 0
   activationType: 0

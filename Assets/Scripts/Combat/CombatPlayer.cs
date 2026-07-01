@@ -2645,9 +2645,10 @@ public class CombatPlayer : MonoBehaviour
         FadeFastMetabolismLeaves(1);
     }
 
-    // Heavy e Sharp/default não são somados (não faz sentido físico somar dois alcances de
-    // categoria inteiros) — Heavy tem prioridade, depois Fast desconta — mesma regra de
-    // PlayerCombat.AttackPosition, ver tabela em CLAUDE.md.
+    // Fórmula única para todas as armas: base 2.0 + data.reach − (scale − 1) × 4.0
+    // Scale é o principal fator: arma maior → personagem para mais perto do defensor.
+    // data.reach é o knob de calibração por arma (float, permite 1.4 etc.).
+    // A scale=1.5 o reach final = data.reach (efeito direto e intuitivo).
     private static Vector2 CalcAttackPosition(PlayerCombat attacker, PlayerCombat defender)
     {
         float reach;
@@ -2657,8 +2658,9 @@ public class CombatPlayer : MonoBehaviour
         }
         else
         {
-            reach = WeaponData.HasType(attacker.weaponHandler.CurrentWeaponData, WeaponType.Heavy) ? 2.8f : 2.0f;
-            if (WeaponData.HasType(attacker.weaponHandler.CurrentWeaponData, WeaponType.Fast)) reach -= 0.5f;
+            var data = attacker.weaponHandler.CurrentWeaponData;
+            reach = 2.0f + (data?.reach ?? 0f) - ((data?.scale ?? 1f) - 1f) * 4.0f;
+            reach = Mathf.Max(0.3f, reach);
         }
         Vector2 defPos = defender.transform.position;
         Vector2 attPos = attacker.transform.position;
@@ -2669,6 +2671,17 @@ public class CombatPlayer : MonoBehaviour
     private static string SwingTrigger(PlayerCombat attacker)
     {
         var data = attacker?.weaponHandler.CurrentWeaponData;
+
+        // Sobe a cadeia previousTier para herdar attackAnimation do T1 caso T2/T3 ainda
+        // estejam em Auto (gerados antes de o T1 ter a animação configurada manualmente).
+        var check = data;
+        while (check != null)
+        {
+            if (check.attackAnimation != AttackAnimation.Auto)
+                return check.attackAnimation == AttackAnimation.SlashingDagger ? "SlashingDagger" : "Slashing";
+            check = check.previousTier;
+        }
+
         if (WeaponData.HasType(data, WeaponType.Fast)) return "SlashingDagger";
         return "Slashing";
     }

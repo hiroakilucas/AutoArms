@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed0c7a0e125c40a42b05fdb965dc5526, type: 3}
+  m_Name: Flail T3
+  m_EditorClassIdentifier: 
+  weaponName: Flail T3
+  icon: {fileID: 0}
+  inHandSprite: {fileID: 0}
+  damage: 63
+  speedModifier: 1
+  types: 0400000002000000
+  scale: 1
+  attackAnimation: 0
+  tier: 3
+  previousTier: {fileID: 11400000, guid: 4fb6a85e70d4770469c1d94534196e65, type: 2}
+  dropOdds: 0
+  hitSpeed: 0.55
+  drawChance: 0.43
+  reach: 1
+  critChanceBonus: -0.2
+  critDamageMultiplier: 1.7
+  evasionBonus: -0.3
+  dexterityBonus: -1.6
+  reversalBonus: 0
+  blockBonus: -0.5
+  accuracyBonus: 1.56
+  disarmBonus: -0.2
+  comboBonus: 0.4
+  deflectBonus: 0

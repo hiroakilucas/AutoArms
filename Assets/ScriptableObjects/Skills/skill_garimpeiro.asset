@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_garimpeiro
+  m_EditorClassIdentifier: 
+  skillName: Garimpeiro
+  description: "40% de chance no in\xEDcio do turno (desarmado) de pegar uma arma
+    aleat\xF3ria do ch\xE3o em vez do loadout"
+  icon: {fileID: 0}
+  category: 3
+  activationType: 0
+  usesPerFight: 1

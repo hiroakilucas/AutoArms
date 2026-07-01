@@ -18,11 +18,18 @@ public class WeaponData : ScriptableObject
     [Min(0.01f)]
     public float scale = 1f;      // tamanho arma
 
+    [Header("Animação de Ataque")]
+    public AttackAnimation attackAnimation = AttackAnimation.Auto;
+
+    [Header("Tier / Progressão")]
+    public int tier = 1;                    // 1, 2 ou 3 — indica o nível de evolução desta arma
+    public WeaponData previousTier = null;  // referência para o tier anterior (T2→T1, T3→T2)
+
     [Header("My Brute — Propriedades da Arma")]
     public float dropOdds = 0f;              // % de chance de drop no level-up
     public float hitSpeed = 1.0f;            // multiplicador de velocidade de ataque
     public float drawChance = 0f;            // % chance de pegar esta arma ao pick up
-    public int   reach = 0;                  // alcance — soma à distância base de AttackPosition
+    public float reach = 0f;                 // alcance — soma à distância base de AttackPosition
     public float critChanceBonus = 0f;
     public float critDamageMultiplier = 1.0f; // multiplicador de dano crítico
     public float evasionBonus = 0f;          // bônus de esquiva ao segurar esta arma
@@ -54,6 +61,17 @@ public class WeaponData : ScriptableObject
         if (types != null && types.Count > 3)
             Debug.LogWarning($"[WeaponData] {name}: {types.Count} tags em WeaponType (máximo recomendado: 3).");
     }
+}
+
+// Qual trigger do Animator usar no ataque corpo-a-corpo.
+// Auto = comportamento atual (Fast tag → SlashingDagger, todo o resto → Slashing).
+// Nota: Throwing como ataque melee exige transições extras no Animator Controller — deixar Auto
+// ou Slashing/SlashingDagger por enquanto; Throwing é usado automaticamente no evento ThrowWeapon.
+public enum AttackAnimation
+{
+    Auto,           // deriva da tag: Fast → SlashingDagger, demais → Slashing
+    Slashing,       // swing pesado (espada/machado/maça)
+    SlashingDagger, // golpe rápido (faca/sai/shuriken)
 }
 
 // Tipos do My Brute original. Uma arma pode combinar até 3 (ex: Halberd = Long+Heavy+Sharp,

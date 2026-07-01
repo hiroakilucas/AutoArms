@@ -64,7 +64,7 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 | `AttackSettings` | `Assets/Data/Player1Settings.asset`, `Assets/Data/Player2Settings.asset` | Combat timing — see current values below |
 | `WeaponLoadout` | `Assets/Data/UI/Weapons/` | array of `WeaponData` slots. **Um asset por personagem** — `Loadout_AssasinGuy.asset`, `Loadout_MedievalWarrior.asset`, `Loadout_MedievalWarriorGirl.asset` (todos começam com as mesmas 4 armas: Satyr1, Golem3, Succubus, Zombie). Antes os 3 `PlayerProfile` apontavam para o mesmo `Loadout10Armas.asset` (ainda existe no projeto, sem uso) — qualquer arma ganha em level-up por um personagem vazava pra todos, já que `CombatResultPanel.ApplyBonus` muta `profile.weaponLoadout.weapons` diretamente. Separar os assets corrigiu isso. |
 | `WeaponData` (legados) | `Assets/Data/UI/Weapons/<type>/` | 5 assets originais: Satyr1, Golem3, Succubus, VeryHeavyArmoredFrontierDefender, Zombie. Têm sprites. |
-| `WeaponData` (My Brute) | `Assets/Data/Weapons/` | 26 assets sem sprite (icon/inHandSprite = null): Knife, Sai, Mug, Fan, Keyboard, Leek, Broadsword, Scimitar, Sword, Axe, Halberd, Baton, Lance, Trident, Whip, Bumps, Flail, Morning Star, Mammoth Bone, Hammer, Trombone, Shuriken, Pio Pio, Noodle Bowl, Frying Pan, Racquet. Stats T1 prontos. **Precisam ser arrastados para `AttackSequencer.allWeapons` no Inspector da cena `04_CombatScenePVP` para entrar no pool de level-up.** |
+| `WeaponData` (My Brute) | `Assets/Data/Weapons/` | 26 armas organizadas em **3 tiers** (T1/T2/T3): Knife, Sai, Mug, Fan, Keyboard, Leek, Broadsword, Scimitar, Sword, Axe, Halberd, Baton, Lance, Trident, Whip, Bumps, Flail, Morning Star, Mammoth Bone, Hammer, Trombone, Shuriken, Pio Pio, Noodle Bowl, Frying Pan, Racquet. T1 têm sprites (icon + inHandSprite) e stats base. T2/T3 são gerados por `WeaponTierGenerator` (sem sprite — herdam a do tier anterior via `EquipSpecific`) e têm dano multiplicado (T2 ×1.35, T3 ×1.75). **Precisam ser arrastados para `AttackSequencer.allWeapons` no Inspector da cena `04_CombatScenePVP` para entrar no pool de level-up.** |
 
 **AttackSettings — valores atuais (Player1 = Player2 exceto onde indicado):**
 | Campo | Valor |
@@ -295,13 +295,33 @@ STR soma direto no dano base da arma como valor flat (não como multiplicador pe
 **Dano base não soma por tag** — `weaponData.damage` tem prioridade absoluta (`RollWeaponDamage(data) => data.damage > 0 ? data.damage : 3`), sem depender de Sharp/Heavy/Fast. Cada `WeaponData` configura seu próprio valor fixo no Inspector; não há mais range aleatório por tipo.
 
 **Alcance não é soma pura** (somar distâncias inteiras por tag não faz sentido físico):
-- **Alcance** (`AttackPosition`/`CalcAttackPosition`): `base = Heavy presente ? 2.8 : 2.0`, depois `-0.5` se Fast presente, depois soma o campo `weaponData.reach` (inalterado). Ex: Sharp só = 2.0; Sharp+Fast = 1.5; Heavy só = 2.8.
-- **Trigger de animação** (`Slashing`/`SlashingDagger`): `Fast` usa `SlashingDagger`; demais (inclusive `Heavy`) usam `Slashing` — `CombatPlayer.SwingTrigger`/`PlayerCombat.HitRoutine`.
+- **Alcance** (`AttackPosition`/`CalcAttackPosition`): fórmula única para todas as armas: `reach = 2.0 + data.reach − (scale − 1) × 4.0`, clampado em 0.3. Sem distinção por tipo (Heavy/Long/Fast não alteram a base). `data.reach` (float) é o knob de calibração por arma. Propriedade intuitiva: a scale=1.5, `reach final = data.reach` diretamente. Desarmado: reach fixo = 0.8.
+- **Trigger de animação** (`Slashing`/`SlashingDagger`): checado em ordem de prioridade — (1) `attackAnimation` explícito na cadeia `previousTier` (T2/T3 com Auto herdam do T1); (2) tag `Fast` → `SlashingDagger`; (3) fallback → `Slashing`. Configurado via `WeaponData.attackAnimation` (enum `Auto/Slashing/SlashingDagger`) — `CombatPlayer.SwingTrigger`.
 - **Bodybuilder/Lead Skeleton**: checam `HasType(data, Heavy)`/`IsBlunt(data)` em vez de `== WeaponType.Heavy`.
 
 Campos não afetados pela migração (continuam somando direto, sem tabela por tag): `hitSpeed`, `drawChance`, `critChanceBonus`, `critDamageMultiplier`, `evasionBonus`, `dexterityBonus`, `reversalBonus`, `blockBonus`, `accuracyBonus`, `disarmBonus`, `comboBonus`, `deflectBonus` — cada um é um valor manual por asset, somado em cima do resultado das tabelas acima (mesmo padrão de sempre, ver `CombatSimulator`/`PlayerCombat`).
 
-Os 5 `WeaponData.asset` legados: `Satyr1` = `Sharp, Fast`, `Golem3` = `Heavy, Blunt`, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie` = `Sharp` (trio continua idêntico entre si). As tabelas acima foram calibradas pra reproduzir exatamente os valores de chance/dano/alcance que essas 5 armas já tinham antes da migração. Os 26 assets novos em `Assets/Data/Weapons/` usam os mesmos campos mas não têm sprite ainda — só entram em combate depois de adicionados ao `allWeapons` do `AttackSequencer`. `WeaponHandler` não tem mais uma propriedade `currentType` própria (era um espelho de `data.type`, que não existe mais como valor único) — todo lugar que precisa ler o tipo da arma equipada usa `weaponHandler.CurrentWeaponData` direto com `HasType`/`IsSharp`/`IsBlunt`.
+Os 5 `WeaponData.asset` legados: `Satyr1` = `Sharp, Fast`, `Golem3` = `Heavy, Blunt`, `Succubus`/`VeryHeavyArmoredFrontierDefender`/`Zombie` = `Sharp` (trio continua idêntico entre si). As tabelas acima foram calibradas pra reproduzir exatamente os valores de chance/dano/alcance que essas 5 armas já tinham antes da migração. Os 26 assets novos em `Assets/Data/Weapons/` usam os mesmos campos — T1 têm sprites, T2/T3 sem sprite (herdam via `previousTier`). `WeaponHandler` não tem mais uma propriedade `currentType` própria (era um espelho de `data.type`, que não existe mais como valor único) — todo lugar que precisa ler o tipo da arma equipada usa `weaponHandler.CurrentWeaponData` direto com `HasType`/`IsSharp`/`IsBlunt`.
+
+### Sistema de Tiers de Armas (T1 → T2 → T3)
+
+**Campos em `WeaponData`:**
+- `tier` (int): 1, 2 ou 3 — indica o nível de evolução.
+- `previousTier` (WeaponData): referência ao tier anterior (T2→T1, T3→T2). `null` em T1.
+- `attackAnimation` (AttackAnimation enum): `Auto` / `Slashing` / `SlashingDagger`. Auto herda pela cadeia `previousTier` via `SwingTrigger`.
+- `reach` (float): knob de calibração de alcance (substituiu `int` — permite valores como 1.4).
+
+**Geração automática — `Assets/Editor/WeaponTierGenerator.cs`:**
+- Menu `Tools → AutoArms → Generate Weapon Tiers (T2 & T3)`: para cada T1 em `Assets/Data/Weapons/`, cria `<Nome> T2.asset` e `<Nome> T3.asset` se não existirem. Copia todos os stats (incluindo `attackAnimation`, `scale`, `reach`, `types`). T2: damage ×1.35; T3: damage ×1.75. `icon`/`inHandSprite` ficam `null` (atribuir manualmente).
+- Menu `Tools → AutoArms → Assign All Weapon Tiers to AttackSequencer`: popula `AttackSequencer.allWeapons` com todos os assets T1/T2/T3 da pasta.
+
+**Progressão em combate — `CombatResultPanel`:**
+- `ShowLevelUpChoice` filtra: T1 aparece no pool se **não** há T2 ou T3 do mesmo já no loadout; T2/T3 aparecem se `previousTier` está no loadout.
+- `ApplyBonus` remove `previousTier` do loadout ao escolher a evolução.
+- `HasUpgradeInLoadout` percorre a cadeia T3→T2→T1 para verificar a presença.
+
+**Herança de sprite em `WeaponHandler.EquipSpecific`:**
+T2/T3 sem `inHandSprite` sobem a cadeia `previousTier` até achar um sprite válido — o personagem mostra visualmente o sprite do T1, mas `CurrentWeaponData` reflete a arma real do tier equipado (stats corretos para cálculos de dano/alcance/animação).
 
 ### Critical Hit
 `CritChance()` no atacante = soma por tag (ver tabela acima) + `weaponData.critChanceBonus` (ou `UnarmedStats.CritChanceBonus`) + `criticalChance` (profile/skills).

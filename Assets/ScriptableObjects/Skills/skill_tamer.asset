@@ -13,9 +13,8 @@ MonoBehaviour:
   m_Name: skill_tamer
   m_EditorClassIdentifier: 
   skillName: Tamer
-  description: "67% por turno: come um pet morto na arena (pr\xF3prio ou inimigo)
-    e cura 20-50% do HP m\xE1ximo do pet"
+  description: Pets mais fortes e com mais HP
   icon: {fileID: 21300000, guid: 80e830d01c63e1047b6ee97c116571af, type: 3}
   category: 4
   activationType: 1
-  usesPerFight: 0
+  usesPerFight: 4

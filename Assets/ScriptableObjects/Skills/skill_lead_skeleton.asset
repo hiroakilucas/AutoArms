@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: skill_lead_skeleton
   m_EditorClassIdentifier: 
   skillName: Lead Skeleton
-  description: +15% armor, -15% evasion, -15% dano de arma blunt (Heavy)
+  description: -15% dano de armas Heavy
   icon: {fileID: 21300000, guid: 3d0ac0c268603174bafaacb2f94bcea7, type: 3}
   category: 1
   activationType: 0

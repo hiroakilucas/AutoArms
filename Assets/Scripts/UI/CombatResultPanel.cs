@@ -241,6 +241,9 @@ public class CombatResultPanel : MonoBehaviour
                 if (opt.weapon != null && profile.weaponLoadout != null)
                 {
                     var list = new List<WeaponData>(profile.weaponLoadout.weapons ?? new WeaponData[0]);
+                    // Upgrade de tier: remove o tier anterior do loadout antes de adicionar o novo
+                    if (opt.weapon.previousTier != null)
+                        list.RemoveAll(lw => lw != null && lw.weaponName == opt.weapon.previousTier.weaponName);
                     list.Add(opt.weapon);
                     profile.weaponLoadout.weapons = list.ToArray();
 #if UNITY_EDITOR
@@ -286,11 +289,20 @@ public class CombatResultPanel : MonoBehaviour
             foreach (var w in allWeaponsPool)
             {
                 if (w == null) continue;
-                bool inLoadout = false;
-                if (loadoutWeapons != null)
-                    foreach (var lw in loadoutWeapons)
-                        if (lw != null && lw.weaponName == w.weaponName) { inLoadout = true; break; }
-                if (!inLoadout) availableWeapons.Add(w);
+                if (IsInLoadout(w, loadoutWeapons)) continue;
+
+                if (w.tier <= 1)
+                {
+                    // T1: só aparece se não há upgrade desta arma (T2 ou T3) no loadout
+                    if (!HasUpgradeInLoadout(w, loadoutWeapons, allWeaponsPool))
+                        availableWeapons.Add(w);
+                }
+                else
+                {
+                    // T2/T3: só aparece se o tier anterior está no loadout
+                    if (w.previousTier != null && IsInLoadout(w.previousTier, loadoutWeapons))
+                        availableWeapons.Add(w);
+                }
             }
 
         if (ShowAllOptionsForTesting)
@@ -356,8 +368,8 @@ public class CombatResultPanel : MonoBehaviour
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = i });
         foreach (var s in availableSkills)
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = s });
-        // foreach (var w in availableWeapons)
-        //     allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = w });
+        foreach (var w in availableWeapons)
+            allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = w });
         foreach (var pt in PetPool)
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Pet, petType = pt });
 
@@ -605,5 +617,33 @@ public class CombatResultPanel : MonoBehaviour
         tmp.fontStyle = FontStyles.Bold;
 
         return btn;
+    }
+
+    private static bool IsInLoadout(WeaponData w, WeaponData[] loadout)
+    {
+        if (loadout == null || w == null) return false;
+        foreach (var lw in loadout)
+            if (lw != null && lw.weaponName == w.weaponName) return true;
+        return false;
+    }
+
+    // Verifica se alguma versão de tier superior desta arma T1 já está no loadout
+    private static bool HasUpgradeInLoadout(WeaponData t1, WeaponData[] loadout, WeaponData[] allWeapons)
+    {
+        if (allWeapons == null) return false;
+        foreach (var candidate in allWeapons)
+        {
+            if (candidate == null || candidate.tier <= 1) continue;
+            // T2 direto deste T1
+            if (candidate.previousTier != null && candidate.previousTier.weaponName == t1.weaponName
+                && IsInLoadout(candidate, loadout))
+                return true;
+            // T3 via cadeia T3→T2→T1
+            if (candidate.previousTier?.previousTier != null
+                && candidate.previousTier.previousTier.weaponName == t1.weaponName
+                && IsInLoadout(candidate, loadout))
+                return true;
+        }
+        return false;
     }
 }
