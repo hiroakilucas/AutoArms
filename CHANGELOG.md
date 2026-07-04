@@ -3,6 +3,7 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-04: Renomeadas 8 armas: Mammoth Bone→Bone, Mug→Bottle, Pio Pio→Boomerang, Halberd→Reaper, Noodle Bowl→Bow, Leek→Branch, Trombone→Anchor, Keyboard→Book
 - 2026-06-30: CalcAttackPosition unificado — fórmula única `reach = 2.0 + data.reach − (scale−1)×4.0` para todas as armas; removidas distinções por Heavy/Fast/Long; K aumentado de 3.2 para 4.0; a scale=1.5 o valor de `data.reach` é o alcance final direto; `WeaponData.reach` alterado de `int` para `float` (calibração mais fina, ex: 1.4); Axe T1 ajustada para reach=1.2 (compensa remoção do bônus Heavy)
 - 2026-06-30: SwingTrigger com herança de attackAnimation por cadeia previousTier — T2/T3 com `attackAnimation=Auto` herdam o valor explícito do T1; prioridade: attackAnimation explícito > tag Fast > fallback Slashing
 - 2026-06-30: WeaponHandler.EquipSpecific corrigido — T2/T3 sem `inHandSprite` sobem a cadeia `previousTier` para sprite fallback; `CurrentWeaponData` sempre refletindo a arma real (era `Unequip()` → `null` → animação errada)
