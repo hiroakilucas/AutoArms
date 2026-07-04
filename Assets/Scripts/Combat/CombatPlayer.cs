@@ -106,6 +106,13 @@ public class CombatPlayer : MonoBehaviour
     private bool              _skipRequested;
     private HealthSystem      _h1, _h2;
 
+    // Bug 1 (weapon drop): índice do evento em execução em PlayEvents (pra case Hit poder
+    // espiar eventos futuros na lista) e o conjunto de Disarm já disparados antecipadamente no
+    // instante do impacto — evita que o case Disarm, ao ser alcançado de verdade mais tarde,
+    // dispare a queda da arma de novo.
+    private int _currentEventIndex;
+    private readonly HashSet<CombatEvent> _consumedDisarms = new HashSet<CombatEvent>();
+
     // case PetAttack montava `System.Action onImpact = () => {...}` capturando 5 variáveis
     // locais a cada execução — closure (objeto extra no heap pra guardar as variáveis
     // capturadas) + delegate, alocados de novo em TODO ataque de pet da luta inteira (suspeita
@@ -381,8 +388,9 @@ public class CombatPlayer : MonoBehaviour
 
     private IEnumerator PlayEvents()
     {
-        foreach (var evt in _events)
+        for (int i = 0; i < _events.Count; i++)
         {
+            var evt = _events[i];
             if (_skipRequested)
             {
                 // Fast-forward: apply all remaining HealthChanged events, then fire CombatEnd
@@ -396,6 +404,11 @@ public class CombatPlayer : MonoBehaviour
                 yield break;
             }
 
+            // Bug 1 (weapon drop): case Hit abaixo usa este índice pra espiar se um Disarm
+            // deste mesmo golpe vem mais à frente na lista, e disparar a queda da arma já no
+            // instante do impacto em vez de esperar o Hit inteiro (swing + hurt + comboDelay)
+            // terminar primeiro.
+            _currentEventIndex = i;
             yield return StartCoroutine(ExecuteEvent(evt));
         }
     }
@@ -464,6 +477,15 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.TurnStart:
+                // Bug 2 (sorting): promove o atacante (corpo+arma) e demove o defensor pra
+                // este turno — ver PlayerCombat.SetAttackerLayers. Nunca era chamado no path
+                // ativo do simulador antes (só existia em AttackRoutine/legado, código morto
+                // enquanto useSimulator=true), então corpo/arma de ambos ficavam sempre nas
+                // sorting layers default da luta inteira — a arma (layer "Weapons", acima de
+                // "Default") sempre na frente do corpo (layer "Default") de QUALQUER
+                // personagem, o tempo todo.
+                attacker?.SetAttackerLayers();
+
                 // Pequeno buffer antes de qualquer PickupWeapon/CatchWeapon deste turno.
                 // A transição "Idle → Catch Weapon" no Animator só existe a partir do
                 // estado Idle (não AnyState) — em turnos extras por velocidade, o TurnEnd
@@ -1377,6 +1399,36 @@ public class CombatPlayer : MonoBehaviour
                     float   kbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
                     float   kbDur   = attacker?.settings?.hurtDuration ?? 0.07f;
 
+                    // Bug 1 (weapon drop): se este hit vai desarmar o defensor (Disarm emitido
+                    // mais à frente na lista, ver CombatSimulator.SimulateHit — sempre depois de
+                    // Hit/HealthChanged, possivelmente depois de Sabotage/Iron Head/Reversal
+                    // também), dispara a queda da arma JÁ NESTE INSTANTE (junto do resto do
+                    // impacto) em vez de esperar o Hit inteiro (swing + hurt + comboDelay)
+                    // terminar e só então o case Disarm, bem mais tarde, começar a animação de
+                    // queda — a arma "demorava" pra cair depois do golpe que a derrubou. Busca
+                    // limitada até o próximo TurnStart/TurnEnd/CombatEnd (fronteira de turno) —
+                    // um Disarm fora desse turno nunca pertence a este hit.
+                    if (defender != null)
+                    {
+                        CombatEvent aheadDisarm = null;
+                        for (int j = _currentEventIndex + 1; j < _events.Count; j++)
+                        {
+                            var futureEvt = _events[j];
+                            if (futureEvt.type == CombatEventType.TurnStart || futureEvt.type == CombatEventType.TurnEnd || futureEvt.type == CombatEventType.CombatEnd)
+                                break;
+                            if (futureEvt.type == CombatEventType.Disarm && futureEvt.targetIndex == evt.targetIndex)
+                            {
+                                aheadDisarm = futureEvt;
+                                break;
+                            }
+                        }
+                        if (aheadDisarm != null && !_consumedDisarms.Contains(aheadDisarm))
+                        {
+                            _consumedDisarms.Add(aheadDisarm);
+                            StartCoroutine(PlayerCombat.DropWeapon(defender, isDisarm: true));
+                        }
+                    }
+
                     ApplyHealthDelta(evt.targetIndex, evt.newHp);
 
                     Vector3 popupPos = defender.transform.position + Vector3.up * 1.5f
@@ -1693,6 +1745,14 @@ public class CombatPlayer : MonoBehaviour
             }
 
             case CombatEventType.Disarm:
+                // Bug 1 (weapon drop): se o case Hit já disparou esta queda antecipadamente no
+                // instante do impacto (ver lookahead lá), só consome o evento aqui — sem isso a
+                // arma cairia (e o popup apareceria) uma segunda vez.
+                if (_consumedDisarms.Remove(evt))
+                {
+                    yield return null;
+                    break;
+                }
                 // PlayerCombat.DropWeapon já cobre popup + UnequipPermanent + a queda em
                 // pêndulo amortecido até o chão (ver Drop de Arma no CLAUDE.md) — antes este
                 // case só tirava a arma e mostrava o popup, sem nenhum visual de queda.
@@ -1838,7 +1898,14 @@ public class CombatPlayer : MonoBehaviour
                 // própria zona de spawn neste turno (correu até o adversário). Monk corre e
                 // ataca normalmente agora (não guarda mais — ver CombatSimulator.ApplySkillStats),
                 // então cai no mesmo caminho de qualquer outro personagem, sem guard especial.
-                if (attacker != null && !InSpawnZone(attacker.transform.position, attacker.isPlayer1))
+                //
+                // Bug 3 (morte por Counter/Reversal): CombatSimulator.SimulateTurn emite este
+                // TurnEnd incondicionalmente pro atacante, mesmo quando o Counter/Reversal do
+                // defensor (SimulateRetaliation, disparado dentro do próprio Hit deste turno) já
+                // matou o atacante antes deste ponto. Sem o guard `!attacker.IsDead`, o
+                // personagem já morto ainda pulava de volta pro spawn antes do CombatEnd tocar
+                // Dying — teleportando o cadáver pra longe de onde ele de fato morreu.
+                if (attacker != null && !attacker.IsDead && !InSpawnZone(attacker.transform.position, attacker.isPlayer1))
                 {
                     float jsDur = attacker.settings?.jumpStartDuration ?? 0.02f;
                     float jh    = attacker.settings?.jumpHeight ?? 2f;
@@ -1848,6 +1915,9 @@ public class CombatPlayer : MonoBehaviour
                     yield return StartCoroutine(attacker.movement.JumpTo(spawnPos, spd, jh));
                 }
                 attacker?.animationController.SetIdle(true);
+                // Bug 2 (sorting): desfaz a promoção de TurnStart — mirrors PlayerCombat.
+                // AttackRoutine's RestoreDefaultLayers() at the end of the legacy turn.
+                attacker?.RestoreDefaultLayers();
                 break;
 
             case CombatEventType.CombatEnd:
@@ -2859,11 +2929,16 @@ public class CombatPlayer : MonoBehaviour
                 ghost.transform.localScale = sr.transform.lossyScale;
                 ghostSr.sprite           = sr.sprite;
                 ghostSr.color            = ghostColor;
-                // Characters2 (atrás de Weapons/Characters na ordem de layers do projeto, ver
-                // CLAUDE.md) — trail sempre atrás do personagem/arma de verdade, em vez de
-                // depender de sortingOrder - 1 dentro da MESMA layer do corpo (arriscava
-                // overlaps imprevisíveis entre partes do rig que compartilham ordem).
-                ghostSr.sortingLayerName = "Characters2";
+                // Default (mais atrás que TODAS as layers de combate — Weapons2/Characters2/
+                // Weapons/Characters, ver CLAUDE.md) — trail sempre atrás do personagem/arma de
+                // verdade, em vez de depender de sortingOrder - 1 dentro da MESMA layer do corpo
+                // (arriscava overlaps imprevisíveis entre partes do rig que compartilham ordem).
+                // Era "Characters2", correto só por acaso enquanto SetAttackerLayers nunca rodava
+                // no path ativo (arma do atacante ficava sempre em "Weapons", que já é maior que
+                // Characters2) — ver Bug 2 no CLAUDE.md. Agora que o atacante pode estar em
+                // "Weapons2" (menor que Characters2), só "Default" garante ficar atrás em
+                // qualquer um dos dois casos.
+                ghostSr.sortingLayerName = "Default";
                 ghostSr.sortingOrder     = sr.sortingOrder;
                 ghostSr.flipX            = sr.flipX;
                 ghostSr.flipY            = sr.flipY;

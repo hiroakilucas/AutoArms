@@ -1300,7 +1300,12 @@ public class PlayerCombat : MonoBehaviour
         Vector2 to = ClampToArena((Vector2)transform.position + pushDirection * distance);
         float duration = settings.dodgeDuration;
         StartCoroutine(animationController.PlayJumpStart(duration));
-        yield return movement.JumpTo(to, distance / duration, 0.4f);
+        // minDuration=duration: no limite da arena, ClampToArena pode deixar `to` quase igual à
+        // posição atual — sem o piso de duração, JumpTo (distance/speed) colapsa pra ~0s e o
+        // pulinho nunca chega a tocar, só o "teleporte" instantâneo pro mesmo lugar. Com o piso,
+        // o arco (Sin) ainda joga por `duration` inteiro, só sem deslocamento horizontal — o
+        // personagem pula no próprio lugar em vez de ficar parado.
+        yield return movement.JumpTo(to, distance / duration, 0.4f, minDuration: duration);
         animationController.SetIdle(true);
     }
 
@@ -1381,19 +1386,36 @@ public class PlayerCombat : MonoBehaviour
     // No-op kept for call-site compatibility (logging removed project-wide).
     public void LogSkillCheck(string skillName, bool triggered, string detail = "") { }
 
-    private void SetAttackerLayers()
+    // Bug 2 (sorting) — ordem final pedida pelo usuário (fundo → frente):
+    //   Background < Arma do atacante < Corpo do atacante < Arma do defensor < Corpo do defensor
+    // Cada personagem: própria arma sempre atrás do próprio corpo. Cruzado: arma do atacante
+    // nunca sobrepõe nada do defensor (fica atrás até do corpo dele); arma do defensor fica
+    // na frente do atacante inteiro (corpo+arma), mas ainda atrás do próprio corpo.
+    // Mapeada nas 4 sorting layers do projeto por ordem de prioridade fixa (Default < Weapons2
+    // < Characters2 < Weapons < Characters, ver CLAUDE.md — Weapons2 é a mais atrás das 4,
+    // Characters a mais à frente):
+    //   Arma do atacante → Weapons2 (mais atrás)     Corpo do atacante → Characters2
+    //   Arma do defensor → Weapons                    Corpo do defensor → Characters (mais à frente)
+    // Note que "Characters"/"Characters2" agora identificam DEFENSOR/ATACANTE (não mais
+    // atacante/defensor como antes) — só importa qual layer cada um ocupa em cada turno, os
+    // outros sistemas que reusam essas 2 layers (ghost trail da Fierce Brute, pets) não dependem
+    // de qual papel (atacante/defensor) está em qual layer, só de onde as sprites de personagem/
+    // arma realmente estão a cada momento. Chamado por CombatPlayer.ExecuteEvent nos casos
+    // TurnStart/TurnEnd (path ativo do simulador) — antes só existia em AttackRoutine/legado,
+    // nunca executado de verdade enquanto CombatSceneLoader.useSimulator=true (default).
+    public void SetAttackerLayers()
     {
-        SetBodyLayer(bodyRenderers, "Characters");
-        SetWeaponLayer(weaponHandler, "Weapons");
+        SetBodyLayer(bodyRenderers, "Characters2");
+        SetWeaponLayer(weaponHandler, "Weapons2");
 
         if (defender != null)
         {
-            SetBodyLayer(defender.bodyRenderers, "Characters2");
-            SetWeaponLayer(defender.weaponHandler, "Weapons2");
+            SetBodyLayer(defender.bodyRenderers, "Characters");
+            SetWeaponLayer(defender.weaponHandler, "Weapons");
         }
     }
 
-    private void RestoreDefaultLayers()
+    public void RestoreDefaultLayers()
     {
         SetBodyLayer(bodyRenderers, defaultSortingLayer);
         if (defender != null)
