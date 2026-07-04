@@ -13,21 +13,21 @@ MonoBehaviour:
   m_Name: Axe T2
   m_EditorClassIdentifier: 
   weaponName: Axe T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 23
+  icon: {fileID: 21300000, guid: a5ef860d64a2e1d438e556b4f91734aa, type: 3}
+  inHandSprite: {fileID: 21300000, guid: a5ef860d64a2e1d438e556b4f91734aa, type: 3}
+  damage: 22
   speedModifier: 1
   types: 0400000001000000
-  scale: 1.5
+  scale: 1.2
   attackAnimation: 0
   tier: 2
   previousTier: {fileID: 11400000, guid: bb20000000000000000000000000000a, type: 2}
   dropOdds: 0
   hitSpeed: 0.8
   drawChance: 0.28
-  reach: 0
-  critChanceBonus: 0.18
-  critDamageMultiplier: 1.6
+  reach: 0.6
+  critChanceBonus: 0.25
+  critDamageMultiplier: 1.5
   evasionBonus: 0
   dexterityBonus: 0
   reversalBonus: 0

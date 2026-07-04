@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Broadsword T3
   m_EditorClassIdentifier: 
   weaponName: Broadsword T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: 2ad8556a0ea91ef44a9ba546110df565, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 2ad8556a0ea91ef44a9ba546110df565, type: 3}
   damage: 18
   speedModifier: 1
   types: 01000000

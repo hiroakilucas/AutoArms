@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Baton T2
   m_EditorClassIdentifier: 
   weaponName: Baton T2
-  icon: {fileID: 21300000, guid: 8602725b6d466774686f8be7ffa5f168, type: 3}
-  inHandSprite: {fileID: 21300000, guid: 8602725b6d466774686f8be7ffa5f168, type: 3}
+  icon: {fileID: 21300000, guid: 08a175f44a23909448251dfd85bef239, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 08a175f44a23909448251dfd85bef239, type: 3}
   damage: 8
   speedModifier: 1
   types: 03000000
@@ -25,14 +25,14 @@ MonoBehaviour:
   dropOdds: 0
   hitSpeed: 1.2
   drawChance: 0.28
-  reach: 3
-  critChanceBonus: 0.23
-  critDamageMultiplier: 1.6
-  evasionBonus: 0.08
+  reach: 2
+  critChanceBonus: 0.25
+  critDamageMultiplier: 1.5
+  evasionBonus: 0.1
   dexterityBonus: 0
-  reversalBonus: 0.23
-  blockBonus: 0.08
+  reversalBonus: 0.35
+  blockBonus: 0.3
   accuracyBonus: 0
-  disarmBonus: 0.28
-  comboBonus: 0.25
+  disarmBonus: 0.3
+  comboBonus: 0.15
   deflectBonus: 0
