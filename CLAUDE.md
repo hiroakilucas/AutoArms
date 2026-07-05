@@ -130,7 +130,7 @@ PlayerCombat.AttackRoutine()
 | `Main Camera` | Scene camera |
 | `Medieval Warrior Girl` | Player2 — pre-placed, has all combat components configured |
 | `TurnManager` | **Dead object** — has a missing (deleted) script, can be removed from the scene |
-| `Colosseum arena` | Background/visual |
+| `Colosseum arena` | Background/visual — sprite trocado aleatoriamente a cada combate, ver **Background Aleatório** abaixo |
 | `CombatInitializer` | Hosts `CombatSceneLoader` — spawns Player1 and wires both combatants at runtime |
 | `AttackSequencer` | Hosts `AttackSequencer` script — Player2 (Medieval Warrior Girl) pre-assigned, `interTurnDelay = 0.2`; Player1 starts as `None` and is filled at runtime by `CombatSceneLoader` |
 
@@ -142,6 +142,12 @@ PlayerCombat.AttackRoutine()
 5. `yield return null` — garante que `PlayerCombat.Start()` rodou em ambos (necessário para `spawnPosition`)
 6. Move ambos para `spawnY + 12f`, executa `EntryFall` em paralelo, aguarda via callbacks `bool`
 7. Assigns `attackSequencer.player1` e `attackSequencer.player1Profile` — **só após ambos pousarem**, desbloqueando o loop de combate
+
+### Background Aleatório (2026-07-05)
+
+`CombatSceneLoader.RandomizeArenaBackground()` roda no início de `Initialize()` (antes de qualquer outra coisa) — acha o GameObject `Colosseum arena` por nome (`GameObject.Find`, sem precisar de campo `[SerializeField]` wireado no Inspector), sorteia um nome entre os 51 arquivos de `Assets/Resources/BattleGround/` (movida de `Assets/BattleGround` — precisa estar dentro de uma pasta `Resources` pra `Resources.Load` funcionar) e troca o `SpriteRenderer.sprite`.
+
+Lista de nomes é **fixa no código** (`ArenaBackgroundNames`), não um `Resources.LoadAll` — a pasta inteira soma ~500MB (imagens 3840x2160), e `LoadAll` carregaria as 51 pra memória de uma vez só pra usar 1; `Resources.Load(nome)` carrega só a sorteada (~10MB). Adicionar um arquivo novo na pasta exige adicionar o nome na lista também (não é automático). Todos os 51 arquivos verificados com a mesma resolução (3840×2160) e mesmo `spritePixelsToUnits` (100) — trocar entre eles não muda o tamanho aparente em cena.
 
 ### Menu Character Preview
 

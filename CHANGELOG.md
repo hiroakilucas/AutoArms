@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-05: Background da arena aleatório a cada combate — `Assets/BattleGround` movida pra `Assets/Resources/BattleGround` (51 imagens), `CombatSceneLoader.RandomizeArenaBackground()` sorteia uma e troca o `SpriteRenderer` do `Colosseum arena` no início de `Initialize()`. Usa `Resources.Load` por nome (lista fixa no código) em vez de `LoadAll`, pra não carregar os ~500MB da pasta inteira de uma vez só
+
 - 2026-07-05: Atualizada a curva de XP (`XpSystem.XpRequired`) pra tabela nova pedida pelo usuário — 1→2 até 6→7 sobe +1 por nível (5,6,7,8,9,10), 7→8 em diante sobe +2 por nível sem teto (12,14,16,18,20,22...). Substituiu a fórmula antiga `(level+1)*(level+2)`
 
 - 2026-07-05: Corrigido o fix anterior do Reversal sem Hurt — usar `PlayJumpStart` pra tirar o defensor de Slashing tocava a animação de pulo de verdade, e a duração curta não dava tempo da transição real terminar antes do Hurt disparar, fazendo o hurt aparecer "no meio do pulo" em vez de imediatamente. Novo `AnimationController.ForceIdleState()` corta direto pro estado Idle via `Animator.Play(...)`, sem transição/blend nenhuma — elimina a animação de pulo visível por completo
