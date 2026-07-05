@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-05: Corrigido arremesso "invisível" a partir do 2º ciclo do mesmo turno (armas Thrown com hitSpeed alto, ex: Shuriken 10.0) — o simulador reatribuía `currentWeaponData` internamente antes de cada arremesso, mas nada reequipava a arma visualmente depois do 1º `Unequip`, então o `FlyingWeapon` nunca era criado. `CombatPlayer` agora reequipa (`EquipSpecific` + `SetAttackerLayers`) se a arma não estiver equipada no início do case `ThrowWeapon`, fazendo "surgir outra shuriken" na mão antes de cada arremesso seguinte
+
 - 2026-07-05: Background da arena aleatório a cada combate — `Assets/BattleGround` movida pra `Assets/Resources/BattleGround` (51 imagens), `CombatSceneLoader.RandomizeArenaBackground()` sorteia uma e troca o `SpriteRenderer` do `Colosseum arena` no início de `Initialize()`. Usa `Resources.Load` por nome (lista fixa no código) em vez de `LoadAll`, pra não carregar os ~500MB da pasta inteira de uma vez só
 
 - 2026-07-05: Atualizada a curva de XP (`XpSystem.XpRequired`) pra tabela nova pedida pelo usuário — 1→2 até 6→7 sobe +1 por nível (5,6,7,8,9,10), 7→8 em diante sobe +2 por nível sem teto (12,14,16,18,20,22...). Substituiu a fórmula antiga `(level+1)*(level+2)`

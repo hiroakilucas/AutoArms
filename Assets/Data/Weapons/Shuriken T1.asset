@@ -13,12 +13,18 @@ MonoBehaviour:
   m_Name: Shuriken T1
   m_EditorClassIdentifier: 
   weaponName: Shuriken T1
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: f3e1f4a56fb61d542b83fa0595f1d36f, type: 3}
+  inHandSprite: {fileID: 21300000, guid: f3e1f4a56fb61d542b83fa0595f1d36f, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 3
   speedModifier: 1
   types: 06000000
-  scale: 1
+  scale: 0.5
+  isBoomerang: 0
   attackAnimation: 0
   tier: 1
   previousTier: {fileID: 0}

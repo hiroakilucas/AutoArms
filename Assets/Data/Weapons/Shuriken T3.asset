@@ -13,12 +13,18 @@ MonoBehaviour:
   m_Name: Shuriken T3
   m_EditorClassIdentifier: 
   weaponName: Shuriken T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 5
+  icon: {fileID: 21300000, guid: 87272896884630e489bdba06eda629f4, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 87272896884630e489bdba06eda629f4, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  damage: 7
   speedModifier: 1
   types: 06000000
   scale: 1
+  isBoomerang: 0
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: 644c5406336576d46827c109cedcda79, type: 2}
@@ -27,13 +33,13 @@ MonoBehaviour:
   drawChance: 0.47
   reach: 0
   critChanceBonus: 0
-  critDamageMultiplier: 1.7
-  evasionBonus: 0.21000001
+  critDamageMultiplier: 1.5
+  evasionBonus: 0.25
   dexterityBonus: 0
   reversalBonus: 0
   blockBonus: -0.1
   accuracyBonus: 0
   disarmBonus: -0.5
-  comboBonus: 0.4
+  comboBonus: 0.5
   deflectBonus: 0
   counterBonus: 0

@@ -93,11 +93,13 @@ SpriteAtlas:
     - dbf5d07534a74744cb6b9df81fd7649f: 21300000
     - 6b21f09530568d34da4a24e3c4b7750a: 21300000
     - 785a17957e58de348bf841f2516b986c: 21300000
+    - f3e1f4a56fb61d542b83fa0595f1d36f: 21300000
     - a30b30e5817c42080988ee40e7419247: 21300000
     - 118e5c0682e2ebd4fb98709b496095ca: 21300000
     - f418a326c3cc3024bb131dc7d7e4e5bc: 21300000
     - 14d7747688a86fa40b4b19d42f47ca41: 21300000
     - 766b2496787e37547823af8b6ff78ac9: 21300000
+    - 87272896884630e489bdba06eda629f4: 21300000
     - 0003dc96f264fad4dbde307d2e633606: 21300000
     - 1536c1f6754ba444a896651c47e98273: 21300000
     - a1b4b8f6991f79f479eb7ca4af38b8a5: 21300000
@@ -108,6 +110,7 @@ SpriteAtlas:
     - 858ff3d788c31ca468b5507706e34c98: 21300000
     - 2417f9e767b198a428c62e9a2b44fc6d: 21300000
     - fc67fce79d560a848a5e543535226596: 21300000
+    - ac69d6281598ca847a08bbcbaaaf5a12: 21300000
     - b9442548747424e448e13a1da15d1c74: 21300000
     - fcffcb484e39fb240b9add5204d23b52: 21300000
     - 8a792e6898d94874ea406ba3ffa19882: 21300000
@@ -207,11 +210,13 @@ SpriteAtlas:
   - {fileID: 21300000, guid: dbf5d07534a74744cb6b9df81fd7649f, type: 3}
   - {fileID: 21300000, guid: 6b21f09530568d34da4a24e3c4b7750a, type: 3}
   - {fileID: 21300000, guid: 785a17957e58de348bf841f2516b986c, type: 3}
+  - {fileID: 21300000, guid: f3e1f4a56fb61d542b83fa0595f1d36f, type: 3}
   - {fileID: 21300000, guid: a30b30e5817c42080988ee40e7419247, type: 3}
   - {fileID: 21300000, guid: 118e5c0682e2ebd4fb98709b496095ca, type: 3}
   - {fileID: 21300000, guid: f418a326c3cc3024bb131dc7d7e4e5bc, type: 3}
   - {fileID: 21300000, guid: 14d7747688a86fa40b4b19d42f47ca41, type: 3}
   - {fileID: 21300000, guid: 766b2496787e37547823af8b6ff78ac9, type: 3}
+  - {fileID: 21300000, guid: 87272896884630e489bdba06eda629f4, type: 3}
   - {fileID: 21300000, guid: 0003dc96f264fad4dbde307d2e633606, type: 3}
   - {fileID: 21300000, guid: 1536c1f6754ba444a896651c47e98273, type: 3}
   - {fileID: 21300000, guid: a1b4b8f6991f79f479eb7ca4af38b8a5, type: 3}
@@ -222,6 +227,7 @@ SpriteAtlas:
   - {fileID: 21300000, guid: 858ff3d788c31ca468b5507706e34c98, type: 3}
   - {fileID: 21300000, guid: 2417f9e767b198a428c62e9a2b44fc6d, type: 3}
   - {fileID: 21300000, guid: fc67fce79d560a848a5e543535226596, type: 3}
+  - {fileID: 21300000, guid: ac69d6281598ca847a08bbcbaaaf5a12, type: 3}
   - {fileID: 21300000, guid: b9442548747424e448e13a1da15d1c74, type: 3}
   - {fileID: 21300000, guid: fcffcb484e39fb240b9add5204d23b52, type: 3}
   - {fileID: 21300000, guid: 8a792e6898d94874ea406ba3ffa19882, type: 3}
@@ -320,11 +326,13 @@ SpriteAtlas:
   - Book2
   - Scimitar1
   - Branch1
+  - Shuriken1
   - WhipAttack3
   - Left Hand
   - Right Leg
   - Boomerang3
   - Weapon
+  - Shuriken3
   - Anchor3
   - Boomerang2
   - Left Leg
@@ -335,6 +343,7 @@ SpriteAtlas:
   - FryingPan3
   - Right Hand
   - FryingPan2
+  - Shuriken2
   - Hammer3
   - Sword1
   - Racquet3

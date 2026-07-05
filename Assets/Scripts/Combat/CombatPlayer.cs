@@ -1999,6 +1999,28 @@ public class CombatPlayer : MonoBehaviour
                     // destrói a aura aqui também, senão ficaria órfã (no-op se não existir).
                     attacker.HideFierceBruteAura();
 
+                    // Múltiplos arremessos no mesmo turno (hitSpeed > 100%, ex: Shuriken 10.0):
+                    // o simulador reatribui attacker.currentWeaponData antes de cada
+                    // SimulateThrow (ver CombatSimulator.SimulateTurn item 3), mas isso é só um
+                    // dado do simulador — nada reequipa a arma VISUALMENTE depois que o 1º
+                    // arremesso já a desequipou (Unequip, logo abaixo). Sem isso, o 2º arremesso
+                    // em diante achava CurrentWeaponData == null e não criava nenhum
+                    // FlyingWeapon — arma "invisível" (bug real reportado pelo usuário testando
+                    // Shuriken). Fix: reequipa aqui se necessário, fazendo "surgir outra
+                    // shuriken" na mão antes do próximo arremesso (pedido explícito do usuário).
+                    // Mesmo bug de sorting layer já visto em PickupWeapon/BoomerangReturnFlight —
+                    // EquipSpecific sempre cria a arma na layer padrão do WeaponHandler (papel do
+                    // DEFENSOR), por isso o SetAttackerLayers() de novo logo depois.
+                    if (attacker.weaponHandler.CurrentWeaponData == null)
+                    {
+                        var weaponToRethrow = FindWeaponByName(attacker.weaponHandler.loadout, evt.weaponName);
+                        if (weaponToRethrow != null)
+                        {
+                            attacker.weaponHandler.EquipSpecific(weaponToRethrow);
+                            attacker.SetAttackerLayers();
+                        }
+                    }
+
                     // Capture sprite/position/scale before Unequip destroys the in-hand weapon object.
                     var weaponData   = attacker.weaponHandler.CurrentWeaponData;
                     _lastThrownWeaponData = weaponData; // lido pelo case Repulse que segue imediatamente
