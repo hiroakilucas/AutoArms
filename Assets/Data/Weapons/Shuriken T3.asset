@@ -25,6 +25,7 @@ MonoBehaviour:
   types: 06000000
   scale: 1
   isBoomerang: 0
+  straightThrow: 1
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: 644c5406336576d46827c109cedcda79, type: 2}

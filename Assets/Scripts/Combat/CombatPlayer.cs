@@ -100,10 +100,10 @@ public class CombatPlayer : MonoBehaviour
     // Repulse: arma lançada que será deflectida — capturada no case ThrowWeapon e lida no case Repulse.
     private WeaponData _lastThrownWeaponData;
 
-    // Bumerangue: alvo do arremesso mirava direto no pivô do personagem (pés) — sobe um pouco
-    // pra acertar mais perto do centro do corpo, pedido pelo usuário. Só o bumerangue, não afeta
-    // as outras armas Thrown (Shuriken etc.), que continuam mirando o pivô normalmente.
-    private const float BoomerangHitHeight = 0.9f;
+    // Qualquer arremesso mirava direto no pivô do personagem (pés) — sobe um pouco pra acertar
+    // mais perto do centro do corpo. Era só pro bumerangue, generalizado depois que o usuário
+    // reportou o mesmo problema ("pegando no pé") testando a Shuriken.
+    private const float ThrownHitHeight = 0.9f;
 
     // Bumerangue: em vez de parar no ponto de impacto e só voltar quando o case BoomerangReturn
     // for processado (o que deixava a arma parada, imóvel, durante todo o Hit/knockback do meio
@@ -2025,10 +2025,12 @@ public class CombatPlayer : MonoBehaviour
                         // com o comboDelay padrão do melee) emendava direto no próximo
                         // "Throwing" sem nenhum respiro extra, parecendo uma rajada confusa em
                         // vez de etapas distintas (lança → reação → lança → reação...). Pedido
-                        // explícito do usuário depois de testar a Shuriken (hitSpeed 10.0). Não
-                        // afeta o 1º arremesso do turno (arma já equipada, cai fora deste if)
-                        // nem armas com só 1 arremesso por turno (nunca reequipam aqui).
-                        yield return new WaitForSeconds((attacker.settings?.comboDelay ?? 0.15f) * t);
+                        // explícito do usuário depois de testar a Shuriken (hitSpeed 10.0);
+                        // aumentada de 1x pra 3x comboDelay depois do usuário pedir "mais um
+                        // pouco" de pausa. Não afeta o 1º arremesso do turno (arma já equipada,
+                        // cai fora deste if) nem armas com só 1 arremesso por turno (nunca
+                        // reequipam aqui).
+                        yield return new WaitForSeconds((attacker.settings?.comboDelay ?? 0.15f) * 3f * t);
                     }
 
                     // Capture sprite/position/scale before Unequip destroys the in-hand weapon object.
@@ -2072,10 +2074,14 @@ public class CombatPlayer : MonoBehaviour
                                 ? defender.transform.position
                                 : attacker.transform.position + (attacker.isPlayer1 ? Vector3.right : Vector3.left) * 5f;
 
-                        // Bumerangue: sobe o alvo pra acertar mais perto do centro do corpo em
-                        // vez do pivô (pés) do defensor — não afeta pet nem as outras Thrown.
-                        if (weaponData.isBoomerang && throwTargetPet == null && defender != null)
-                            targetPos += Vector3.up * BoomerangHitHeight;
+                        // Sobe o alvo pra acertar mais perto do centro do corpo em vez do pivô
+                        // (pés) do defensor — generalizado pra qualquer arma arremessada (era só
+                        // pro bumerangue; Shuriken tinha o mesmo problema, "pegando no pé",
+                        // reportado pelo usuário — o pivô do personagem é sempre nos pés,
+                        // qualquer arremesso mirando em transform.position direto sofre disso).
+                        // Não afeta pet (usa a posição do pet, sem pivô-nos-pés do personagem).
+                        if (throwTargetPet == null && defender != null)
+                            targetPos += Vector3.up * ThrownHitHeight;
 
                         Vector3 flightDir   = (targetPos - launchPos).normalized;
                         float   flightAngle = Mathf.Atan2(flightDir.y, flightDir.x) * Mathf.Rad2Deg;
@@ -2091,7 +2097,9 @@ public class CombatPlayer : MonoBehaviour
                         sr.sortingOrder     = 10;
 
                         bool  rotate = WeaponData.HasType(weaponData, WeaponType.Thrown);
-                        float arc    = rotate ? 0.5f : 0f;
+                        // straightThrow força voo reto (sem arco/pêndulo) mesmo em arma Thrown —
+                        // pedido do usuário pra Shuriken, que voa reta/girando na vida real.
+                        float arc    = (rotate && !weaponData.straightThrow) ? 0.5f : 0f;
                         yield return StartCoroutine(attacker.FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f * t, rotate, arc));
 
                         // Bumerangue: dispara o voo de volta JÁ AQUI, em paralelo (fire-and-forget),

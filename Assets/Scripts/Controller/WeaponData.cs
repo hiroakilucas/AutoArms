@@ -42,6 +42,12 @@ public class WeaponData : ScriptableObject
     // CombatPlayer (case BoomerangReturn).
     public bool isBoomerang = false;
 
+    // Força o voo do arremesso a ser em linha reta, sem o arco/pêndulo padrão de armas Thrown
+    // (CombatPlayer.FlyWeapon, parâmetro arc) — pedido do usuário pra Shuriken, que na vida real
+    // voa reto/girando, não em lob. false (default) = comportamento de sempre (arco pra qualquer
+    // arma com a tag Thrown).
+    public bool straightThrow = false;
+
     [Header("Animação de Ataque")]
     public AttackAnimation attackAnimation = AttackAnimation.Auto;
 
