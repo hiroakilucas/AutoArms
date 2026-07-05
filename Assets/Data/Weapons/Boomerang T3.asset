@@ -13,11 +13,12 @@ MonoBehaviour:
   m_Name: Boomerang T3
   m_EditorClassIdentifier: 
   weaponName: Boomerang T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 9
+  icon: {fileID: 21300000, guid: 14d7747688a86fa40b4b19d42f47ca41, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 14d7747688a86fa40b4b19d42f47ca41, type: 3}
+  damage: 11
   speedModifier: 1
   types: 06000000
+  isBoomerang: 1
   scale: 1
   attackAnimation: 0
   tier: 3
@@ -28,11 +29,12 @@ MonoBehaviour:
   reach: 0
   critChanceBonus: 0
   critDamageMultiplier: 1.7
-  evasionBonus: 0.56
+  evasionBonus: 0.6
   dexterityBonus: 0
   reversalBonus: 0
   blockBonus: -0.1
   accuracyBonus: 0
-  disarmBonus: 0.56
+  disarmBonus: 0.6
   comboBonus: 0
   deflectBonus: 0
+  counterBonus: 0

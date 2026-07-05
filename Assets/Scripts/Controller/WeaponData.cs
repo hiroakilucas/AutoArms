@@ -6,7 +6,25 @@ public class WeaponData : ScriptableObject
 {
     public string weaponName;
     public Sprite icon;           // para uso em UI mais tarde
-    public Sprite inHandSprite;   // sprite que ficará na mão
+    public Sprite inHandSprite;   // sprite que ficará na mão (pose parada/idle)
+    // 2º frame opcional (ex: Whip aberto/estalando) — se preenchido, WeaponHandler.SetAttackPose
+    // troca pra este sprite durante o swing de ataque e volta pro inHandSprite ao terminar.
+    // Deixado null em qualquer arma com sprite único (comportamento de sempre, sem mudança).
+    public Sprite attackSprite;
+    // Multiplicador aplicado em cima de `scale` só enquanto attackSprite está visível (ex: Whip
+    // esticando na largura ao estalar). (1,1,1) = sem mudança nenhuma (default, não afeta
+    // nenhuma arma que não configure isso).
+    public Vector3 attackScaleMultiplier = Vector3.one;
+    // Graus somados ao rotationOffset do WeaponHandler (por personagem) só enquanto attackSprite
+    // está visível — ex: Whip apontando um pouco pra baixo, na direção do pé do defensor.
+    // (0,0,0) = sem mudança (default).
+    public Vector3 attackRotationOffset = Vector3.zero;
+    // Efeito visual (faísca/burst) na ponta da arma, só durante o attackSprite — desligado por
+    // padrão (false = nenhuma arma nova ganha isso sem configurar). attackTipOffset é a posição
+    // da ponta no espaço LOCAL da arma (antes de escala/rotação), usado por
+    // WeaponHandler.GetAttackTipWorldPosition().
+    public bool showAttackTipEffect = false;
+    public Vector3 attackTipOffset = Vector3.zero;
     public int damage;
     public float speedModifier;
 
@@ -17,6 +35,12 @@ public class WeaponData : ScriptableObject
     public List<WeaponType> types = new List<WeaponType>();
     [Min(0.01f)]
     public float scale = 1f;      // tamanho arma
+
+    // Bumerangue: em vez de ficar desarmado depois do arremesso (padrão de qualquer arma
+    // Thrown), a arma voa até o defensor e volta pra mão do atacante, permanecendo equipada
+    // até ele trocar de arma ou ser desarmado/soltar. Ver CombatSimulator.SimulateThrow e
+    // CombatPlayer (case BoomerangReturn).
+    public bool isBoomerang = false;
 
     [Header("Animação de Ataque")]
     public AttackAnimation attackAnimation = AttackAnimation.Auto;
@@ -40,6 +64,11 @@ public class WeaponData : ScriptableObject
     public float disarmBonus = 0f;
     public float comboBonus = 0f;
     public float deflectBonus = 0f;
+    // Contra-ataque: defensor bate ANTES do golpe do atacante conectar, cancelando o hit (e o
+    // resto do combo) — mesmo mecanismo de PlayerState.counter (skills Monk/Sixth Sense), só que
+    // como bônus por arma. Ainda sem efeito em nenhuma fórmula (CounterChance), reservado pra uso
+    // futuro — pedido do usuário: adicionar o campo em todas as armas, todas em 0 por enquanto.
+    public float counterBonus = 0f;
 
     // Checa se esta arma carrega a tag `flag` — uma arma pode ter até 3 tags simultâneas na
     // lista `types` (ex: Halberd = Long+Heavy+Sharp).
@@ -108,4 +137,5 @@ public static class UnarmedStats
     public const float DisarmBonus = 0.05f;
     public const float ComboBonus = 0f;
     public const float DeflectBonus = 0f;
+    public const float CounterBonus = 0f;
 }

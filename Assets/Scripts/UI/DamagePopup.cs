@@ -125,6 +125,12 @@ public class DamagePopup : MonoBehaviour
     public static void SpawnRapido(Vector3 worldPos) =>
         Rent(worldPos).Begin("RAPIDO!", 4f, new Color(1f, 1f, 0f));
 
+    // hitSpeed < 100% da arma equipada — débito de CombatSimulator.ResolveHitSpeedUnits ainda não
+    // fechou 1.0, então o personagem não age neste turno. Cinza-azulado pra não ser confundido
+    // com MISS (cinza puro) nem com nenhum popup de dano.
+    public static void SpawnSlow(Vector3 worldPos) =>
+        Rent(worldPos).Begin("LENTO!", 4f, new Color(0.55f, 0.6f, 0.75f));
+
     // Fierce Brute: mesmo popup de dano normal, mas com uma linha "×2!" abaixo do número e cor
     // laranja intensa em vez do amarelo padrão — pedido explícito do usuário pra diferenciar
     // visualmente o hit que consumiu o buff.

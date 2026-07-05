@@ -53,8 +53,10 @@ SpriteAtlas:
     isAtlasV2: 0
     cachedData: {fileID: 0}
     packedSpriteRenderDataKeys:
+    - 61667520ce848aca5cf1139928ef058b: 21300000
     - 3a4feda09e2856344a8d977ee49026c5: 21300000
     - 2951d1c0db889d54bb941fb8036e7926: 21300000
+    - d267e6d0360906a36d9656bbe8dadac2: 21300000
     - 3713a8d0a41f2514c94d91aadc300d96: 21300000
     - 809fb0f05e5cf834ca2b4a2875aae964: 21300000
     - f29271c1cbdc1a741ae301ca444c6263: 21300000
@@ -66,15 +68,23 @@ SpriteAtlas:
     - 2dc8b253e938f304ea16032e5d6f4bd6: 21300000
     - dcaec163575d36e4eb3d7f6d1e036419: 21300000
     - eee34f6311aac0d418fe7730dd093eed: 21300000
+    - 256822f3bb7e94846a56c30b3aed0ca9: 21300000
     - 9ff35234563a47d41b6dcaf24800f10a: 21300000
     - b37487548041cb545a4f4621b3c14381: 21300000
+    - 3cf4b854c2073f44e86b20f8981257f8: 21300000
     - 08a175f44a23909448251dfd85bef239: 21300000
+    - 319a7835a1fa5094e5b916d9df1b621b: 21300000
     - f179ef351bdb1da4dbd6f4b50b9a513b: 21300000
     - be7658450b063b142b6b55a215c6cd3b: 21300000
+    - 4c53836550868bc418f03f6a424a1607: 21300000
+    - dbf5d07534a74744cb6b9df81fd7649f: 21300000
+    - a30b30e5817c42080988ee40e7419247: 21300000
     - 118e5c0682e2ebd4fb98709b496095ca: 21300000
     - f418a326c3cc3024bb131dc7d7e4e5bc: 21300000
+    - 14d7747688a86fa40b4b19d42f47ca41: 21300000
     - 766b2496787e37547823af8b6ff78ac9: 21300000
     - 0003dc96f264fad4dbde307d2e633606: 21300000
+    - 1536c1f6754ba444a896651c47e98273: 21300000
     - a1b4b8f6991f79f479eb7ca4af38b8a5: 21300000
     - b713563763dd96449b78438783d23541: 21300000
     - 2417f9e767b198a428c62e9a2b44fc6d: 21300000
@@ -90,9 +100,11 @@ SpriteAtlas:
     - 9c8f138ac814d4544a34365252154e16: 21300000
     - 298b71ca76173b3448fc912e6e1b0290: 21300000
     - d3fd01da838dc9e408216a67439db8ed: 21300000
+    - 939ea10b6685f572cdf559d609adb08f: 21300000
     - 0fcb705b334ceb944a7d79193d1cd0a6: 21300000
     - 3a92ed8b640ef984e8635e0ad8d1f614: 21300000
     - 16c2170c27c055e46a3a384cc322ea7e: 21300000
+    - e90d17dc1f482e0a9141ffbe7de70da4: 21300000
     - a5ef860d64a2e1d438e556b4f91734aa: 21300000
     - b768008deb3e9df438a03843304a9205: 21300000
     - 7947738dd4ae2e34d8c4ac6b1f840941: 21300000
@@ -107,8 +119,10 @@ SpriteAtlas:
     - d2beddffc1cb2ad439eb53976f7fd796: 21300000
   m_MasterAtlas: {fileID: 0}
   m_PackedSprites:
+  - {fileID: 21300000, guid: 61667520ce848aca5cf1139928ef058b, type: 3}
   - {fileID: 21300000, guid: 3a4feda09e2856344a8d977ee49026c5, type: 3}
   - {fileID: 21300000, guid: 2951d1c0db889d54bb941fb8036e7926, type: 3}
+  - {fileID: 21300000, guid: d267e6d0360906a36d9656bbe8dadac2, type: 3}
   - {fileID: 21300000, guid: 3713a8d0a41f2514c94d91aadc300d96, type: 3}
   - {fileID: 21300000, guid: 809fb0f05e5cf834ca2b4a2875aae964, type: 3}
   - {fileID: 21300000, guid: f29271c1cbdc1a741ae301ca444c6263, type: 3}
@@ -120,15 +134,23 @@ SpriteAtlas:
   - {fileID: 21300000, guid: 2dc8b253e938f304ea16032e5d6f4bd6, type: 3}
   - {fileID: 21300000, guid: dcaec163575d36e4eb3d7f6d1e036419, type: 3}
   - {fileID: 21300000, guid: eee34f6311aac0d418fe7730dd093eed, type: 3}
+  - {fileID: 21300000, guid: 256822f3bb7e94846a56c30b3aed0ca9, type: 3}
   - {fileID: 21300000, guid: 9ff35234563a47d41b6dcaf24800f10a, type: 3}
   - {fileID: 21300000, guid: b37487548041cb545a4f4621b3c14381, type: 3}
+  - {fileID: 21300000, guid: 3cf4b854c2073f44e86b20f8981257f8, type: 3}
   - {fileID: 21300000, guid: 08a175f44a23909448251dfd85bef239, type: 3}
+  - {fileID: 21300000, guid: 319a7835a1fa5094e5b916d9df1b621b, type: 3}
   - {fileID: 21300000, guid: f179ef351bdb1da4dbd6f4b50b9a513b, type: 3}
   - {fileID: 21300000, guid: be7658450b063b142b6b55a215c6cd3b, type: 3}
+  - {fileID: 21300000, guid: 4c53836550868bc418f03f6a424a1607, type: 3}
+  - {fileID: 21300000, guid: dbf5d07534a74744cb6b9df81fd7649f, type: 3}
+  - {fileID: 21300000, guid: a30b30e5817c42080988ee40e7419247, type: 3}
   - {fileID: 21300000, guid: 118e5c0682e2ebd4fb98709b496095ca, type: 3}
   - {fileID: 21300000, guid: f418a326c3cc3024bb131dc7d7e4e5bc, type: 3}
+  - {fileID: 21300000, guid: 14d7747688a86fa40b4b19d42f47ca41, type: 3}
   - {fileID: 21300000, guid: 766b2496787e37547823af8b6ff78ac9, type: 3}
   - {fileID: 21300000, guid: 0003dc96f264fad4dbde307d2e633606, type: 3}
+  - {fileID: 21300000, guid: 1536c1f6754ba444a896651c47e98273, type: 3}
   - {fileID: 21300000, guid: a1b4b8f6991f79f479eb7ca4af38b8a5, type: 3}
   - {fileID: 21300000, guid: b713563763dd96449b78438783d23541, type: 3}
   - {fileID: 21300000, guid: 2417f9e767b198a428c62e9a2b44fc6d, type: 3}
@@ -144,9 +166,11 @@ SpriteAtlas:
   - {fileID: 21300000, guid: 9c8f138ac814d4544a34365252154e16, type: 3}
   - {fileID: 21300000, guid: 298b71ca76173b3448fc912e6e1b0290, type: 3}
   - {fileID: 21300000, guid: d3fd01da838dc9e408216a67439db8ed, type: 3}
+  - {fileID: 21300000, guid: 939ea10b6685f572cdf559d609adb08f, type: 3}
   - {fileID: 21300000, guid: 0fcb705b334ceb944a7d79193d1cd0a6, type: 3}
   - {fileID: 21300000, guid: 3a92ed8b640ef984e8635e0ad8d1f614, type: 3}
   - {fileID: 21300000, guid: 16c2170c27c055e46a3a384cc322ea7e, type: 3}
+  - {fileID: 21300000, guid: e90d17dc1f482e0a9141ffbe7de70da4, type: 3}
   - {fileID: 21300000, guid: a5ef860d64a2e1d438e556b4f91734aa, type: 3}
   - {fileID: 21300000, guid: b768008deb3e9df438a03843304a9205, type: 3}
   - {fileID: 21300000, guid: 7947738dd4ae2e34d8c4ac6b1f840941, type: 3}
@@ -160,8 +184,10 @@ SpriteAtlas:
   - {fileID: 21300000, guid: f023ff7f6ac0c59418c5903a8ea83065, type: 3}
   - {fileID: 21300000, guid: d2beddffc1cb2ad439eb53976f7fd796, type: 3}
   m_PackedSpriteNamesToIndex:
+  - WhipAttack2
   - Axe1
   - Body
+  - Whip2
   - Right Arm
   - Baton3
   - Anchor2
@@ -173,15 +199,23 @@ SpriteAtlas:
   - Face 02
   - Left Hand
   - Right Leg
+  - Book3
   - Face 03
   - Face 03
+  - Book1
   - Baton2
+  - Whip1
   - Left Arm
   - Bone2
+  - Boomerang1
+  - Book2
+  - WhipAttack3
   - Left Hand
   - Right Leg
+  - Boomerang3
   - Weapon
   - Anchor3
+  - Boomerang2
   - Left Leg
   - Right Hand
   - Right Hand
@@ -197,9 +231,11 @@ SpriteAtlas:
   - Left Arm
   - Sword
   - SlashFX
+  - Whip3
   - Bone1
   - Face 03
   - Face 02
+  - WhipAttack1
   - Axe2
   - Axe3
   - Face 02

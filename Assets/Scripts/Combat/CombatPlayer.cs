@@ -100,6 +100,22 @@ public class CombatPlayer : MonoBehaviour
     // Repulse: arma lançada que será deflectida — capturada no case ThrowWeapon e lida no case Repulse.
     private WeaponData _lastThrownWeaponData;
 
+    // Bumerangue: alvo do arremesso mirava direto no pivô do personagem (pés) — sobe um pouco
+    // pra acertar mais perto do centro do corpo, pedido pelo usuário. Só o bumerangue, não afeta
+    // as outras armas Thrown (Shuriken etc.), que continuam mirando o pivô normalmente.
+    private const float BoomerangHitHeight = 0.9f;
+
+    // Bumerangue: em vez de parar no ponto de impacto e só voltar quando o case BoomerangReturn
+    // for processado (o que deixava a arma parada, imóvel, durante todo o Hit/knockback do meio
+    // — sentido como uma "travada" pelo usuário), o próprio case ThrowWeapon já dispara o voo de
+    // volta em paralelo (fire-and-forget) assim que a ida chega ao alvo — a arma nunca para de
+    // se mover, igual a um bumerangue de verdade. _boomerangReturnRoutine guarda a referência
+    // pro case BoomerangReturn (que roda depois do Hit/Dodge/Block na lista de eventos) esperar
+    // essa mesma coroutine terminar em vez de iniciar um voo novo.
+    private GameObject _boomerangFlyingObject;
+    private Vector3    _boomerangLandPosition;
+    private Coroutine  _boomerangReturnRoutine;
+
     private List<CombatEvent> _events;
     private float             _playbackSpeed = 1f;
     private bool              _is2x = false;
@@ -246,6 +262,33 @@ public class CombatPlayer : MonoBehaviour
         if (!next.targetIsPet) return null;
         if (next.type != CombatEventType.Hit && next.type != CombatEventType.Miss) return null;
         return GetPet(next.targetIndex, next.targetPetIndex);
+    }
+
+    // Bumerangue: disparada fire-and-forget pelo case ThrowWeapon assim que a ida chega no
+    // alvo — roda em paralelo com o Hit/Dodge/Block que vem a seguir na lista de eventos, então
+    // a arma nunca fica parada esperando (era isso que causava a "travada" sentida pelo usuário:
+    // o objeto ficava imóvel no ponto de impacto durante todo o Hit antes do case BoomerangReturn
+    // sequer começar a voar de volta). O case BoomerangReturn só espera esta coroutine terminar.
+    private IEnumerator BoomerangReturnFlight(PlayerCombat thrower, GameObject flyingObj, Vector3 fromPos, WeaponData boomerangData, float t)
+    {
+        Vector3 returnTo = thrower.weaponHandler.handBone != null
+            ? thrower.weaponHandler.handBone.position
+            : thrower.transform.position + Vector3.up * 0.5f;
+        Vector3 returnDir = (returnTo - fromPos).normalized;
+        flyingObj.transform.rotation = Quaternion.Euler(0, 0, Mathf.Atan2(returnDir.y, returnDir.x) * Mathf.Rad2Deg);
+
+        // Arco negativo (por baixo) na volta, oposto ao arco positivo (por cima) da ida.
+        yield return StartCoroutine(thrower.FlyWeapon(flyingObj.transform, fromPos, returnTo, 0.45f * t, true, -0.5f));
+
+        Destroy(flyingObj);
+        if (_boomerangFlyingObject == flyingObj) _boomerangFlyingObject = null;
+        thrower.weaponHandler.EquipSpecific(boomerangData);
+
+        // Mesmo bug do PickupWeapon (ver case correspondente): EquipSpecific sempre cria o
+        // sprite na layer padrão do WeaponHandler ("Weapons", papel do DEFENSOR), nunca
+        // "Weapons2" — reaplicar SetAttackerLayers (idempotente) corrige pro papel de atacante
+        // de quem arremessou (thrower é sempre quem está atacando neste turno).
+        thrower.SetAttackerLayers();
     }
 
     private Vector2 RollPetSpawnPosition(PetCombatController pet)
@@ -517,10 +560,25 @@ public class CombatPlayer : MonoBehaviour
                 }
                 if (attacker != null && defender != null)
                 {
-                    Vector2 attackPos = CalcAttackPosition(attacker, defender);
+                    // Se o próximo evento for um Counter, o defensor bate primeiro — o atacante
+                    // precisa parar dentro do alcance da arma DO DEFENSOR (é ela que vai conectar),
+                    // não da própria. Ver comentário completo em CalcAttackPosition.
+                    var nextEvt = (_currentEventIndex + 1 < _events.Count) ? _events[_currentEventIndex + 1] : null;
+                    PlayerCombat reachOwner = (nextEvt != null && nextEvt.type == CombatEventType.Counter) ? defender : attacker;
+
+                    Vector2 attackPos = CalcAttackPosition(attacker, defender, reachOwner);
                     yield return StartCoroutine(
                         attacker.animationController.PlayRun(attackPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
                 }
+                break;
+
+            case CombatEventType.HitSpeedSkip:
+                // Arma lenta demais (WeaponData.hitSpeed < 100%) — débito ainda não fechou 1.0
+                // neste turno (ver CombatSimulator.ResolveHitSpeedUnits). Sem Run/Throw/Hit
+                // nenhum, só o popup acima do próprio atacante indicando o motivo.
+                if (attacker != null)
+                    DamagePopup.SpawnSlow(attacker.transform.position + Vector3.up * 2f);
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
             case CombatEventType.WeaponSwap:
@@ -544,6 +602,19 @@ public class CombatPlayer : MonoBehaviour
                     var weaponToEquip = FindWeaponByName(attacker.weaponHandler.loadout, evt.weaponName);
                     if (weaponToEquip != null) attacker.weaponHandler.EquipSpecific(weaponToEquip);
                     else attacker.weaponHandler.EquipRandom();
+
+                    // Bug: EquipSpecific/EquipRandom sempre criam o sprite da arma na layer
+                    // padrão do WeaponHandler ("Weapons", nunca "Weapons2") — SetAttackerLayers()
+                    // já tinha rodado no TurnStart deste turno, mas nesse momento o personagem
+                    // ainda estava desarmado (sem GameObject de arma pra reatribuir), então a
+                    // arma recém-criada ficava presa na layer errada até o PRÓXIMO TurnStart
+                    // (bug real reportado pelo usuário: arma aparecia atrás do defensor só no
+                    // turno em que foi sacada, corrigia sozinha a partir do turno seguinte).
+                    // PickupWeapon só acontece pro atacante da vez, então reaplicar
+                    // SetAttackerLayers aqui (idempotente) resolve, sem precisar saber o nome
+                    // exato da layer aqui.
+                    attacker.SetAttackerLayers();
+
                     yield return StartCoroutine(attacker.animationController.PlayCatchWeapon(0.6f * t));
                 }
                 break;
@@ -1306,6 +1377,16 @@ public class CombatPlayer : MonoBehaviour
                 // aplica swing + hurt/morte direto nele.
                 if (evt.targetIsPet)
                 {
+                    // Bumerangue arremessado contra um pet: SimulateThrow nunca emite
+                    // BoomerangReturn nesse caminho (só volta pra mão contra o personagem
+                    // principal), então o objeto mantido vivo pelo case ThrowWeapon nunca seria
+                    // consumido/destruído — limpa aqui pra não deixar um sprite órfão parado.
+                    if (_boomerangFlyingObject != null)
+                    {
+                        Destroy(_boomerangFlyingObject);
+                        _boomerangFlyingObject = null;
+                    }
+
                     var hitPet = GetPet(evt.targetIndex, evt.targetPetIndex);
                     if (hitPet != null && attacker != null)
                     {
@@ -1328,6 +1409,10 @@ public class CombatPlayer : MonoBehaviour
                             if (swingMultPet != 1f) attacker?.animationController.SetSpeed(swingMultPet);
                             attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
                             yield return new WaitForSeconds(slashHalfPet);
+                            // Pose de ataque (ex: Whip estalando) só no finalzinho do swing, bem
+                            // perto do impacto — não desde o início — pra dar a impressão de
+                            // "chicotada" em vez de ficar esticado o swing inteiro.
+                            SetWeaponSwingPose(attacker, true);
                         }
 
                         Vector3 petPopupPos = hitPet.transform.position + Vector3.up * 0.8f;
@@ -1361,6 +1446,7 @@ public class CombatPlayer : MonoBehaviour
                         {
                             yield return new WaitForSeconds(slashHalfPet);
                             if (swingMultPet != 1f) attacker?.animationController.SetSpeed(1f);
+                            SetWeaponSwingPose(attacker, false);
                         }
                     }
                     yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
@@ -1389,6 +1475,9 @@ public class CombatPlayer : MonoBehaviour
                         if (swingMult != 1f) attacker?.animationController.SetSpeed(swingMult);
                         attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
                         yield return new WaitForSeconds(slashHalf);
+                        // Pose de ataque só no finalzinho do swing (impressão de "chicotada"), ver
+                        // mesmo comentário no case Hit (pet) acima.
+                        SetWeaponSwingPose(attacker, true);
                     }
 
                     // Impact moment: damage, hurt animation, knockback, and popup all fire
@@ -1465,6 +1554,7 @@ public class CombatPlayer : MonoBehaviour
                     {
                         yield return new WaitForSeconds(slashHalf);
                         if (swingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                        SetWeaponSwingPose(attacker, false);
                     }
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
@@ -1489,6 +1579,8 @@ public class CombatPlayer : MonoBehaviour
                     if (retSwingMult != 1f) attacker?.animationController.SetSpeed(retSwingMult);
                     attacker?.GetComponent<Animator>()?.SetTrigger(retTrigger);
                     yield return new WaitForSeconds(retSlashHalf);
+                    // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
+                    SetWeaponSwingPose(attacker, true);
 
                     Vector2 retPushDir = ComputePushDir(attacker, defender);
                     float   retKbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
@@ -1523,6 +1615,7 @@ public class CombatPlayer : MonoBehaviour
 
                     yield return new WaitForSeconds(retSlashHalf);
                     if (retSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                    SetWeaponSwingPose(attacker, false);
 
                     // Os estados Slashing/SlashingDagger/SlashingHeavy só têm UMA transição de
                     // saída no Animator Controller: pro estado Jump Start (via bool JumpStart),
@@ -1565,6 +1658,8 @@ public class CombatPlayer : MonoBehaviour
                         if (dodgeSwingMultPet != 1f) attacker?.animationController.SetSpeed(dodgeSwingMultPet);
                         attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
                         yield return new WaitForSeconds(slashHalfPet);
+                        // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
+                        SetWeaponSwingPose(attacker, true);
 
                         DamagePopup.SpawnDodge(dodgePet.transform.position + Vector3.up * 0.8f);
                         attacker?.HideFierceBruteAura();
@@ -1573,23 +1668,33 @@ public class CombatPlayer : MonoBehaviour
 
                         yield return new WaitForSeconds(slashHalfPet);
                         if (dodgeSwingMultPet != 1f) attacker?.animationController.SetSpeed(1f);
+                        SetWeaponSwingPose(attacker, false);
                     }
                     yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                     break;
                 }
                 if (defender != null)
                 {
-                    // Dodge always follows a melee swing attempt (never a throw) — the attacker
-                    // swings, and exactly when it would have landed, the defender leaps away.
-                    yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+                    // Dodge normalmente segue um swing melee (attacker corre e ataca, defensor
+                    // pula na hora certa). Bumerangue (evt.isThrow) é a exceção — o atacante já
+                    // arremessou do lugar onde estava, sem correr nem sacar arma nenhuma; pular o
+                    // reposicionamento/swing evita ele "correndo" pra perto do defensor do nada.
+                    float dodgeSwingMult = 1f;
+                    float slashHalf = 0f;
+                    if (!evt.isThrow)
+                    {
+                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
-                    string trigger = SwingTrigger(attacker);
-                    float dodgeSwingMult = SwingSpeedMultiplier(attacker);
-                    if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(dodgeSwingMult);
-                    attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        string trigger = SwingTrigger(attacker);
+                        dodgeSwingMult = SwingSpeedMultiplier(attacker);
+                        if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(dodgeSwingMult);
+                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
 
-                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMult;
-                    yield return new WaitForSeconds(slashHalf);
+                        slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMult;
+                        yield return new WaitForSeconds(slashHalf);
+                        // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
+                        SetWeaponSwingPose(attacker, true);
+                    }
 
                     Vector3 dodgePopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
@@ -1602,8 +1707,12 @@ public class CombatPlayer : MonoBehaviour
                     float   dodgeDist = attacker?.settings?.knockbackDistance ?? 0.5f;
                     yield return StartCoroutine(defender.DodgeLeap(dodgeDir, dodgeDist));
 
-                    yield return new WaitForSeconds(slashHalf);
-                    if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                    if (!evt.isThrow)
+                    {
+                        yield return new WaitForSeconds(slashHalf);
+                        if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                        SetWeaponSwingPose(attacker, false);
+                    }
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -1611,15 +1720,24 @@ public class CombatPlayer : MonoBehaviour
             case CombatEventType.Block:
                 if (defender != null)
                 {
-                    string trigger = SwingTrigger(attacker);
-                    float blockSwingMult = SwingSpeedMultiplier(attacker);
-                    float slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / blockSwingMult;
+                    // Mesma exceção do Dodge acima — bumerangue (evt.isThrow) nunca teve um swing
+                    // melee pra sincronizar, então pula reposicionamento/trigger do atacante.
+                    float blockSwingMult = 1f;
+                    float slashHalf = 0f;
+                    if (!evt.isThrow)
+                    {
+                        string trigger = SwingTrigger(attacker);
+                        blockSwingMult = SwingSpeedMultiplier(attacker);
+                        slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / blockSwingMult;
 
-                    // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
-                    yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
-                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
-                    attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
-                    yield return new WaitForSeconds(slashHalf);
+                        // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
+                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+                        if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
+                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        yield return new WaitForSeconds(slashHalf);
+                        // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
+                        SetWeaponSwingPose(attacker, true);
+                    }
 
                     Vector3 blockPopupPos = defender.transform.position + Vector3.up * 1.5f
                         + Vector3.right * Random.Range(-0.3f, 0.3f);
@@ -1639,8 +1757,12 @@ public class CombatPlayer : MonoBehaviour
                     StartCoroutine(defender.Knockback(blockDir, kbDist, kbDur));
                     yield return StartCoroutine(defender.animationController.PlayBlock(0.36666667f * t));
 
-                    yield return new WaitForSeconds(slashHalf);
-                    if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                    if (!evt.isThrow)
+                    {
+                        yield return new WaitForSeconds(slashHalf);
+                        if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
+                        SetWeaponSwingPose(attacker, false);
+                    }
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -1651,6 +1773,14 @@ public class CombatPlayer : MonoBehaviour
                 // PetAnimationController).
                 if (evt.targetIsPet)
                 {
+                    // Mesma limpeza do case Hit acima — bumerangue que erra contra um pet também
+                    // nunca recebe um BoomerangReturn.
+                    if (_boomerangFlyingObject != null)
+                    {
+                        Destroy(_boomerangFlyingObject);
+                        _boomerangFlyingObject = null;
+                    }
+
                     var missPet = GetPet(evt.targetIndex, evt.targetPetIndex);
                     if (missPet != null)
                     {
@@ -1677,6 +1807,17 @@ public class CombatPlayer : MonoBehaviour
 
             case CombatEventType.Repulse:
             {
+                // Bumerangue deflectido pelo Repulse do defensor: SimulateThrow retorna cedo
+                // nesse caso (nunca chega a emitir BoomerangReturn), então o objeto do arremesso
+                // de ida (mantido vivo de propósito, ver case ThrowWeapon) nunca seria destruído
+                // nem limpo — o Repulse já cria seu próprio "RepulseWeapon" pro voo de volta, tira
+                // o antigo da tela aqui pra não ficar um sprite órfão parado pra sempre.
+                if (_boomerangFlyingObject != null)
+                {
+                    Destroy(_boomerangFlyingObject);
+                    _boomerangFlyingObject = null;
+                }
+
                 // attacker = deflector (evt.playerIndex), defender = lançador original que toma o impacto (evt.targetIndex)
                 float repSlashMult = SwingSpeedMultiplier(attacker);
                 float repSlashHalf = (attacker?.settings?.slashingDuration ?? 0.4f) * 0.5f * t / repSlashMult;
@@ -1785,6 +1926,15 @@ public class CombatPlayer : MonoBehaviour
                 break;
 
             case CombatEventType.ThrowWeapon:
+                // Rede de segurança: qualquer bumerangue anterior que não tenha sido consumido
+                // por um BoomerangReturn (ex: caminho não previsto) não deve acumular objetos
+                // órfãos na cena a cada novo arremesso.
+                if (_boomerangFlyingObject != null)
+                {
+                    Destroy(_boomerangFlyingObject);
+                    _boomerangFlyingObject = null;
+                }
+                _boomerangReturnRoutine = null;
                 if (attacker != null)
                 {
                     // Fierce Brute: escopado só a melee (CombatSimulator.SimulateHit) — se o
@@ -1833,6 +1983,11 @@ public class CombatPlayer : MonoBehaviour
                                 ? defender.transform.position
                                 : attacker.transform.position + (attacker.isPlayer1 ? Vector3.right : Vector3.left) * 5f;
 
+                        // Bumerangue: sobe o alvo pra acertar mais perto do centro do corpo em
+                        // vez do pivô (pés) do defensor — não afeta pet nem as outras Thrown.
+                        if (weaponData.isBoomerang && throwTargetPet == null && defender != null)
+                            targetPos += Vector3.up * BoomerangHitHeight;
+
                         Vector3 flightDir   = (targetPos - launchPos).normalized;
                         float   flightAngle = Mathf.Atan2(flightDir.y, flightDir.x) * Mathf.Rad2Deg;
 
@@ -1849,7 +2004,31 @@ public class CombatPlayer : MonoBehaviour
                         bool  rotate = WeaponData.HasType(weaponData, WeaponType.Thrown);
                         float arc    = rotate ? 0.5f : 0f;
                         yield return StartCoroutine(attacker.FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f * t, rotate, arc));
-                        Destroy(flyingWeapon);
+
+                        // Bumerangue: dispara o voo de volta JÁ AQUI, em paralelo (fire-and-forget),
+                        // em vez de deixar o objeto parado esperando o case BoomerangReturn (que só
+                        // roda depois do Hit/Dodge/Block) — a arma nunca fica imóvel, sempre em
+                        // movimento, igual a um bumerangue de verdade. Exceção: se o próximo evento
+                        // for Repulse (defensor deflectiu, cria seu PRÓPRIO objeto de volta) ou um
+                        // Hit/Miss contra um pet (bumerangue nunca volta nesse caminho, ver
+                        // CombatSimulator.SimulateThrow) — nesses dois casos, destrói normalmente
+                        // como qualquer arma Thrown.
+                        var nextEvt = (_currentEventIndex + 1 < _events.Count) ? _events[_currentEventIndex + 1] : null;
+                        bool boomerangWillReturn = weaponData.isBoomerang
+                            && nextEvt != null
+                            && nextEvt.type != CombatEventType.Repulse
+                            && !nextEvt.targetIsPet;
+
+                        if (boomerangWillReturn)
+                        {
+                            _boomerangFlyingObject  = flyingWeapon;
+                            _boomerangLandPosition  = targetPos;
+                            _boomerangReturnRoutine = StartCoroutine(BoomerangReturnFlight(attacker, flyingWeapon, targetPos, weaponData, t));
+                        }
+                        else
+                        {
+                            Destroy(flyingWeapon);
+                        }
                     }
                     else
                     {
@@ -1864,6 +2043,27 @@ public class CombatPlayer : MonoBehaviour
                     // turno (bug real reportado pelo usuário, "parece que está com parkinson").
                     attacker.animationController.SetIdle(true);
                 }
+                break;
+
+            case CombatEventType.BoomerangReturn:
+                // Só emitido para WeaponData.isBoomerang, logo depois do Hit/Dodge/Block do
+                // arremesso (ver CombatSimulator.SimulateThrow). O voo de volta em si já foi
+                // disparado antes, em paralelo, pelo próprio case ThrowWeapon (assim que a ida
+                // chegou no alvo) — a arma nunca fica parada esperando este evento, sempre em
+                // movimento contínuo, igual a um bumerangue de verdade. Este case só espera essa
+                // mesma coroutine terminar (ela mesma cuida do reequip ao chegar).
+                if (_boomerangReturnRoutine != null)
+                {
+                    yield return _boomerangReturnRoutine;
+                    _boomerangReturnRoutine = null;
+                }
+                else if (attacker != null && _lastThrownWeaponData != null)
+                {
+                    // Fallback (ex: inHandSprite nulo, sem voo visual pra acompanhar) — reequipa
+                    // direto, sem animação.
+                    attacker.weaponHandler.EquipSpecific(_lastThrownWeaponData);
+                }
+                yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
 
             case CombatEventType.SpeedBonus:
@@ -2715,27 +2915,36 @@ public class CombatPlayer : MonoBehaviour
         FadeFastMetabolismLeaves(1);
     }
 
-    // Fórmula única para todas as armas: base 2.0 + data.reach − (scale − 1) × 4.0
-    // Scale é o principal fator: arma maior → personagem para mais perto do defensor.
-    // data.reach é o knob de calibração por arma (float, permite 1.4 etc.).
-    // A scale=1.5 o reach final = data.reach (efeito direto e intuitivo).
-    private static Vector2 CalcAttackPosition(PlayerCombat attacker, PlayerCombat defender)
+    // Fórmula única para todas as armas: base 2.0 + data.reach — scale removido do cálculo
+    // (pedido do usuário: misturar scale confundia o alcance de aproximação, e deixava o
+    // atacante grudado demais no defensor em algumas armas, fazendo o knockback do
+    // Counter/Reversal logo em seguida parecer um teleporte pra trás em vez de um empurrão).
+    // data.reach é o único knob de calibração por arma a partir de agora.
+    //
+    // reachOwner: de quem é o alcance que decide a distância de parada — por padrão o próprio
+    // `mover` (o atacante correndo até o defensor pra golpear). Antes de um Counter, porém, é o
+    // DEFENSOR quem bate primeiro — o atacante precisa parar dentro do alcance da arma DELE, não
+    // da própria, senão o defensor golpearia alguém fora do alcance de quem de fato vai conectar
+    // (bug real reportado pelo usuário: atacante "teleportava" pra trás no knockback do Counter
+    // por ter parado longe demais). Ver case RunToDefender, que faz esse peek.
+    private static Vector2 CalcAttackPosition(PlayerCombat mover, PlayerCombat target, PlayerCombat reachOwner = null)
     {
+        reachOwner ??= mover;
         float reach;
-        if (attacker.weaponHandler.CurrentWeapon == null)
+        if (reachOwner.weaponHandler.CurrentWeapon == null)
         {
             reach = 0.8f;
         }
         else
         {
-            var data = attacker.weaponHandler.CurrentWeaponData;
-            reach = 2.0f + (data?.reach ?? 0f) - ((data?.scale ?? 1f) - 1f) * 4.0f;
+            var data = reachOwner.weaponHandler.CurrentWeaponData;
+            reach = 2.0f + (data?.reach ?? 0f);
             reach = Mathf.Max(0.3f, reach);
         }
-        Vector2 defPos = defender.transform.position;
-        Vector2 attPos = attacker.transform.position;
-        Vector2 dir    = (defPos - attPos).normalized;
-        return defPos - dir * reach;
+        Vector2 targetPos = target.transform.position;
+        Vector2 moverPos  = mover.transform.position;
+        Vector2 dir       = (targetPos - moverPos).normalized;
+        return targetPos - dir * reach;
     }
 
     private static string SwingTrigger(PlayerCombat attacker)
@@ -2770,6 +2979,92 @@ public class CombatPlayer : MonoBehaviour
     {
         if (attacker == null || defender == null) return Vector2.right;
         return ((Vector2)defender.transform.position - (Vector2)attacker.transform.position).normalized;
+    }
+
+    // Animação de 2 frames (ex: Whip fechado/aberto, ver WeaponData.attackSprite) — chamado junto
+    // de todo SetTrigger(Slashing/SlashingDagger) melee (true) e desfeito quando o swing termina
+    // (false). No-op pra qualquer arma sem attackSprite configurado (sprite único de sempre).
+    // Instância (não mais static) porque dispara a faísca da ponta via StartCoroutine.
+    private void SetWeaponSwingPose(PlayerCombat attacker, bool attacking)
+    {
+        if (attacker?.weaponHandler == null) return;
+        attacker.weaponHandler.SetAttackPose(attacking);
+
+        // WeaponData.showAttackTipEffect (ex: Whip estalando) — só no instante em que a pose de
+        // ataque liga, nunca ao desligar.
+        if (attacking && attacker.weaponHandler.CurrentWeaponData != null && attacker.weaponHandler.CurrentWeaponData.showAttackTipEffect)
+            StartCoroutine(PlayWeaponTipEffect(attacker.weaponHandler.GetAttackTipWorldPosition()));
+    }
+
+    private static Texture2D _sparkTexture;
+
+    private static Texture2D GetSparkTexture()
+    {
+        if (_sparkTexture != null) return _sparkTexture;
+
+        const int size = 16;
+        _sparkTexture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Vector2 center = new Vector2(size / 2f, size / 2f);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dist  = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), center) / (size / 2f);
+                float alpha = Mathf.Clamp01(1f - dist);
+                alpha *= alpha; // soft falloff
+                _sparkTexture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+        _sparkTexture.Apply();
+        return _sparkTexture;
+    }
+
+    // Faísca procedural na ponta da arma (ex: Whip estalando) — sem depender de nenhum asset
+    // externo, mesmo espírito de FlashScreenWhite/SpawnGhostTrail abaixo: alguns sprites gerados
+    // em runtime, um burst radial curto que encolhe e desaparece.
+    private IEnumerator PlayWeaponTipEffect(Vector3 worldPos)
+    {
+        const int   count        = 6;
+        const float duration     = 0.18f;
+        const float burstDistance = 0.35f;
+
+        var sprite = Sprite.Create(GetSparkTexture(), new Rect(0, 0, 16, 16), new Vector2(0.5f, 0.5f), 32f);
+        var parts  = new List<(Transform tr, SpriteRenderer sr, Vector3 dir)>(count);
+
+        for (int i = 0; i < count; i++)
+        {
+            var go = new GameObject("WeaponTipSpark");
+            go.transform.position = worldPos;
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite           = sprite;
+            sr.sortingLayerName = "Effects";
+            sr.sortingOrder     = 15;
+            sr.color            = new Color(1f, 0.95f, 0.6f, 1f);
+
+            float   angle = (360f / count) * i + Random.Range(-15f, 15f);
+            Vector3 dir   = new Vector3(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad), 0f);
+            parts.Add((go.transform, sr, dir));
+        }
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            float p = elapsed / duration;
+            foreach (var (tr, sr, dir) in parts)
+            {
+                if (tr == null) continue;
+                tr.position   = worldPos + dir * burstDistance * p;
+                tr.localScale = Vector3.one * Mathf.Lerp(0.5f, 0.15f, p);
+                var c = sr.color;
+                c.a      = 1f - p;
+                sr.color = c;
+            }
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        foreach (var (tr, _, _) in parts)
+            if (tr != null) Destroy(tr.gameObject);
     }
 
     // Skill Net (libertação) — extraído do case NetFreed pra também ser reusado pela skill Bomb

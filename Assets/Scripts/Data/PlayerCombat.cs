@@ -1283,7 +1283,8 @@ public class PlayerCombat : MonoBehaviour
         {
             float t   = elapsed / duration;
             Vector3 p = Vector3.Lerp(from, to, t);
-            if (arc > 0f)
+            // arc < 0 curva por baixo (usado pela volta do bumerangue) em vez de por cima.
+            if (arc != 0f)
                 p.y += arc * Mathf.Sin(t * Mathf.PI);
             obj.position = p;
             if (rotate)

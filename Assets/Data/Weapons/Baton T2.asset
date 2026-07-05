@@ -15,17 +15,23 @@ MonoBehaviour:
   weaponName: Baton T2
   icon: {fileID: 21300000, guid: 08a175f44a23909448251dfd85bef239, type: 3}
   inHandSprite: {fileID: 21300000, guid: 08a175f44a23909448251dfd85bef239, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 8
   speedModifier: 1
   types: 03000000
   scale: 1.5
+  isBoomerang: 0
   attackAnimation: 2
   tier: 2
   previousTier: {fileID: 11400000, guid: bb20000000000000000000000000000c, type: 2}
   dropOdds: 0
   hitSpeed: 1.2
   drawChance: 0.28
-  reach: 2
+  reach: 0.6
   critChanceBonus: 0.25
   critDamageMultiplier: 1.5
   evasionBonus: 0.1
@@ -36,3 +42,4 @@ MonoBehaviour:
   disarmBonus: 0.3
   comboBonus: 0.15
   deflectBonus: 0
+  counterBonus: 0.35

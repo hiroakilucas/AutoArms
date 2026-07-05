@@ -15,17 +15,23 @@ MonoBehaviour:
   weaponName: Bone T2
   icon: {fileID: 21300000, guid: be7658450b063b142b6b55a215c6cd3b, type: 3}
   inHandSprite: {fileID: 21300000, guid: be7658450b063b142b6b55a215c6cd3b, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 18
   speedModifier: 1
   types: 0400000002000000
   scale: 1.2
+  isBoomerang: 0
   attackAnimation: 0
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000013, type: 2}
   dropOdds: 0
   hitSpeed: 0.75
   drawChance: 0.38000003
-  reach: 0.3
+  reach: -0.5
   critChanceBonus: 0.25
   critDamageMultiplier: 1.5
   evasionBonus: 0
@@ -36,3 +42,4 @@ MonoBehaviour:
   disarmBonus: 0.15
   comboBonus: -0.1
   deflectBonus: 0
+  counterBonus: 0

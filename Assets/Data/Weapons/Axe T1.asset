@@ -15,17 +15,23 @@ MonoBehaviour:
   weaponName: Axe T1
   icon: {fileID: 21300000, guid: 3a4feda09e2856344a8d977ee49026c5, type: 3}
   inHandSprite: {fileID: 21300000, guid: 3a4feda09e2856344a8d977ee49026c5, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 17
   speedModifier: 1
   types: 0400000001000000
   scale: 1.2
+  isBoomerang: 0
   attackAnimation: 0
   tier: 1
   previousTier: {fileID: 0}
   dropOdds: 0
   hitSpeed: 0.8
   drawChance: 0.23
-  reach: 0.6
+  reach: 0
   critChanceBonus: 0.15
   critDamageMultiplier: 1.5
   evasionBonus: 0
@@ -36,3 +42,4 @@ MonoBehaviour:
   disarmBonus: 0
   comboBonus: 0
   deflectBonus: 0
+  counterBonus: 0

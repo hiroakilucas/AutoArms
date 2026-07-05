@@ -36,3 +36,4 @@ MonoBehaviour:
   disarmBonus: 0.21000001
   comboBonus: 0
   deflectBonus: 0
+  counterBonus: 0

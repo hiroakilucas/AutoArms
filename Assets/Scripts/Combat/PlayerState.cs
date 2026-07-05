@@ -29,6 +29,12 @@ public class PlayerState
     public float runSpeedMultiplier;
     public float stickyHands;
 
+    // WeaponData.hitSpeed < 100% (armas lentas, ex: Anchor 0.48) acumula aqui turno a turno até
+    // fechar 1.0 — ver CombatSimulator.ResolveHitSpeedUnits. Resetado sempre que a arma equipada
+    // muda de fato (Thief/PickupWeapon/WeaponSwap), pra não carregar o ritmo de uma arma
+    // diferente da atual.
+    public float weaponHitSpeedDebt;
+
     // Skill state flags
     public bool leadSkeleton;
     public bool firstHitAvoided;

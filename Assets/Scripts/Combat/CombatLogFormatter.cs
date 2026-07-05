@@ -37,6 +37,10 @@ public static class CombatLogFormatter
                     sb.AppendLine($"  {Name(e.playerIndex)} pega arma: {e.weaponName}");
                     break;
 
+                case CombatEventType.HitSpeedSkip:
+                    sb.AppendLine($"  {Name(e.playerIndex)} não age neste turno (arma lenta)");
+                    break;
+
                 case CombatEventType.WeaponSwap:
                     sb.AppendLine($"  {Name(e.playerIndex)} troca de arma, larga: {e.weaponName}");
                     break;

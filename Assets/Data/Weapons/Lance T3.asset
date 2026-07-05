@@ -15,10 +15,16 @@ MonoBehaviour:
   weaponName: Lance T3
   icon: {fileID: 0}
   inHandSprite: {fileID: 0}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 21
   speedModifier: 1
   types: 03000000
   scale: 1
+  isBoomerang: 0
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: 645e98ed83c51154584791268e11ced0, type: 2}
@@ -36,3 +42,4 @@ MonoBehaviour:
   disarmBonus: 0.16
   comboBonus: 0
   deflectBonus: 0
+  counterBonus: 0.3

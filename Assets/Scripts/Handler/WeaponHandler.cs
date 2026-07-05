@@ -96,6 +96,50 @@ public class WeaponHandler : MonoBehaviour
         OnWeaponChanged?.Invoke(data);
     }
 
+    // Animação de 2 frames (ex: Whip fechado/idle vs aberto/atacando) — troca o sprite da arma
+    // já na mão pro attackSprite durante o swing (CombatPlayer chama true junto do SetTrigger de
+    // Slashing/SlashingDagger, false quando o swing termina). No-op se a arma atual não tiver
+    // attackSprite configurado (comportamento de sempre, sprite único parado).
+    public void SetAttackPose(bool attacking)
+    {
+        if (current == null || CurrentWeaponData == null) return;
+        var sr = current.GetComponent<SpriteRenderer>();
+        if (sr == null) return;
+
+        if (attacking && CurrentWeaponData.attackSprite != null)
+        {
+            sr.sprite = CurrentWeaponData.attackSprite;
+            // attackScaleMultiplier (ex: Whip esticando na largura ao estalar) — (1,1,1) por
+            // padrão, então é um no-op pra qualquer arma que não configure isso.
+            current.transform.localScale = Vector3.Scale(
+                Vector3.one * CurrentWeaponData.scale, CurrentWeaponData.attackScaleMultiplier);
+            // attackRotationOffset soma em cima do rotationOffset normal do personagem (ex: Whip
+            // apontando pra baixo, na direção do pé do defensor) — (0,0,0) por padrão, no-op.
+            current.transform.localEulerAngles = rotationOffset + CurrentWeaponData.attackRotationOffset;
+            return;
+        }
+
+        // Volta pro idle — mesmo fallback de tier do EquipSpecific (T2/T3 sem sprite sobem a
+        // cadeia previousTier).
+        var spriteSource = CurrentWeaponData;
+        while (spriteSource != null && spriteSource.inHandSprite == null)
+            spriteSource = spriteSource.previousTier;
+        if (spriteSource?.inHandSprite != null)
+            sr.sprite = spriteSource.inHandSprite;
+        current.transform.localScale = Vector3.one * CurrentWeaponData.scale;
+        current.transform.localEulerAngles = rotationOffset;
+    }
+
+    // Posição mundial da ponta da arma durante o attackSprite — usado por efeitos visuais (ex:
+    // faísca do Whip). attackTipOffset é lido no espaço LOCAL da arma (antes de escala/rotação);
+    // TransformPoint já aplica a escala/rotação atuais (inclusive attackScaleMultiplier/
+    // attackRotationOffset acima), então a ponta acompanha a pose de ataque automaticamente.
+    public Vector3 GetAttackTipWorldPosition()
+    {
+        if (current == null || CurrentWeaponData == null) return handBone != null ? handBone.position : transform.position;
+        return current.transform.TransformPoint(CurrentWeaponData.attackTipOffset);
+    }
+
     private void EquipData(WeaponData data)
     {
         CurrentWeaponData = data;

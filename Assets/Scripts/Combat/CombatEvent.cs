@@ -4,15 +4,17 @@ public enum CombatEventType
 {
     TurnStart,       // playerIndex = acting player
     RunToDefender,   // playerIndex = attacker, targetIndex = defender. targetIsPet/targetPetIndex setados quando o alvo do turno é um pet em vez do personagem (ver Hit acima) — CombatPlayer corre direto até o pet em vez de calcular CalcAttackPosition contra o personagem.
+    HitSpeedSkip,    // playerIndex = atacante cuja arma é lenta demais pra agir neste turno (WeaponData.hitSpeed < 100%, débito acumulado — ver CombatSimulator.ResolveHitSpeedUnits). Sem Run/Throw/Hit nenhum; CombatPlayer só mostra um popup "LENTO!".
     ThrowWeapon,     // playerIndex = attacker, targetIndex = defender, weaponName
+    BoomerangReturn, // playerIndex = attacker recebendo a arma de volta na mão, targetIndex = defender (origem do voo de volta — obrigatório, CombatPlayer usa GetCombat(evt.targetIndex) pra saber de onde a arma vem), weaponName. Emitido logo após o Hit/Dodge/Block do arremesso, só para WeaponData.isBoomerang — o voo de volta em si já foi disparado antes, em paralelo, pelo case ThrowWeapon (ver CombatPlayer._boomerangReturnRoutine); este evento só sincroniza o fim do turno com o fim desse voo.
     PickupWeapon,    // playerIndex = picker, weaponName
     WeaponSwap,      // playerIndex = player who drops their current weapon (stays in loadout, doesn't disappear) right before picking up a new one — weaponName = the dropped weapon
     Thief,           // playerIndex = thief (unarmed), targetIndex = victim (armed) who loses the weapon to the thief, weaponName
     Hit,             // playerIndex = attacker, targetIndex = defender, damage, isCrit, isCombo, isThrow. Pets como alvo válido (CombatSimulator.RollPetTarget): targetIsPet/targetPetIndex/newTargetHp/newTargetMaxHp setados em vez de newHp/maxHp quando o alvo é um pet do defensor em vez do personagem.
     Counter,         // playerIndex = counterer (deals damage), targetIndex = original attacker (countered), damage, isCrit. Cancela o hit do atacante e o resto do combo.
     Reversal,        // playerIndex = quem reverte (deals damage), targetIndex = original attacker (alvo), damage, isCrit. Acontece depois do atacante já ter acertado; cancela o resto do combo dele.
-    Dodge,           // playerIndex = attacker, targetIndex = dodger. targetIsPet/targetPetIndex setados quando o alvo esquivado é um pet (ver Hit acima).
-    Block,           // playerIndex = attacker, targetIndex = blocker (50% knockback, no damage)
+    Dodge,           // playerIndex = attacker, targetIndex = dodger. targetIsPet/targetPetIndex setados quando o alvo esquivado é um pet (ver Hit acima). isThrow = true quando vem de um arremesso de bumerangue (CombatSimulator.SimulateThrow) — CombatPlayer pula o swing/reposicionamento do atacante nesse caso (ele nunca correu nem sacou arma pro arremesso).
+    Block,           // playerIndex = attacker, targetIndex = blocker (50% knockback, no damage). isThrow = true quando vem de um arremesso de bumerangue — mesma exceção do Dodge acima (sem swing/reposicionamento).
     Miss,            // playerIndex = attacker, targetIndex = missed (defender DodgeLeaps). targetIsPet/targetPetIndex setados quando o arremesso errado era contra um pet (toca Jumping em vez de DodgeLeap).
     Repulse,         // playerIndex = deflector (quem tem a skill), targetIndex = original thrower (toma o impacto de volta). weaponName = arma deflectida, damage, isCrit, newHp/maxHp do lançador original.
     Mimic,           // playerIndex = quem usa Mimic. weaponName = nome da skill copiada (ex: "Flash Flood"). A skill copiada dispara seus próprios eventos logo a seguir na lista.

@@ -19,9 +19,9 @@ MonoBehaviour:
   weaponLoadout: {fileID: 11400000, guid: 501d244af57792bf64799733faa8427e, type: 2}
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 65
-  str: 6
-  agility: 3
+  maxHealth: 67
+  str: 4
+  agility: 5
   speed: 4
   armor: 0
   evasion: 0
@@ -35,8 +35,8 @@ MonoBehaviour:
   hitSpeed: 1
   skills: []
   pets: 
-  level: 1
+  level: 2
   winRate: 0
   xpCurrent: 0
-  xpRequired: 6
-  battlesRemaining: 6
+  xpRequired: 12
+  battlesRemaining: 0

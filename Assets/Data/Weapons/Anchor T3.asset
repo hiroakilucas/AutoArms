@@ -15,17 +15,23 @@ MonoBehaviour:
   weaponName: Anchor T3
   icon: {fileID: 21300000, guid: 0003dc96f264fad4dbde307d2e633606, type: 3}
   inHandSprite: {fileID: 21300000, guid: 0003dc96f264fad4dbde307d2e633606, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 30
   speedModifier: 1
   types: 0400000002000000
   scale: 1.3
+  isBoomerang: 0
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: 8f1df6011e134974e9619d8e10504c76, type: 2}
   dropOdds: 0
   hitSpeed: 0.48
   drawChance: 0.27
-  reach: 0.4
+  reach: -0.5
   critChanceBonus: -0.1
   critDamageMultiplier: 1.5
   evasionBonus: 0
@@ -36,3 +42,4 @@ MonoBehaviour:
   disarmBonus: 0.6
   comboBonus: 0.4
   deflectBonus: 0
+  counterBonus: 0

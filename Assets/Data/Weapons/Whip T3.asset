@@ -13,19 +13,25 @@ MonoBehaviour:
   m_Name: Whip T3
   m_EditorClassIdentifier: 
   weaponName: Whip T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: 939ea10b6685f572cdf559d609adb08f, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 939ea10b6685f572cdf559d609adb08f, type: 3}
+  attackSprite: {fileID: 21300000, guid: a30b30e5817c42080988ee40e7419247, type: 3}
+  attackScaleMultiplier: {x: 3, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: -10}
+  showAttackTipEffect: 1
+  attackTipOffset: {x: 0.5, y: -0.15, z: 0}
   damage: 18
   speedModifier: 1
   types: 03000000
   scale: 1
+  isBoomerang: 0
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: 349bfb88eb369cd43b1d9eb391b64d84, type: 2}
   dropOdds: 0
   hitSpeed: 0.8
   drawChance: 0.43
-  reach: 5
+  reach: 2
   critChanceBonus: 0
   critDamageMultiplier: 1.7
   evasionBonus: 0.36
@@ -36,3 +42,4 @@ MonoBehaviour:
   disarmBonus: 0.36
   comboBonus: 0.45
   deflectBonus: 0
+  counterBonus: 0.5

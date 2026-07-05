@@ -610,6 +610,11 @@ public class CombatSimulator
             defender.currentWeaponData = null;
             attacker.weaponLoadout.Add(stolen);
             attacker.currentWeaponData = stolen;
+            // 1f (não 0f) — garante que o 1º turno com a arma nova já ataque de verdade, mesmo
+            // com hitSpeed < 100% (ex: Whip 0.8), em vez de cair direto no HitSpeedSkip só por
+            // começar com débito zerado (bug real reportado pelo usuário: "quando pega a arma
+            // aparece como lentidão e não ataca").
+            attacker.weaponHitSpeedDebt = 1f;
             attacker.thiefUsesRemaining--;
             Emit(new CombatEvent { type = CombatEventType.Thief, playerIndex = attacker.index, targetIndex = defender.index, weaponName = stolen.weaponName });
             stoleWeapon = true;
@@ -620,6 +625,7 @@ public class CombatSimulator
         {
             var w = attacker.weaponLoadout[_rng.Next(attacker.weaponLoadout.Count)];
             attacker.currentWeaponData = w;
+            attacker.weaponHitSpeedDebt = 1f; // ver comentário no Thief acima
             Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = w.weaponName });
         }
         // 2b. Weapon swap if armed (mesma 40% chance do pickup acima) — mecânica geral, vale pra
@@ -640,6 +646,7 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.WeaponSwap, playerIndex = attacker.index, weaponName = oldWeapon.weaponName });
             attacker.weaponLoadout.Remove(oldWeapon);
             attacker.currentWeaponData = newWeapon;
+            attacker.weaponHitSpeedDebt = 1f; // ver comentário no Thief acima
             Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = newWeapon.weaponName });
         }
 
@@ -671,18 +678,57 @@ public class CombatSimulator
             // chega a agir de verdade, então o buff persiste pro turno seguinte (ver
             // TryActivateFierceBrute) — aqui ele chega a agir (arremessar), só não com o bônus.
             attacker.fierceBruteActive = false;
-            SimulateThrow(attacker, defender, targetPet);
+
+            // hitSpeed decide quantos ciclos completos de arremesso (ida+volta) acontecem NESTE
+            // turno — sem combo (nunca existiu pra arremesso). weaponToThrow é capturado uma vez
+            // porque armas Thrown sem retorno (ex: Shuriken) zeram currentWeaponData a cada
+            // arremesso (ver SimulateThrow) — sem recapturar, o 2º ciclo não teria mais arma pra
+            // jogar. Bumerangue (isBoomerang) já a devolve sozinho a cada ciclo, então a
+            // reatribuição abaixo é um no-op nesse caso.
+            var weaponToThrow = attacker.currentWeaponData;
+            int throwUnits = ResolveHitSpeedUnits(attacker, weaponToThrow);
+            if (throwUnits <= 0)
+            {
+                Emit(new CombatEvent { type = CombatEventType.HitSpeedSkip, playerIndex = attacker.index });
+            }
+            else
+            {
+                for (int i = 0; i < throwUnits; i++)
+                {
+                    if (!attacker.isAlive || !defender.isAlive) break;
+                    attacker.currentWeaponData = weaponToThrow;
+                    SimulateThrow(attacker, defender, targetPet);
+                    if (targetPet != null && !targetPet.isAlive) targetPet = null;
+                }
+            }
             EmitTurnEnd(attacker);
             return;
         }
 
-        // 4. Melee
+        // 4. Melee — hitSpeed decide quantas sequências de ataque independentes acontecem NESTE
+        // turno (cada uma com seu próprio golpe inicial + loop de combo), pedido pelo usuário
+        // (ex: 300% hitSpeed = 3 sequências; se o combo emendar em 2 delas, vira 6 hits totais).
+        int meleeUnits = ResolveHitSpeedUnits(attacker, attacker.currentWeaponData);
+        if (meleeUnits <= 0)
         {
+            Emit(new CombatEvent { type = CombatEventType.HitSpeedSkip, playerIndex = attacker.index });
+            EmitTurnEnd(attacker);
+            return;
+        }
+
+        for (int hsIdx = 0; hsIdx < meleeUnits; hsIdx++)
+        {
+            if (!attacker.isAlive || !defender.isAlive) break;
+
             int runTargetPetIdx = targetPet != null ? defender.pets.IndexOf(targetPet) : -1;
             Emit(new CombatEvent { type = CombatEventType.RunToDefender, playerIndex = attacker.index, targetIndex = defender.index, targetIsPet = targetPet != null, targetPetIndex = runTargetPetIdx });
+
+            bool interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: false, out bool _, targetPet);
+            SimulateComboLoop(attacker, defender, interrupted, targetPet);
+
+            if (targetPet != null && !targetPet.isAlive) targetPet = null;
+            if (interrupted) break; // Counter cancela o resto — mesma regra do combo em si.
         }
-        bool interrupted = SimulateHitWithDetermination(attacker, defender, isCombo: false, out bool _, targetPet);
-        SimulateComboLoop(attacker, defender, interrupted, targetPet);
 
         EmitTurnEnd(attacker);
     }
@@ -1282,7 +1328,8 @@ public class CombatSimulator
         var  weaponData = attacker.currentWeaponData;
         // HasType (não tipo único) — uma arma pode ter Thrown combinado com outra tag (ex: uma
         // adaga Sharp+Thrown), e ainda assim deve seguir o caminho "volta pro loadout" abaixo.
-        bool isThrown   = WeaponData.HasType(weaponData, WeaponType.Thrown);
+        bool isThrown    = WeaponData.HasType(weaponData, WeaponType.Thrown);
+        bool isBoomerang = weaponData != null && weaponData.isBoomerang;
         string wn       = weaponData?.weaponName ?? "";
 
         // Hideaway: a arma some da mão igual a qualquer arma Thrown (Unequip — não
@@ -1327,30 +1374,63 @@ public class CombatSimulator
             return;
         }
 
-        // Hideaway: +25% block contra arremessos recebidos — reduz direto a chance de acerto do
-        // throw (80% → 55%, miss sobe de 20% pra 45%), em vez de um 3º resultado separado de
-        // Block. Mais simples que a versão anterior (Roll(ThrowBlockChance) + evento Block
-        // próprio) e bate com os valores oficiais do LaBrute.
-        // Net: defensor enredado não pode evadir o arremesso também — força acerto, ignorando
-        // hitChance/Hideaway por completo (mesmo "sempre acerta" das outras checagens, ver
-        // Counter/Block/Dodge gated em SimulateHit/SimulateHaste).
-        float hitChance = 0.80f - (defender.HasSkill("Hideaway") ? 0.25f : 0f);
-        if (defender.netEnsnared || Roll(hitChance))
+        if (isBoomerang)
         {
-            int dmg = CalcThrowDamage(attacker, weaponData);
-            // Resistant: cap no dano bruto, antes da armadura (ver ApplyResistantCap).
-            dmg = Mathf.RoundToInt(ApplyResistantCap(defender, dmg));
-            if (defender.armor > 0f)
-                dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
+            // Bumerangue é a exceção entre as Thrown: em vez da chance fixa de acerto abaixo,
+            // rola o Block/Dodge REAIS do defensor (mesmas fórmulas do melee — agilidade, tags
+            // da própria arma dele, skills), pedido pelo usuário. Hideaway continua tendo seu
+            // papel de "defesa extra contra arremesso", só que agora somado direto no Block em
+            // vez de reduzir uma chance fixa de acerto. Net força acerto (sem mobilidade pra
+            // reagir), mesma regra de qualquer arremesso.
+            float boomerangBlockChance = BlockChance(attacker, defender) + (defender.HasSkill("Hideaway") ? 0.25f : 0f);
+            if (!defender.netEnsnared && Roll(boomerangBlockChance))
+            {
+                Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = attacker.index, targetIndex = defender.index, isThrow = true });
+            }
+            else if (!defender.netEnsnared && Roll(DodgeChance(attacker, defender)))
+            {
+                Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = attacker.index, targetIndex = defender.index, isThrow = true });
+            }
+            else
+            {
+                int dmg = CalcThrowDamage(attacker, weaponData);
+                dmg = Mathf.RoundToInt(ApplyResistantCap(defender, dmg));
+                if (defender.armor > 0f)
+                    dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
 
-            defender.hp = ApplyDamage(defender, dmg);
-            Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true, newHp = defender.hp, maxHp = defender.maxHp });
-            Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
-            CheckNetFreed(defender);
+                defender.hp = ApplyDamage(defender, dmg);
+                Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true, newHp = defender.hp, maxHp = defender.maxHp });
+                Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+                CheckNetFreed(defender);
+            }
         }
         else
         {
-            Emit(new CombatEvent { type = CombatEventType.Miss, playerIndex = attacker.index, targetIndex = defender.index });
+            // Hideaway: +25% block contra arremessos recebidos — reduz direto a chance de acerto do
+            // throw (80% → 55%, miss sobe de 20% pra 45%), em vez de um 3º resultado separado de
+            // Block. Mais simples que a versão anterior (Roll(ThrowBlockChance) + evento Block
+            // próprio) e bate com os valores oficiais do LaBrute.
+            // Net: defensor enredado não pode evadir o arremesso também — força acerto, ignorando
+            // hitChance/Hideaway por completo (mesmo "sempre acerta" das outras checagens, ver
+            // Counter/Block/Dodge gated em SimulateHit/SimulateHaste).
+            float hitChance = 0.80f - (defender.HasSkill("Hideaway") ? 0.25f : 0f);
+            if (defender.netEnsnared || Roll(hitChance))
+            {
+                int dmg = CalcThrowDamage(attacker, weaponData);
+                // Resistant: cap no dano bruto, antes da armadura (ver ApplyResistantCap).
+                dmg = Mathf.RoundToInt(ApplyResistantCap(defender, dmg));
+                if (defender.armor > 0f)
+                    dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
+
+                defender.hp = ApplyDamage(defender, dmg);
+                Emit(new CombatEvent { type = CombatEventType.Hit, playerIndex = attacker.index, targetIndex = defender.index, damage = dmg, isThrow = true, newHp = defender.hp, maxHp = defender.maxHp });
+                Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = defender.index, newHp = defender.hp, maxHp = defender.maxHp });
+                CheckNetFreed(defender);
+            }
+            else
+            {
+                Emit(new CombatEvent { type = CombatEventType.Miss, playerIndex = attacker.index, targetIndex = defender.index });
+            }
         }
 
         // Sem re-equip imediato aqui — fica desarmado até o próprio TurnStart do próximo turno
@@ -1359,6 +1439,20 @@ public class CombatSimulator
         // ocasionalmente "equipar" uma arma já no fim do turno (depois do hit/miss do arremesso),
         // sem nenhuma ação visível além da troca de ícone — bug real reportado pelo usuário: o
         // pickup deveria sempre acontecer no início do turno, nunca no meio/fim.
+        //
+        // Bumerangue é a exceção: em vez de ficar desarmado, volta pra mão do próprio atacante
+        // (currentWeaponData restaurado) e permanece equipado até um WeaponSwap ou um
+        // Disarm/WeaponDrop tirar ela de novo — CombatPlayer anima o voo de volta (arco por
+        // baixo) e reequipa ao emitir este evento.
+        if (isBoomerang)
+        {
+            attacker.currentWeaponData = weaponData;
+            // targetIndex = defender é obrigatório aqui — CombatPlayer.ExecuteEvent resolve
+            // `defender = GetCombat(evt.targetIndex)`, e sem isso o default (0) fazia o voo de
+            // volta "nascer" na posição do Player1 sempre que ELE fosse o atacante (índice 0 ==
+            // ele mesmo), tornando a animação de retorno invisível (from ≈ to, sem trajeto).
+            Emit(new CombatEvent { type = CombatEventType.BoomerangReturn, playerIndex = attacker.index, targetIndex = defender.index, weaponName = wn });
+        }
     }
 
     // --- Repulse (Passiva de Defesa) ---
@@ -2264,7 +2358,10 @@ public class CombatSimulator
     // hit (e o resto do combo) do atacante. defender.counter era somado em BlockChance antes
     // dessa mecânica existir de fato (usado só pela skill Counter Attack) — agora vira o que
     // o nome já sugeria.
-    private float CounterChance(PlayerState defender) => defender.counter;
+    // weaponData.counterBonus (campo por arma, ex: Whip) soma direto — mesmo padrão de
+    // reversalBonus/blockBonus/disarmBonus (valor manual por asset, sem tabela por tag).
+    private float CounterChance(PlayerState defender) =>
+        defender.counter + (defender.currentWeaponData?.counterBonus ?? 0f);
 
     // Reversal: depois de já ter tomado o hit, defensor contra-ataca imediatamente, cancelando
     // o resto do combo do atacante. weaponData.reversalBonus já existe nos 5 assets (Sword
@@ -2333,6 +2430,37 @@ public class CombatSimulator
             ? 0.50f
             : TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f);
         return chance * (1f - attacker.stickyHands);
+    }
+
+    // WeaponData.hitSpeed (ex: Boomerang 3.75 = 375%) determina quantas vezes o atacante age
+    // NESTE turno com a arma atual — cada unidade é uma sequência de ataque independente
+    // (melee: golpe + seu próprio loop de combo; arremesso: um ciclo completo de ida-e-volta),
+    // pedido pelo usuário. Regra por faixa:
+    //  - hitSpeed >= 100%: piso garantido (ex: 3.75 → 3) + chance da fração pra 1 unidade extra
+    //    (75% de chance de virar 4) — resolvido de novo a cada turno, sem carregar resto.
+    //  - hitSpeed < 100%: acumula em PlayerState.weaponHitSpeedDebt turno a turno (mesmo
+    //    princípio do acúmulo de Speed já existente) até fechar 1.0 — a arma pode "pular" turnos
+    //    inteiros sem agir enquanto o débito não fecha (armas muito lentas, ex: Anchor 0.48).
+    private int ResolveHitSpeedUnits(PlayerState attacker, WeaponData weaponData)
+    {
+        float hitSpeed = weaponData != null ? weaponData.hitSpeed : UnarmedStats.HitSpeed;
+        if (hitSpeed <= 0f) hitSpeed = 1f; // guarda contra asset mal configurado (hitSpeed <= 0)
+
+        if (hitSpeed >= 1f)
+        {
+            int guaranteed = Mathf.FloorToInt(hitSpeed);
+            float frac = hitSpeed - guaranteed;
+            if (frac > 0f && Roll(frac)) guaranteed++;
+            return guaranteed;
+        }
+
+        attacker.weaponHitSpeedDebt += hitSpeed;
+        if (attacker.weaponHitSpeedDebt >= 1f)
+        {
+            attacker.weaponHitSpeedDebt -= 1f;
+            return 1;
+        }
+        return 0;
     }
 
     // --- Damage calculations (mirrors WeaponBaseDamage / CalcDamage / ThrowDamage) ---

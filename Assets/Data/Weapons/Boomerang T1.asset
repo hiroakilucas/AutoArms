@@ -13,11 +13,12 @@ MonoBehaviour:
   m_Name: Boomerang T1
   m_EditorClassIdentifier: 
   weaponName: Boomerang T1
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: 4c53836550868bc418f03f6a424a1607, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 4c53836550868bc418f03f6a424a1607, type: 3}
   damage: 5
   speedModifier: 1
   types: 06000000
+  isBoomerang: 1
   scale: 1
   attackAnimation: 0
   tier: 1
@@ -36,3 +37,4 @@ MonoBehaviour:
   disarmBonus: 0.5
   comboBonus: 0
   deflectBonus: 0
+  counterBonus: 0

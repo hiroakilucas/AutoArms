@@ -13,26 +13,29 @@ MonoBehaviour:
   m_Name: Book T2
   m_EditorClassIdentifier: 
   weaponName: Book T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 9
+  icon: {fileID: 21300000, guid: dbf5d07534a74744cb6b9df81fd7649f, type: 3}
+  inHandSprite: {fileID: 21300000, guid: dbf5d07534a74744cb6b9df81fd7649f, type: 3}
+  attackSprite: {fileID: 0}
+  damage: 10
   speedModifier: 1
   types: 0500000002000000
-  scale: 1
-  attackAnimation: 0
+  scale: 0.8
+  isBoomerang: 0
+  attackAnimation: 1
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000005, type: 2}
   dropOdds: 0
   hitSpeed: 1.2
   drawChance: 0.22
-  reach: 0
+  reach: -1.5
   critChanceBonus: 0
   critDamageMultiplier: 1.6
-  evasionBonus: 0.13
-  dexterityBonus: 0.23
+  evasionBonus: 0.15
+  dexterityBonus: 0.3
   reversalBonus: 0
   blockBonus: 0
   accuracyBonus: 0
   disarmBonus: 0
   comboBonus: 0.55
-  deflectBonus: 0.33
+  deflectBonus: 0.35
+  counterBonus: 0
