@@ -145,9 +145,9 @@ PlayerCombat.AttackRoutine()
 
 ### Background Aleatório (2026-07-05)
 
-`CombatSceneLoader.RandomizeArenaBackground()` roda no início de `Initialize()` (antes de qualquer outra coisa) — acha o GameObject `Colosseum arena` por nome (`GameObject.Find`, sem precisar de campo `[SerializeField]` wireado no Inspector), sorteia um nome entre os 51 arquivos de `Assets/Resources/BattleGround/` (movida de `Assets/BattleGround` — precisa estar dentro de uma pasta `Resources` pra `Resources.Load` funcionar) e troca o `SpriteRenderer.sprite`.
+`CombatSceneLoader.RandomizeArenaBackground()` roda no início de `Initialize()` (antes de qualquer outra coisa) — acha o GameObject `Colosseum arena` por nome (`GameObject.Find`, sem precisar de campo `[SerializeField]` wireado no Inspector), sorteia um nome entre os 50 arquivos de `Assets/Resources/BattleGround/` (movida de `Assets/BattleGround` — precisa estar dentro de uma pasta `Resources` pra `Resources.Load` funcionar) e troca o `SpriteRenderer.sprite`.
 
-Lista de nomes é **fixa no código** (`ArenaBackgroundNames`), não um `Resources.LoadAll` — a pasta inteira soma ~500MB (imagens 3840x2160), e `LoadAll` carregaria as 51 pra memória de uma vez só pra usar 1; `Resources.Load(nome)` carrega só a sorteada (~10MB). Adicionar um arquivo novo na pasta exige adicionar o nome na lista também (não é automático). Todos os 51 arquivos verificados com a mesma resolução (3840×2160) e mesmo `spritePixelsToUnits` (100) — trocar entre eles não muda o tamanho aparente em cena.
+Lista de nomes é **fixa no código** (`ArenaBackgroundNames`), não um `Resources.LoadAll` — a pasta inteira soma ~500MB (imagens 3840x2160), e `LoadAll` carregaria as 50 pra memória de uma vez só pra usar 1; `Resources.Load(nome)` carrega só a sorteada (~10MB). Adicionar um arquivo novo na pasta exige adicionar o nome na lista também (não é automático); removido `Terrace land` (usuário apagou o arquivo depois da implementação inicial). Todos os arquivos verificados com a mesma resolução (3840×2160) e mesmo `spritePixelsToUnits` (100) — trocar entre eles não muda o tamanho aparente em cena.
 
 ### Menu Character Preview
 

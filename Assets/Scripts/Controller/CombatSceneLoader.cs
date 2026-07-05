@@ -85,9 +85,9 @@ public class CombatSceneLoader : MonoBehaviour
     // ele já existe sozinho na cena com esse nome específico.
     private const string ArenaBackgroundObjectName = "Colosseum arena";
 
-    // Nomes dos 51 arquivos em Assets/Resources/BattleGround (movida de Assets/BattleGround pra
+    // Nomes dos 50 arquivos em Assets/Resources/BattleGround (movida de Assets/BattleGround pra
     // poder usar Resources.Load aqui), sem extensão. Lista fixa em vez de Resources.LoadAll —
-    // a pasta inteira soma ~500MB (imagens 3840x2160), e LoadAll carregaria todas as 51 pra
+    // a pasta inteira soma ~500MB (imagens 3840x2160), e LoadAll carregaria todas as 50 pra
     // memória de uma vez só pra usar 1; Resources.Load(nome) carrega só a sorteada (~10MB).
     // Adicionar um arquivo novo na pasta exige adicionar o nome aqui também (não é automático).
     private static readonly string[] ArenaBackgroundNames =
@@ -95,7 +95,7 @@ public class CombatSceneLoader : MonoBehaviour
         "5", "6", "Castle arena", "Colosseum arena", "Desert ruins", "Dragon dungeon 2",
         "Dragon dungeon 3", "Dragon dungeon 4", "Forest", "Horizontal Battle Backgrounds 2",
         "Horizontal Battle Backgrounds 3", "Horizontal Battle Backgrounds 4", "PRIMAVERA",
-        "Prison arena", "Ruins", "Sandy beach", "Terrace land", "Underground ruins", "WINTER",
+        "Prison arena", "Ruins", "Sandy beach", "Underground ruins", "WINTER",
         "Winter arena", "battle arena", "battle arena2", "castle", "castle bridge",
         "castle corridor", "castle hall", "crystal cave", "dead forest", "desert", "empty cave",
         "enchanted stones", "floating castle", "floating islands", "forest bridge", "forest hut",
