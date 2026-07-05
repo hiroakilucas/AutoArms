@@ -621,9 +621,13 @@ public class CombatSimulator
         }
 
         // 2. Pick up weapon if unarmed (40% chance) — só se Thief não tiver acontecido acima.
+        // A ARMA sorteada dentro do loadout é ponderada por WeaponData.drawChance (valores
+        // originais do My Brute, ex: Shuriken 33%/38%/43%) em vez de uniforme — pedido do
+        // usuário; o gate de 40% "ocorre um pickup neste turno" continua fixo, drawChance só
+        // decide QUAL arma entre as disponíveis (ver PickWeaponByDrawChance).
         if (!stoleWeapon && attacker.currentWeaponData == null && attacker.weaponLoadout.Count > 0 && Roll(0.40f))
         {
-            var w = attacker.weaponLoadout[_rng.Next(attacker.weaponLoadout.Count)];
+            var w = PickWeaponByDrawChance(attacker.weaponLoadout);
             attacker.currentWeaponData = w;
             attacker.weaponHitSpeedDebt = 1f; // ver comentário no Thief acima
             Emit(new CombatEvent { type = CombatEventType.PickupWeapon, playerIndex = attacker.index, weaponName = w.weaponName });
@@ -631,17 +635,15 @@ public class CombatSimulator
         // 2b. Weapon swap if armed (mesma 40% chance do pickup acima) — mecânica geral, vale pra
         // todo mundo (não é skill, pedido pelo usuário como ação independente de Hideaway). Joga
         // a arma atual no chão e ela some do loadout/HUB pra sempre (igual a WeaponDrop — não dá
-        // pra sacar de novo) e puxa uma nova arma aleatória do loadout (evita repetir a mesma, se
-        // houver outra opção). Como ninguém mais nasce armado (EquipStartingWeaponIfNeeded
-        // removido), este `else if` só pode mesmo disparar a partir do 2º turno em diante de
-        // quem já pegou arma antes (o 1º turno de todo mundo cai sempre no `if` acima, unarmed).
+        // pra sacar de novo) e puxa uma nova arma do loadout, também ponderada por drawChance
+        // (exclui a arma atual do sorteio). Como ninguém mais nasce armado
+        // (EquipStartingWeaponIfNeeded removido), este `else if` só pode mesmo disparar a partir
+        // do 2º turno em diante de quem já pegou arma antes (o 1º turno de todo mundo cai sempre
+        // no `if` acima, unarmed).
         else if (!stoleWeapon && attacker.currentWeaponData != null && attacker.weaponLoadout.Count > 1 && Roll(0.40f))
         {
             var oldWeapon = attacker.currentWeaponData;
-            int idx = _rng.Next(attacker.weaponLoadout.Count);
-            var newWeapon = attacker.weaponLoadout[idx];
-            if (newWeapon == oldWeapon)
-                newWeapon = attacker.weaponLoadout[(idx + 1) % attacker.weaponLoadout.Count];
+            var newWeapon = PickWeaponByDrawChance(attacker.weaponLoadout, exclude: oldWeapon);
 
             Emit(new CombatEvent { type = CombatEventType.WeaponSwap, playerIndex = attacker.index, weaponName = oldWeapon.weaponName });
             attacker.weaponLoadout.Remove(oldWeapon);
@@ -1284,14 +1286,21 @@ public class CombatSimulator
         // Reversal). Block é verificado antes de Dodge — o alvo da retaliação prioriza se
         // defender com a arma/escudo antes de tentar esquivar, mesma ordem do SimulateHit
         // principal (Counter → Block → Dodge) depois do Counter já ter sido descartado.
+        // isRetaliation = true: o retaliador (playerIndex) já não saiu do lugar pra chegar aqui
+        // (pode ter sido empurrado pelo knockback do hit/block que originou este Counter/
+        // Reversal) — sem essa flag, CombatPlayer tratava isso como um Dodge/Block comum e fazia
+        // ele "correr" até o alvo do zero antes de bloquear/esquivar de volta (bug real
+        // reportado pelo usuário, testando a arma Branch com 100% de reversalBonus: retaliador
+        // ficava preso fora da animação de Idle, hurt do alvo aparecia atrasado depois do
+        // TurnEnd já ter mandado ele de volta pro spawn).
         if (Roll(BlockChance(retaliator, target)))
         {
-            Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = retaliator.index, targetIndex = target.index });
+            Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = retaliator.index, targetIndex = target.index, isRetaliation = true });
             return;
         }
         if (Roll(DodgeChance(retaliator, target)))
         {
-            Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = retaliator.index, targetIndex = target.index });
+            Emit(new CombatEvent { type = CombatEventType.Dodge, playerIndex = retaliator.index, targetIndex = target.index, isRetaliation = true });
             return;
         }
 
@@ -1366,9 +1375,17 @@ public class CombatSimulator
             return;
         }
 
-        // Repulse: 30% de chance de deflectir o throw de volta para o lançador original.
-        // Não ativa se o defensor estiver enredado (Net — sem mobilidade pra rebater).
-        if (!defender.netEnsnared && defender.HasSkill("Repulse") && Roll(0.30f))
+        // Repulse: 30% de chance de deflectir o throw de volta para o lançador original (skill)
+        // + WeaponData.deflectBonus da arma que o DEFENSOR tem em mãos (ex: Racquet 0.5/0.53/
+        // 0.56, Frying Pan 0.4/0.43/0.46, Book/Fan/Sai também configuradas) — mesma ação de
+        // Repulse, só que como bônus por arma em vez de skill, pedido do usuário. Somados (mesmo
+        // padrão de Block/Dodge/Combo/Counter/Reversal: skill + arma). Não ativa se o defensor
+        // estiver enredado (Net — sem mobilidade pra rebater) nem sem nenhuma fonte de deflect
+        // (chance 0, Roll(0f) nunca dispara de qualquer forma, mas o guard evita computar
+        // CalcThrowDamage/SimulateRepulse à toa).
+        float deflectChance = (defender.HasSkill("Repulse") ? 0.30f : 0f)
+            + (defender.currentWeaponData?.deflectBonus ?? 0f);
+        if (!defender.netEnsnared && deflectChance > 0f && Roll(deflectChance))
         {
             SimulateRepulse(defender, attacker, weaponData);
             return;
@@ -2299,13 +2316,46 @@ public class CombatSimulator
         }
     }
 
+    // Sorteia uma arma do loadout ponderada por WeaponData.drawChance (valores originais do My
+    // Brute, ex: Shuriken T1/T2/T3 = 33%/41%/47%) em vez de uniforme entre todas — usado só no
+    // momento do Pickup/WeaponSwap (item 2/2b de SimulateTurn); o modelo "uma vez armado, fica
+    // armado até trocar/ser desarmado" continua igual, drawChance só decide QUAL arma sai do
+    // loadout nesse instante, não é re-rolado turno a turno. Armas com drawChance <= 0 (campo
+    // nunca preenchido em algum asset) ainda entram no sorteio com peso mínimo, pra não travar
+    // loadouts onde nada tenha o campo configurado.
+    private WeaponData PickWeaponByDrawChance(List<WeaponData> loadout, WeaponData exclude = null)
+    {
+        const float minWeight = 0.01f;
+        float totalWeight = 0f;
+        for (int i = 0; i < loadout.Count; i++)
+        {
+            if (loadout[i] == exclude) continue;
+            totalWeight += Mathf.Max(loadout[i].drawChance, minWeight);
+        }
+        if (totalWeight <= 0f) return null;
+
+        float roll = (float)(_rng.NextDouble() * totalWeight);
+        float cumulative = 0f;
+        WeaponData last = null;
+        for (int i = 0; i < loadout.Count; i++)
+        {
+            if (loadout[i] == exclude) continue;
+            cumulative += Mathf.Max(loadout[i].drawChance, minWeight);
+            last = loadout[i];
+            if (roll <= cumulative) return loadout[i];
+        }
+        return last; // fallback de arredondamento de ponto flutuante
+    }
+
     // --- Chance calculations (mirrors PlayerCombat methods) ---
 
     // Soma os valores-base de cada tag presente na arma (WeaponData.types é uma lista — uma
     // arma pode ter até 3 tags simultâneas) — ver tabela em CLAUDE.md. Tags sem entrada
-    // explícita (Blunt/Long, exceto onde passadas) contribuem 0; não existe mais um "default"
-    // genérico, cada bônus vem de uma tag específica.
-    private static float TagSum(WeaponData data, float sharp = 0f, float fast = 0f, float heavy = 0f, float thrown = 0f)
+    // explícita (Blunt, exceto onde passada) contribuem 0; não existe mais um "default"
+    // genérico, cada bônus vem de uma tag específica. `longTag` (não pode se chamar `long`,
+    // palavra reservada em C#) foi adicionado só pra ThrowChance — pedido do usuário pra armas
+    // Long (ex: Whip) também terem uma chance pequena de arremesso ocasional.
+    private static float TagSum(WeaponData data, float sharp = 0f, float fast = 0f, float heavy = 0f, float thrown = 0f, float longTag = 0f)
     {
         if (data == null) return 0f;
         float total = 0f;
@@ -2313,6 +2363,7 @@ public class CombatSimulator
         if (data.HasType(WeaponType.Fast))   total += fast;
         if (data.HasType(WeaponType.Heavy))  total += heavy;
         if (data.HasType(WeaponType.Thrown)) total += thrown;
+        if (data.HasType(WeaponType.Long))   total += longTag;
         return total;
     }
 
@@ -2330,15 +2381,22 @@ public class CombatSimulator
         float agiBonus      = Mathf.Max(0, defender.agility - 3) * 0.02f;
         float weaponEvasion = defender.currentWeaponData != null
             ? defender.currentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
-        // accuracy do atacante (Relentless +0.30) é o oposto de evasion — reduz a chance de
-        // esquiva do defensor em vez de aumentar a do próprio atacante.
+        // accuracy do atacante (Relentless +0.30, stat de PERSONAGEM/skill) é o oposto de
+        // evasion — reduz a chance de esquiva do defensor em vez de aumentar a do próprio
+        // atacante. Sistema separado de dexterityBonus abaixo (arma) — não mexer aqui.
         // Survival: +20% evasion, só enquanto hp == 1 (sai do estado se recuperar HP, e nunca
         // ativa em outro valor de HP, mesmo baixo) — checado vivo a cada chamada, sem flag fixa.
         float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
         // Bodybuilder: +10% evasion ("dexterity"), só enquanto empunha arma Heavy — checado
         // vivo contra a arma atual, igual ao Survival acima (sem flag fixa de ApplySkillStats).
         float bodybuilderBonus = (WeaponData.HasType(defender.currentWeaponData, WeaponType.Heavy) && defender.HasSkill("Bodybuilder")) ? 0.10f : 0f;
-        float total = baseChance + agiBonus + defender.evasion + weaponEvasion - attacker.accuracy + survivalBonus + bodybuilderBonus;
+        // dexterityBonus da arma do ATACANTE (campo por arma, ex: Branch -1.0) — termo negativo
+        // separado de attacker.accuracy acima: dexterity positivo dificulta o dodge do defensor
+        // (subtrai), dexterity negativo facilita (soma, já que -(-1) = +1). Auditado antes desta
+        // mudança: campo existia no WeaponData mas nunca era lido em lugar nenhum.
+        float attackerDexterityBonus = attacker.currentWeaponData != null
+            ? attacker.currentWeaponData.dexterityBonus : UnarmedStats.DexterityBonus;
+        float total = baseChance + agiBonus + defender.evasion + weaponEvasion - attacker.accuracy - attackerDexterityBonus + survivalBonus + bodybuilderBonus;
         return Mathf.Clamp(total, 0f, 0.60f);
     }
 
@@ -2351,7 +2409,14 @@ public class CombatSimulator
             ? defender.currentWeaponData.blockBonus : UnarmedStats.BlockBonus;
         // Survival: +20% block, mesma condição de hp == 1 do DodgeChance acima.
         float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
-        return weaponBonus + weaponBlockBonus + defender.blockBonus + survivalBonus;
+        // accuracyBonus da arma do ATACANTE (campo por arma, ex: Branch +2.0) — termo negativo:
+        // quanto maior o accuracy do atacante, menor a chance de block do defensor (o ataque
+        // "penetra" o block com mais frequência). Auditado antes desta mudança: campo existia no
+        // WeaponData mas nunca era lido em lugar nenhum. Sem clamp aqui (mesmo padrão de sempre
+        // desta fórmula) — Roll() com chance negativa simplesmente nunca dispara.
+        float attackerAccuracyBonus = attacker.currentWeaponData != null
+            ? attacker.currentWeaponData.accuracyBonus : UnarmedStats.AccuracyBonus;
+        return weaponBonus + weaponBlockBonus + defender.blockBonus + survivalBonus - attackerAccuracyBonus;
     }
 
     // Counter: atacante corre, ataca, e o defensor bate antes do hit conectar — cancela o
@@ -2387,8 +2452,16 @@ public class CombatSimulator
     }
 
     // comboCount = quantos hits extra de combo já aconteceram neste turno (0 = checagem do 1º hit extra).
-    // Decaimento ×0.5 por hit consecutivo: 1º normal, 2º ×0.5, 3º ×0.25... aplicado depois do clamp,
-    // para o teto de 35% valer como o pico (1º hit extra) e não ser "recuperado" pelo decaimento.
+    // Decaimento ×0.5 por hit consecutivo: 1º normal, 2º ×0.5, 3º ×0.25...
+    // SEM clamp no total antes do decaimento (era Mathf.Clamp(total, 0f, 0.60f) — teto de 60%
+    // aplicado ANTES do decaimento, o que arruinava armas com comboBonus extremo, ex: Branch com
+    // 400% de chance total: em vez de 400%→200%→100%→50%→25% pelos 5 primeiros hits extra, tudo
+    // ficava achatado em 60%→30%→15%→7.5%→3.75%, muito abaixo do "sempre comba nos primeiros
+    // hits" esperado — bug real reportado pelo usuário). Agora o decaimento age direto sobre o
+    // total bruto (pode passar de 100%, Roll() já trata isso como "sempre dispara" naturalmente);
+    // só o resultado FINAL (já decaído) é clampado em [0,1] por sanidade de probabilidade — não
+    // muda nenhum comportamento de Roll(), só evita guardar/logar um número tipo "4.0" numa
+    // variável que semanticamente é uma chance.
     private float ComboChance(PlayerState attacker, int comboCount = 0)
     {
         float baseChance = attacker.currentWeaponData == null
@@ -2397,8 +2470,8 @@ public class CombatSimulator
         float agiBonus    = Mathf.Max(0, attacker.agility - 3) * 0.008f;
         float weaponCombo = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.comboBonus : UnarmedStats.ComboBonus;
-        float total = Mathf.Clamp(baseChance + agiBonus + attacker.comboChanceBonus + weaponCombo, 0f, 0.60f);
-        return total * Mathf.Pow(0.5f, comboCount);
+        float total = baseChance + agiBonus + attacker.comboChanceBonus + weaponCombo;
+        return Mathf.Clamp(total * Mathf.Pow(0.5f, comboCount), 0f, 1f);
     }
 
     // Sticky Hands (defender): multiplica a chance final por (1 - stickyHands) — 50% reduz a
@@ -2423,12 +2496,16 @@ public class CombatSimulator
     // Hideaway: 50% fixo, substitui a soma por tag (não soma a ela) — valores oficiais do
     // LaBrute. Sticky Hands multiplica o resultado por (1 - stickyHands), seja a chance base ou
     // o fixo de Hideaway — dificulta jogar a própria arma fora até por acidente.
+    // Long soma 0.12 (pedido do usuário: TODA arma não-Thrown deve ter uma chance pequena de
+    // arremesso ocasional, incluindo Long — ex: Whip — igual ao My Brute original, onde
+    // qualquer arma podia ser arremessada eventualmente; Whip continua majoritariamente
+    // corpo-a-corpo, o arremesso é só um evento especial raro).
     private float ThrowChance(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null) return 0f;
         float chance = attacker.HasSkill("Hideaway")
             ? 0.50f
-            : TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f);
+            : TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f, longTag: 0.12f);
         return chance * (1f - attacker.stickyHands);
     }
 

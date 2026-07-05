@@ -13,33 +13,33 @@ MonoBehaviour:
   m_Name: Trident T2
   m_EditorClassIdentifier: 
   weaponName: Trident T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: 76d2a98cd47018a418dd79f65d74bdbd, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 76d2a98cd47018a418dd79f65d74bdbd, type: 3}
   attackSprite: {fileID: 0}
   attackScaleMultiplier: {x: 1, y: 1, z: 1}
   attackRotationOffset: {x: 0, y: 0, z: 0}
   showAttackTipEffect: 0
   attackTipOffset: {x: 0, y: 0, z: 0}
-  damage: 19
+  damage: 18
   speedModifier: 1
   types: 03000000
-  scale: 1
+  scale: 1.5
   isBoomerang: 0
-  attackAnimation: 0
+  attackAnimation: 2
   tier: 2
   previousTier: {fileID: 11400000, guid: bb20000000000000000000000000000e, type: 2}
   dropOdds: 0
   hitSpeed: 0.86
-  drawChance: 0.28
-  reach: 3
-  critChanceBonus: 0.08
-  critDamageMultiplier: 1.6
+  drawChance: 0.33
+  reach: 0.6
+  critChanceBonus: 0.1
+  critDamageMultiplier: 1.5
   evasionBonus: 0
   dexterityBonus: 0
-  reversalBonus: 0.08
+  reversalBonus: 0.1
   blockBonus: 0
   accuracyBonus: 0
-  disarmBonus: 0.23
+  disarmBonus: 0.3
   comboBonus: 0
   deflectBonus: 0
   counterBonus: 0.2

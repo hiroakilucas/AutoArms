@@ -13,27 +13,33 @@ MonoBehaviour:
   m_Name: Fan T3
   m_EditorClassIdentifier: 
   weaponName: Fan T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: 61aebdf6a627cf64d848f6a113501ae5, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 61aebdf6a627cf64d848f6a113501ae5, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 7
   speedModifier: 1
   types: 05000000
-  scale: 1
-  attackAnimation: 0
+  scale: 0.9
+  isBoomerang: 0
+  attackAnimation: 1
   tier: 3
   previousTier: {fileID: 11400000, guid: 5cd61e31017d4a34ba5a49d79acfc547, type: 2}
   dropOdds: 0
   hitSpeed: 4.29
-  drawChance: 0.43
-  reach: 0
+  drawChance: 0.47
+  reach: -0.8
   critChanceBonus: 0
-  critDamageMultiplier: 1.7
-  evasionBonus: 0.66
-  dexterityBonus: 0.56
-  reversalBonus: 0.56
+  critDamageMultiplier: 1.5
+  evasionBonus: 0.7
+  dexterityBonus: 0.6
+  reversalBonus: 0.6
   blockBonus: -0.5
   accuracyBonus: 0
   disarmBonus: -0.5
   comboBonus: 0.55
-  deflectBonus: 0.31
+  deflectBonus: 0.35
   counterBonus: 0

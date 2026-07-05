@@ -13,27 +13,33 @@ MonoBehaviour:
   m_Name: Branch T2
   m_EditorClassIdentifier: 
   weaponName: Branch T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 7
+  icon: {fileID: 21300000, guid: ff2b7b44503cd81498d524636d99da5f, type: 3}
+  inHandSprite: {fileID: 21300000, guid: ff2b7b44503cd81498d524636d99da5f, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  damage: 8
   speedModifier: 1
   types: 0500000002000000
-  scale: 1
-  attackAnimation: 0
+  scale: 1.4
+  isBoomerang: 0
+  attackAnimation: 1
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000006, type: 2}
   dropOdds: 0
   hitSpeed: 1.09
-  drawChance: 0.22
-  reach: 0
+  drawChance: 0.29
+  reach: -0.5
   critChanceBonus: 0
   critDamageMultiplier: 1.6
   evasionBonus: 0
-  dexterityBonus: -1
-  reversalBonus: 1.03
+  dexterityBonus: -0.2
+  reversalBonus: 1
   blockBonus: -0.5
-  accuracyBonus: 2.03
+  accuracyBonus: 3
   disarmBonus: 0
-  comboBonus: 2.05
+  comboBonus: 3
   deflectBonus: 0
   counterBonus: 0

@@ -6,8 +6,10 @@ public static class XpSystem
         public int  newLevel;
     }
 
-    // Correct formula matching the table: 1→2=6, 2→3=12, 3→4=20, 4→5=30, 5→6=42
-    public static int XpRequired(int level) => (level + 1) * (level + 2);
+    // Tabela pedida pelo usuário: 1→2=5, 2→3=6, 3→4=7, 4→5=8, 5→6=9, 6→7=10 (+1 por nível),
+    // depois 7→8=12, 8→9=14, 9→10=16, 10→11=18, 11→12=20, 12→13=22... (+2 por nível a partir
+    // do nível 7, sem teto — continua +2 indefinidamente). Substituiu (level+1)*(level+2).
+    public static int XpRequired(int level) => level <= 6 ? level + 4 : 2 * level - 2;
 
     public static LevelUpResult AddXP(PlayerProfile profile, int xpGained)
     {

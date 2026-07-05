@@ -24,7 +24,7 @@ MonoBehaviour:
   previousTier: {fileID: 11400000, guid: 644c5406336576d46827c109cedcda79, type: 2}
   dropOdds: 0
   hitSpeed: 10
-  drawChance: 0.43
+  drawChance: 0.47
   reach: 0
   critChanceBonus: 0
   critDamageMultiplier: 1.7

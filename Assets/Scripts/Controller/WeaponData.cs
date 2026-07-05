@@ -63,11 +63,14 @@ public class WeaponData : ScriptableObject
     public float accuracyBonus = 0f;
     public float disarmBonus = 0f;
     public float comboBonus = 0f;
+    // Deflect: chance de rebater um arremesso de volta pra quem jogou — mesma ação da skill
+    // Repulse (CombatSimulator.SimulateRepulse), só que como bônus por arma em vez de skill;
+    // soma com o 30% da skill se o defensor tiver as duas (Racquet/Frying Pan/Book/Fan/Sai já
+    // configuradas, ver CombatSimulator.SimulateThrow).
     public float deflectBonus = 0f;
     // Contra-ataque: defensor bate ANTES do golpe do atacante conectar, cancelando o hit (e o
     // resto do combo) — mesmo mecanismo de PlayerState.counter (skills Monk/Sixth Sense), só que
-    // como bônus por arma. Ainda sem efeito em nenhuma fórmula (CounterChance), reservado pra uso
-    // futuro — pedido do usuário: adicionar o campo em todas as armas, todas em 0 por enquanto.
+    // como bônus por arma. Soma em CounterChance (CombatSimulator.cs).
     public float counterBonus = 0f;
 
     // Checa se esta arma carrega a tag `flag` — uma arma pode ter até 3 tags simultâneas na

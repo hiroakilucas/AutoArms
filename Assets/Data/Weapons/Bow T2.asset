@@ -15,10 +15,16 @@ MonoBehaviour:
   weaponName: Bow T2
   icon: {fileID: 0}
   inHandSprite: {fileID: 0}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 14
   speedModifier: 1
   types: 06000000
-  scale: 1
+  scale: 1.4
+  isBoomerang: 0
   attackAnimation: 0
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000018, type: 2}

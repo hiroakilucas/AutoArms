@@ -82,7 +82,9 @@ Aplicado nos 3 pontos onde dano é calculado antes de `ApplyDamage` (mesmo padr�
 
 ### Repulse
 
-`CombatSimulator.SimulateThrow` verifica a skill logo após o check de pet-target e antes de `hitChance`, apenas quando o defensor **não** está enredado (`!defender.netEnsnared`): `if (!defender.netEnsnared && defender.HasSkill("Repulse") && Roll(0.30f))` → chama `SimulateRepulse` e faz `return`.
+`CombatSimulator.SimulateThrow` verifica logo após o check de pet-target e antes de `hitChance`, apenas quando o defensor **não** está enredado (`!defender.netEnsnared`): `deflectChance = (defender.HasSkill("Repulse") ? 0.30f : 0f) + (defender.currentWeaponData?.deflectBonus ?? 0f)` → `if (!defender.netEnsnared && deflectChance > 0f && Roll(deflectChance))` → chama `SimulateRepulse` e faz `return`.
+
+**`WeaponData.deflectBonus`** (2026-07-05) — mesma ação de Repulse, mas como bônus **por arma** empunhada pelo defensor em vez de skill; soma com o 30% da skill se o defensor tiver as duas (ex: alguém com Repulse segurando um Racquet com `deflectBonus: 0.56` deflecte com 86% de chance). Armas já calibradas: Racquet (0.5/0.53/0.56), Frying Pan (0.4/0.43/0.46), Book (0.3/0.35/0.4), Fan (0.25/0.28/0.31), Sai (0.25/0.28/0.31) — todas fazem sentido temático (objetos "achatados"/de aparar). `SimulateRepulse` em si não muda — o +5% de crit e o resto da mecânica abaixo valem igual não importa se o deflect veio da skill ou da arma.
 
 **Mecânica do deflect** (`SimulateRepulse(deflector, originalThrower, weaponData)`):
 

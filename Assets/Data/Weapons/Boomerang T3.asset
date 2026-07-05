@@ -15,17 +15,22 @@ MonoBehaviour:
   weaponName: Boomerang T3
   icon: {fileID: 21300000, guid: 14d7747688a86fa40b4b19d42f47ca41, type: 3}
   inHandSprite: {fileID: 21300000, guid: 14d7747688a86fa40b4b19d42f47ca41, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
   damage: 11
   speedModifier: 1
   types: 06000000
-  isBoomerang: 1
   scale: 1
+  isBoomerang: 1
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: c2041a40106630e49bc5a567169c9034, type: 2}
   dropOdds: 0
   hitSpeed: 3.75
-  drawChance: 0.27
+  drawChance: 0.38
   reach: 0
   critChanceBonus: 0
   critDamageMultiplier: 1.7

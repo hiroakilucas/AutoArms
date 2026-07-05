@@ -13,27 +13,33 @@ MonoBehaviour:
   m_Name: Knife T3
   m_EditorClassIdentifier: 
   weaponName: Knife T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 12
+  icon: {fileID: 21300000, guid: 299e16df319c94242bc58bd515f60ef7, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 299e16df319c94242bc58bd515f60ef7, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  damage: 13
   speedModifier: 1
   types: 0500000001000000
-  scale: 1
-  attackAnimation: 0
+  scale: 0.8
+  isBoomerang: 0
+  attackAnimation: 2
   tier: 3
   previousTier: {fileID: 11400000, guid: d0e03888db6519f44b45c11807a867d3, type: 2}
   dropOdds: 0
   hitSpeed: 2
-  drawChance: 0.43
-  reach: 0
-  critChanceBonus: 0.31
-  critDamageMultiplier: 1.7
-  evasionBonus: 0.16
-  dexterityBonus: 0
+  drawChance: 0.47
+  reach: -0.5
+  critChanceBonus: 0.25
+  critDamageMultiplier: 1.5
+  evasionBonus: 0.2
+  dexterityBonus: 0.6
   reversalBonus: 0
   blockBonus: 0
   accuracyBonus: 0
   disarmBonus: 0
-  comboBonus: 0.4
+  comboBonus: 0.5
   deflectBonus: 0
   counterBonus: 0

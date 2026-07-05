@@ -81,6 +81,12 @@ public class CombatEvent
     public bool  isCrit;
     public bool  isCombo;
     public bool  isThrow;
+    // Dodge/Block only — true quando o evento veio de SimulateRetaliation (o "attacker" deste
+    // evento é quem está RETALIANDO um Counter/Reversal, não iniciando um golpe novo — ele já
+    // não saiu do lugar, pode ter sido empurrado pelo knockback do hit/block anterior). Faz
+    // CombatPlayer pular RepositionIfNeeded (senão o retaliador "corre" até o alvo do nada,
+    // possivelmente de longe) mas ainda tocar o swing, mesmo padrão do case Counter/Reversal.
+    public bool  isRetaliation;
     public bool  isDodged;   // HasteAttack only — defender dodged the dash, no damage.
     public bool  isBlocked;  // HasteAttack only — defender blocked the dash, no damage.
     public bool  isFierceBrute; // Hit only — true when this hit consumed an active Fierce Brute buff (damage already doubled in CombatSimulator) — tells CombatPlayer to show the flash/×2 popup/destroy the attacker's aura.

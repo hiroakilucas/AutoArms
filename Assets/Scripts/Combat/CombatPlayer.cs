@@ -1505,6 +1505,16 @@ public class CombatPlayer : MonoBehaviour
                             var futureEvt = _events[j];
                             if (futureEvt.type == CombatEventType.TurnStart || futureEvt.type == CombatEventType.TurnEnd || futureEvt.type == CombatEventType.CombatEnd)
                                 break;
+                            // Se o próprio defensor retalia (Reversal/Counter) ANTES do Disarm
+                            // chegar, a arma dele ainda precisa existir pra essa retaliação —
+                            // não adianta a queda antecipada aqui, senão o reversal usaria uma
+                            // arma que já tinha "sumido" visualmente (bug real reportado pelo
+                            // usuário: viu a arma cair e DEPOIS um ataque reversal com a
+                            // propriedade dessa mesma arma, que não deveria mais existir). Cai no
+                            // caminho normal (sem lookahead) — o case Disarm mais à frente ainda
+                            // vai disparar a queda na hora certa, só que depois da retaliação.
+                            if ((futureEvt.type == CombatEventType.Reversal || futureEvt.type == CombatEventType.Counter) && futureEvt.playerIndex == evt.targetIndex)
+                                break;
                             if (futureEvt.type == CombatEventType.Disarm && futureEvt.targetIndex == evt.targetIndex)
                             {
                                 aheadDisarm = futureEvt;
@@ -1568,10 +1578,19 @@ public class CombatPlayer : MonoBehaviour
             case CombatEventType.Reversal:
                 if (defender != null)
                 {
-                    // Sem RepositionIfNeeded aqui: quem retalia (attacker deste evento) nunca
-                    // saiu do lugar — é o atacante original (defender deste evento) que correu
-                    // até ele. Counter/Reversal disparam antes de qualquer dano nesta troca
-                    // (ver SimulateHit), então não há knockback prévio que o tenha deslocado.
+                    // Counter: sem RepositionIfNeeded — dispara ANTES de qualquer dano nesta
+                    // troca (cancela o hit do atacante antes dele conectar), então quem retalia
+                    // nunca levou knockback nenhum, genuinamente não saiu do lugar.
+                    // Reversal é DIFERENTE (bug real reportado pelo usuário testando Branch,
+                    // 100% de reversalBonus): acontece DEPOIS de um Hit ou Block já resolvidos
+                    // (ver SimulateHit/CombatSimulator — Reversal só age depois de algo já ter
+                    // acontecido), e os dois aplicam knockback no retaliador (Hit: knockback
+                    // cheio; Block: 50%). Sem reposicionar, o retaliador podia golpear de longe,
+                    // fora de alcance — o "hit" do reversal só parecia registrar depois que outra
+                    // coisa (o retorno do atacante original ao spawn no TurnEnd) já tinha
+                    // acontecido, em vez de no instante do próprio golpe de volta.
+                    if (evt.type == CombatEventType.Reversal)
+                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
                     float retSwingMult = SwingSpeedMultiplier(attacker);
                     float retSlashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / retSwingMult;
@@ -1609,6 +1628,24 @@ public class CombatPlayer : MonoBehaviour
                     // limpo pelo Block que veio antes — chamada incondicional seguindo o mesmo
                     // padrão no-op-se-não-existir do Block/Dodge acima.
                     defender?.HideFierceBruteAura();
+
+                    // Bug real (achado por vídeo, não aparecia nos logs de posição): no Reversal
+                    // depois de um Hit, o defensor deste evento é o ATACANTE ORIGINAL — que
+                    // acabou de golpear e ainda está preso no estado Slashing (só sai via o
+                    // toggle de JumpStart, que só rola no TurnEnd DELE, ainda não alcançado nesta
+                    // troca). No .controller (verificado no da Medieval Warrior Girl), a transição
+                    // pro estado Hurt exige `Idle == true` E o trigger `Hurt` juntos, e pertence
+                    // só ao estado Idle (não é Any State) — preso em Slashing, o trigger Hurt não
+                    // encontra transição nenhuma pra consumir, e o defensor nunca reage
+                    // visualmente ao dano (sem flash, sem knockback aparente). Reversal-após-
+                    // bloqueio tem o mesmo problema (o Block anterior também não tira do
+                    // Slashing). Fix: `ForceIdleState()` no DEFENSOR, antes do Hurt — corte direto
+                    // pro estado Idle, SEM transição/blend nenhuma (1ª tentativa usava
+                    // PlayJumpStart, que toca o Jump Start de verdade e precisa de tempo real de
+                    // transição pra terminar — a duração curta não bastava, e o Hurt disparava
+                    // "no meio do pulo" em vez de imediatamente, bug real reportado pelo usuário).
+                    if (evt.type == CombatEventType.Reversal)
+                        defender.animationController.ForceIdleState();
 
                     StartCoroutine(defender.Knockback(retPushDir, retKbDist, retKbDur * t));
                     yield return StartCoroutine(defender.animationController.PlayHurt(retKbDur * t));
@@ -1679,6 +1716,10 @@ public class CombatPlayer : MonoBehaviour
                     // pula na hora certa). Bumerangue (evt.isThrow) é a exceção — o atacante já
                     // arremessou do lugar onde estava, sem correr nem sacar arma nenhuma; pular o
                     // reposicionamento/swing evita ele "correndo" pra perto do defensor do nada.
+                    // Retaliação (evt.isRetaliation, Dodge dentro de um Counter/Reversal) AINDA
+                    // reposiciona se precisar — o retaliador pode ter sido empurrado pelo
+                    // knockback do hit/block anterior (RepositionIfNeeded já é no-op se a
+                    // distância já for pequena, então não corre à toa quando não precisa).
                     float dodgeSwingMult = 1f;
                     float slashHalf = 0f;
                     if (!evt.isThrow)
@@ -1713,6 +1754,14 @@ public class CombatPlayer : MonoBehaviour
                         if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
                         SetWeaponSwingPose(attacker, false);
                     }
+
+                    // Retaliação: quem swingou (attacker) é o retaliador, não o dono do turno —
+                    // ele não vai ter um TurnEnd próprio nesta troca pra sair do estado Slashing
+                    // (única saída do Animator é o toggle de JumpStart, ver case Counter/Reversal).
+                    // Sem isso, o retaliador ficava preso fora do Idle (bug real reportado pelo
+                    // usuário, testando Branch com 100% de reversalBonus).
+                    if (evt.isRetaliation && attacker != null)
+                        yield return StartCoroutine(attacker.animationController.PlayJumpStart((attacker.settings?.jumpStartDuration ?? 0.02f) * t));
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
@@ -1722,6 +1771,8 @@ public class CombatPlayer : MonoBehaviour
                 {
                     // Mesma exceção do Dodge acima — bumerangue (evt.isThrow) nunca teve um swing
                     // melee pra sincronizar, então pula reposicionamento/trigger do atacante.
+                    // Retaliação (evt.isRetaliation) AINDA reposiciona se precisar, mesmo motivo
+                    // do Dodge acima — ver CombatEvent.isRetaliation.
                     float blockSwingMult = 1f;
                     float slashHalf = 0f;
                     if (!evt.isThrow)
@@ -1763,6 +1814,12 @@ public class CombatPlayer : MonoBehaviour
                         if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(1f);
                         SetWeaponSwingPose(attacker, false);
                     }
+
+                    // Retaliação: mesmo motivo do case Dodge acima — retaliador precisa do
+                    // toggle de JumpStart pra sair do Slashing, já que não vai ter um TurnEnd
+                    // próprio nesta troca.
+                    if (evt.isRetaliation && attacker != null)
+                        yield return StartCoroutine(attacker.animationController.PlayJumpStart((attacker.settings?.jumpStartDuration ?? 0.02f) * t));
                 }
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;

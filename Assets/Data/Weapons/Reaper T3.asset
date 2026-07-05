@@ -13,33 +13,33 @@ MonoBehaviour:
   m_Name: Reaper T3
   m_EditorClassIdentifier: 
   weaponName: Reaper T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: 3bf3a63251e6a4545927eba2c61b150a, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 3bf3a63251e6a4545927eba2c61b150a, type: 3}
   attackSprite: {fileID: 0}
   attackScaleMultiplier: {x: 1, y: 1, z: 1}
   attackRotationOffset: {x: 0, y: 0, z: 0}
   showAttackTipEffect: 0
   attackTipOffset: {x: 0, y: 0, z: 0}
-  damage: 42
+  damage: 36
   speedModifier: 1
   types: 030000000400000001000000
-  scale: 1
+  scale: 1.5
   isBoomerang: 0
-  attackAnimation: 0
+  attackAnimation: 1
   tier: 3
   previousTier: {fileID: 11400000, guid: ae512c0024509ff4da7f530b7236c3e0, type: 2}
   dropOdds: 0
   hitSpeed: 0.67
-  drawChance: 0.27
-  reach: 4
+  drawChance: 0.38
+  reach: 0.3
   critChanceBonus: 0
-  critDamageMultiplier: 1.7
+  critDamageMultiplier: 1.5
   evasionBonus: 0
   dexterityBonus: -0.4
   reversalBonus: 0
   blockBonus: 0
   accuracyBonus: 0
-  disarmBonus: 0.16
+  disarmBonus: 0.2
   comboBonus: 0.2
   deflectBonus: 0
   counterBonus: 0.4

@@ -13,33 +13,33 @@ MonoBehaviour:
   m_Name: Lance T3
   m_EditorClassIdentifier: 
   weaponName: Lance T3
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: 5ee25e9e396590a49ac0886734205ddb, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 5ee25e9e396590a49ac0886734205ddb, type: 3}
   attackSprite: {fileID: 0}
   attackScaleMultiplier: {x: 1, y: 1, z: 1}
   attackRotationOffset: {x: 0, y: 0, z: 0}
   showAttackTipEffect: 0
   attackTipOffset: {x: 0, y: 0, z: 0}
-  damage: 21
+  damage: 20
   speedModifier: 1
   types: 03000000
-  scale: 1
+  scale: 1.5
   isBoomerang: 0
-  attackAnimation: 0
+  attackAnimation: 2
   tier: 3
   previousTier: {fileID: 11400000, guid: 645e98ed83c51154584791268e11ced0, type: 2}
   dropOdds: 0
   hitSpeed: 1
-  drawChance: 0.27
-  reach: 3
-  critChanceBonus: 0.21000001
+  drawChance: 0.38
+  reach: 0.6
+  critChanceBonus: 0.35
   critDamageMultiplier: 1.7
   evasionBonus: 0
   dexterityBonus: 0
   reversalBonus: -0.1
   blockBonus: 0
   accuracyBonus: 0
-  disarmBonus: 0.16
+  disarmBonus: 0.2
   comboBonus: 0
   deflectBonus: 0
   counterBonus: 0.3

@@ -13,27 +13,33 @@ MonoBehaviour:
   m_Name: Broadsword T3
   m_EditorClassIdentifier: 
   weaponName: Broadsword T3
-  icon: {fileID: 21300000, guid: 2ad8556a0ea91ef44a9ba546110df565, type: 3}
-  inHandSprite: {fileID: 21300000, guid: 2ad8556a0ea91ef44a9ba546110df565, type: 3}
-  damage: 18
+  icon: {fileID: 21300000, guid: f3ed4edcd3607634eb4c9506c3e6243c, type: 3}
+  inHandSprite: {fileID: 21300000, guid: f3ed4edcd3607634eb4c9506c3e6243c, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  damage: 16
   speedModifier: 1
   types: 01000000
   scale: 1
-  attackAnimation: 0
+  isBoomerang: 0
+  attackAnimation: 1
   tier: 3
   previousTier: {fileID: 11400000, guid: b981cd02ba42206469c187d56f50e9c3, type: 2}
   dropOdds: 0
   hitSpeed: 1
-  drawChance: 0.43
-  reach: 0
-  critChanceBonus: 0.36
-  critDamageMultiplier: 1.7
+  drawChance: 0.47
+  reach: -0.4
+  critChanceBonus: 0.4
+  critDamageMultiplier: 1.5
   evasionBonus: 0
   dexterityBonus: 0
-  reversalBonus: 0.16
-  blockBonus: 0.21000001
+  reversalBonus: 0.2
+  blockBonus: 0.35
   accuracyBonus: 0
-  disarmBonus: 0.21000001
+  disarmBonus: 0.25
   comboBonus: 0
   deflectBonus: 0
   counterBonus: 0

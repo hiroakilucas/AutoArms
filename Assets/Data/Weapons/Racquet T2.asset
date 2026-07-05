@@ -13,27 +13,33 @@ MonoBehaviour:
   m_Name: Racquet T2
   m_EditorClassIdentifier: 
   weaponName: Racquet T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 8
+  icon: {fileID: 21300000, guid: a4c4e7d97db06584eb77d54ebc84fcdf, type: 3}
+  inHandSprite: {fileID: 21300000, guid: a4c4e7d97db06584eb77d54ebc84fcdf, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: -2}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  damage: 9
   speedModifier: 1
   types: 0500000002000000
   scale: 1
-  attackAnimation: 0
+  isBoomerang: 0
+  attackAnimation: 1
   tier: 2
   previousTier: {fileID: 11400000, guid: bb20000000000000000000000000001a, type: 2}
   dropOdds: 0
   hitSpeed: 1.5
-  drawChance: 0.22
-  reach: 1
+  drawChance: 0.29
+  reach: -0.4
   critChanceBonus: 0
   critDamageMultiplier: 1.6
-  evasionBonus: 0.13
+  evasionBonus: 0.15
   dexterityBonus: 0
-  reversalBonus: 1.03
-  blockBonus: 0.23
+  reversalBonus: 1
+  blockBonus: 0.25
   accuracyBonus: 0
   disarmBonus: 0
   comboBonus: 0
-  deflectBonus: 0.53
+  deflectBonus: 0.55
   counterBonus: 0

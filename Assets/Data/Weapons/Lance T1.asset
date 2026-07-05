@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Lance T1
   m_EditorClassIdentifier: 
   weaponName: Lance T1
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: fc6d977d2c751744cab16f758380b3bd, type: 3}
+  inHandSprite: {fileID: 21300000, guid: fc6d977d2c751744cab16f758380b3bd, type: 3}
   attackSprite: {fileID: 0}
   attackScaleMultiplier: {x: 1, y: 1, z: 1}
   attackRotationOffset: {x: 0, y: 0, z: 0}
@@ -23,15 +23,15 @@ MonoBehaviour:
   damage: 12
   speedModifier: 1
   types: 03000000
-  scale: 1
+  scale: 1.5
   isBoomerang: 0
-  attackAnimation: 0
+  attackAnimation: 2
   tier: 1
   previousTier: {fileID: 0}
   dropOdds: 0
   hitSpeed: 1
   drawChance: 0.17
-  reach: 3
+  reach: 0.6
   critChanceBonus: 0.15
   critDamageMultiplier: 1.5
   evasionBonus: 0

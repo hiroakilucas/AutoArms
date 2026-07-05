@@ -49,6 +49,20 @@ public class AnimationController : MonoBehaviour
         yield return new WaitForSeconds(duration);
     }
 
+    // Corte direto pro estado Idle, sem transição/blend nenhuma — usado quando o personagem
+    // precisa "sair" do Slashing pra receber um trigger que só tem transição de entrada a partir
+    // do Idle (ex: Hurt, ver CombatPlayer case Reversal) mas não pode mostrar NENHUMA animação
+    // de pulo antes (diferente de PlayJumpStart, que toca o Jump Start de verdade e precisa de
+    // tempo real de transição — insuficiente com durações curtas, causava o Hurt disparando "no
+    // meio do pulo" em vez de imediatamente, bug real reportado pelo usuário). Animator.Play(...)
+    // força o estado sem depender de nenhuma transição configurada no Controller.
+    public void ForceIdleState()
+    {
+        anim.SetBool("Idle", true);
+        anim.SetBool("Running", false);
+        anim.Play("Idle", 0, 0f);
+    }
+
     // Força Running=false junto de Idle=true — Medieval Warrior.controller tinha os dois bools
     // (Idle e Running) com m_DefaultBool: 1 (true) simultaneamente (Assassin Guy/Medieval
     // Warrior Girl já tinham os dois corretos em 0/false); sem nada zerando Running explicitamente,

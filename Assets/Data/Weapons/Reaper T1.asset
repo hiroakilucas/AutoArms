@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Reaper T1
   m_EditorClassIdentifier: 
   weaponName: Reaper T1
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: dffc0bade5db5bf4b81a82df10c39445, type: 3}
+  inHandSprite: {fileID: 21300000, guid: dffc0bade5db5bf4b81a82df10c39445, type: 3}
   attackSprite: {fileID: 0}
   attackScaleMultiplier: {x: 1, y: 1, z: 1}
   attackRotationOffset: {x: 0, y: 0, z: 0}
@@ -23,15 +23,15 @@ MonoBehaviour:
   damage: 24
   speedModifier: 1
   types: 030000000400000001000000
-  scale: 1
+  scale: 1.5
   isBoomerang: 0
-  attackAnimation: 0
+  attackAnimation: 1
   tier: 1
   previousTier: {fileID: 0}
   dropOdds: 0
   hitSpeed: 0.67
   drawChance: 0.17
-  reach: 4
+  reach: 0.4
   critChanceBonus: 0
   critDamageMultiplier: 1.5
   evasionBonus: 0

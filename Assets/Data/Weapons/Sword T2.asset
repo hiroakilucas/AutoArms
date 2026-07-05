@@ -13,27 +13,33 @@ MonoBehaviour:
   m_Name: Sword T2
   m_EditorClassIdentifier: 
   weaponName: Sword T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 38
+  icon: {fileID: 21300000, guid: a13b5ed289175a841a2283747a7d4866, type: 3}
+  inHandSprite: {fileID: 21300000, guid: a13b5ed289175a841a2283747a7d4866, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  damage: 36
   speedModifier: 1
   types: 01000000
-  scale: 1
-  attackAnimation: 0
+  scale: 1.4
+  isBoomerang: 0
+  attackAnimation: 1
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000009, type: 2}
   dropOdds: 0
   hitSpeed: 0.67
-  drawChance: 0.38000003
+  drawChance: 0.41
   reach: 0
-  critChanceBonus: 0.08
-  critDamageMultiplier: 1.6
+  critChanceBonus: 0.1
+  critDamageMultiplier: 1.5
   evasionBonus: -0.2
-  dexterityBonus: -0.1
+  dexterityBonus: 0.15
   reversalBonus: 0
   blockBonus: 0
   accuracyBonus: -0.2
-  disarmBonus: 0.13
+  disarmBonus: 0.15
   comboBonus: 0
   deflectBonus: 0
   counterBonus: 0

@@ -13,27 +13,33 @@ MonoBehaviour:
   m_Name: Scimitar T2
   m_EditorClassIdentifier: 
   weaponName: Scimitar T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  damage: 14
+  icon: {fileID: 21300000, guid: 2078200ff5206fd469866db8435735b6, type: 3}
+  inHandSprite: {fileID: 21300000, guid: 2078200ff5206fd469866db8435735b6, type: 3}
+  attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  damage: 15
   speedModifier: 1
   types: 01000000
   scale: 1
-  attackAnimation: 0
+  isBoomerang: 0
+  attackAnimation: 1
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000008, type: 2}
   dropOdds: 0
   hitSpeed: 1.5
-  drawChance: 0.28
-  reach: 0
-  critChanceBonus: 0.08
-  critDamageMultiplier: 1.6
+  drawChance: 0.33
+  reach: -0.4
+  critChanceBonus: 0.1
+  critDamageMultiplier: 1.5
   evasionBonus: 0
-  dexterityBonus: 0.23
+  dexterityBonus: 0.3
   reversalBonus: 0
-  blockBonus: 0.13
+  blockBonus: 0.15
   accuracyBonus: 0
   disarmBonus: 0
-  comboBonus: 0.2
+  comboBonus: 0.25
   deflectBonus: 0
   counterBonus: 0
