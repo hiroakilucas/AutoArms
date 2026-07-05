@@ -2019,6 +2019,16 @@ public class CombatPlayer : MonoBehaviour
                             attacker.weaponHandler.EquipSpecific(weaponToRethrow);
                             attacker.SetAttackerLayers();
                         }
+
+                        // Pausa extra só entre ciclos de arremesso repetido (hitSpeed alto) —
+                        // sem isso, a reação do defensor (Hit/Dodge/Block/Miss, que já termina
+                        // com o comboDelay padrão do melee) emendava direto no próximo
+                        // "Throwing" sem nenhum respiro extra, parecendo uma rajada confusa em
+                        // vez de etapas distintas (lança → reação → lança → reação...). Pedido
+                        // explícito do usuário depois de testar a Shuriken (hitSpeed 10.0). Não
+                        // afeta o 1º arremesso do turno (arma já equipada, cai fora deste if)
+                        // nem armas com só 1 arremesso por turno (nunca reequipam aqui).
+                        yield return new WaitForSeconds((attacker.settings?.comboDelay ?? 0.15f) * t);
                     }
 
                     // Capture sprite/position/scale before Unequip destroys the in-hand weapon object.

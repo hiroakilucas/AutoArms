@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-05: Adicionada pausa extra entre ciclos de arremesso repetido (hitSpeed alto, ex: Shuriken 10.0) — reportado como "muito corrido", sem respiro entre a reação do defensor e o próximo lançamento. `CombatPlayer` espera mais um `comboDelay` só nesses ciclos repetidos, sem afetar o ritmo do melee normal nem do 1º arremesso do turno
+
 - 2026-07-05: Corrigido arremesso "invisível" a partir do 2º ciclo do mesmo turno (armas Thrown com hitSpeed alto, ex: Shuriken 10.0) — o simulador reatribuía `currentWeaponData` internamente antes de cada arremesso, mas nada reequipava a arma visualmente depois do 1º `Unequip`, então o `FlyingWeapon` nunca era criado. `CombatPlayer` agora reequipa (`EquipSpecific` + `SetAttackerLayers`) se a arma não estiver equipada no início do case `ThrowWeapon`, fazendo "surgir outra shuriken" na mão antes de cada arremesso seguinte
 
 - 2026-07-05: Background da arena aleatório a cada combate — `Assets/BattleGround` movida pra `Assets/Resources/BattleGround` (51 imagens), `CombatSceneLoader.RandomizeArenaBackground()` sorteia uma e troca o `SpriteRenderer` do `Colosseum arena` no início de `Initialize()`. Usa `Resources.Load` por nome (lista fixa no código) em vez de `LoadAll`, pra não carregar os ~500MB da pasta inteira de uma vez só
