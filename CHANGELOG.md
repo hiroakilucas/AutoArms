@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-05: Corrigido "throw a mais" visual na Shuriken (achado com log de debug, dados já estavam 100% corretos) — reequipar a arma ANTES da pausa entre ciclos deixava o personagem parado segurando a shuriken nova por meio segundo, lido como um 1º arremesso (postura) seguido do arremesso de fato. Reequipamento movido pro final da pausa, junto do trigger de `Throwing`
+
 - 2026-07-05: 3 ajustes na Shuriken pedidos pelo usuário — pausa entre ciclos de arremesso aumentada de ×1 pra ×3 comboDelay (ainda "muito corrido"); mira do arremesso generalizada pra acertar o centro do corpo em vez do pé do defensor (era só pro bumerangue, `BoomerangHitHeight` virou `ThrownHitHeight`); novo `WeaponData.straightThrow` força o arremesso em linha reta sem arco/pêndulo (Shuriken T1/T2/T3 ligado, resto das armas Thrown sem mudança)
 
 - 2026-07-05: Adicionada pausa extra entre ciclos de arremesso repetido (hitSpeed alto, ex: Shuriken 10.0) — reportado como "muito corrido", sem respiro entre a reação do defensor e o próximo lançamento. `CombatPlayer` espera mais um `comboDelay` só nesses ciclos repetidos, sem afetar o ritmo do melee normal nem do 1º arremesso do turno

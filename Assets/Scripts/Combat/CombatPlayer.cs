@@ -2013,13 +2013,6 @@ public class CombatPlayer : MonoBehaviour
                     // DEFENSOR), por isso o SetAttackerLayers() de novo logo depois.
                     if (attacker.weaponHandler.CurrentWeaponData == null)
                     {
-                        var weaponToRethrow = FindWeaponByName(attacker.weaponHandler.loadout, evt.weaponName);
-                        if (weaponToRethrow != null)
-                        {
-                            attacker.weaponHandler.EquipSpecific(weaponToRethrow);
-                            attacker.SetAttackerLayers();
-                        }
-
                         // Pausa extra só entre ciclos de arremesso repetido (hitSpeed alto) —
                         // sem isso, a reação do defensor (Hit/Dodge/Block/Miss, que já termina
                         // com o comboDelay padrão do melee) emendava direto no próximo
@@ -2031,6 +2024,20 @@ public class CombatPlayer : MonoBehaviour
                         // cai fora deste if) nem armas com só 1 arremesso por turno (nunca
                         // reequipam aqui).
                         yield return new WaitForSeconds((attacker.settings?.comboDelay ?? 0.15f) * 3f * t);
+
+                        // Reequipa só agora, no finalzinho da pausa — não antes dela. Reequipar
+                        // ANTES da pausa deixava o personagem parado segurando a shuriken nova
+                        // por quase meio segundo antes do arremesso de verdade, e isso lia como
+                        // um "1º arremesso" (postura de preparar/segurar) seguido do arremesso de
+                        // fato — duas poses pra uma ação só (bug real reportado pelo usuário:
+                        // "animação de 2 throw, só lança 1 shuriken"). Agora a arma só aparece na
+                        // mão junto do trigger de arremesso, sem pose intermediária pra confundir.
+                        var weaponToRethrow = FindWeaponByName(attacker.weaponHandler.loadout, evt.weaponName);
+                        if (weaponToRethrow != null)
+                        {
+                            attacker.weaponHandler.EquipSpecific(weaponToRethrow);
+                            attacker.SetAttackerLayers();
+                        }
                     }
 
                     // Capture sprite/position/scale before Unequip destroys the in-hand weapon object.
