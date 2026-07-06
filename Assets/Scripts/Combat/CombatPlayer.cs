@@ -1986,9 +1986,20 @@ public class CombatPlayer : MonoBehaviour
                 yield return new WaitForSeconds(repSlashHalf);
                 if (repSlashMult != 1f) attacker?.animationController.SetSpeed(1f);
 
-                // Sair do estado Slashing — mesmo padrão de Counter/Reversal (PlayJumpStart sem JumpTo)
+                // Sair do estado Slashing — mesmo padrão de Counter/Reversal (PlayJumpStart sem
+                // JumpTo). Diferença real encontrada no .controller (Medieval Warrior Girl,
+                // verificado): a transição Jump Start → Idle exige JumpStart==false E Idle==true
+                // simultaneamente. Counter/Reversal nunca mexe no bool Idle (fica true, valor de
+                // repouso) — funciona só com o toggle de JumpStart. Repulse tinha chamado
+                // SetIdle(false) antes do swing (pra permitir o trigger de Slashing) e nunca
+                // revertia — Idle ficava preso em false pra sempre, travando o deflector em Jump
+                // Start (bug real reportado pelo usuário testando Repulse vs Shuriken). Fix:
+                // Idle=true antes do PlayJumpStart, já satisfeito quando JumpStart voltar a false.
                 if (attacker != null)
+                {
+                    attacker.animationController.SetIdle(true);
                     yield return StartCoroutine(attacker.animationController.PlayJumpStart(repJumpDur));
+                }
 
                 yield return new WaitForSeconds((attacker?.settings?.comboDelay ?? 0.15f) * t);
                 break;
