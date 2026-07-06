@@ -119,6 +119,13 @@ public class CombatPlayer : MonoBehaviour
     // si fica mais curto/rápido.
     private const float ThrowFlightDuration = 0.25f;
 
+    // Escala fixa da flecha decorativa do Bow (WeaponData.projectileSprite) — independente do
+    // WeaponData.scale da arma (esse é calibrado pro tamanho do ARCO em mãos, não da flecha; usar
+    // o mesmo valor deixava a flecha "muito grande", reportado pelo usuário). Mesmo padrão de
+    // ChefPizzaScale abaixo (projétil decorativo com tamanho próprio, não herdado da arma/skill).
+    // Chute inicial — calibrar visualmente no Editor se ainda não estiver no tamanho certo.
+    private const float ArrowProjectileScale = 0.3f;
+
     // Bumerangue: em vez de parar no ponto de impacto e só voltar quando o case BoomerangReturn
     // for processado (o que deixava a arma parada, imóvel, durante todo o Hit/knockback do meio
     // — sentido como uma "travada" pelo usuário), o próprio case ThrowWeapon já dispara o voo de
@@ -579,6 +586,14 @@ public class CombatPlayer : MonoBehaviour
                     // não da própria. Ver comentário completo em CalcAttackPosition.
                     var nextEvt = (_currentEventIndex + 1 < _events.Count) ? _events[_currentEventIndex + 1] : null;
                     PlayerCombat reachOwner = (nextEvt != null && nextEvt.type == CombatEventType.Counter) ? defender : attacker;
+
+                    // Bow (Ranged): fica parado, não corre até o alvo — pedido do usuário ("ele
+                    // deveria ficar no lugar pq o bow é ranged"). Só quando o alcance em jogo é o
+                    // PRÓPRIO do atacante (reachOwner == attacker); se um Counter vem a seguir,
+                    // reachOwner já virou o defensor — nesse caso o atacante ainda precisa entrar
+                    // no alcance de quem vai de fato conectar o golpe.
+                    if (reachOwner == attacker && IsRangedWeapon(attacker))
+                        break;
 
                     Vector2 attackPos = CalcAttackPosition(attacker, defender, reachOwner);
                     yield return StartCoroutine(
@@ -1409,7 +1424,9 @@ public class CombatPlayer : MonoBehaviour
 
                         if (!evt.isThrow)
                         {
-                            float distToPet = Vector2.Distance(attacker.transform.position, hitPet.transform.position);
+                            // Bow (Ranged): não corre até o pet — mesmo motivo do defensor
+                            // principal, ver IsRangedWeapon.
+                            float distToPet = IsRangedWeapon(attacker) ? 0f : Vector2.Distance(attacker.transform.position, hitPet.transform.position);
                             if (distToPet > 1.0f)
                             {
                                 Vector3 hitPetStopPos = CalcPetStopPosition(attacker.transform.position, hitPet.transform.position, CharacterPetReach(hitPet.petType));
@@ -1476,7 +1493,10 @@ public class CombatPlayer : MonoBehaviour
                     // swing or wait out slashHalf again; apply the impact immediately instead.
                     if (!evt.isThrow)
                     {
-                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+                        // Bow (Ranged): não corre até o defensor, ver IsRangedWeapon — ainda faz
+                        // o resto (trigger/pose), só sem o deslocamento.
+                        if (!IsRangedWeapon(attacker))
+                            yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
                         // Fierce Brute: pose de braço levantado (power-up) AQUI — já depois do
                         // reposicionamento, ou seja, na posição certa ao lado do defensor — em
@@ -1603,7 +1623,8 @@ public class CombatPlayer : MonoBehaviour
                     // fora de alcance — o "hit" do reversal só parecia registrar depois que outra
                     // coisa (o retorno do atacante original ao spawn no TurnEnd) já tinha
                     // acontecido, em vez de no instante do próprio golpe de volta.
-                    if (evt.type == CombatEventType.Reversal)
+                    // Bow (Ranged): retaliador com arco não corre até o alvo, ver IsRangedWeapon.
+                    if (evt.type == CombatEventType.Reversal && !IsRangedWeapon(attacker))
                         yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
                     float retSwingMult = SwingSpeedMultiplier(attacker);
@@ -1701,7 +1722,8 @@ public class CombatPlayer : MonoBehaviour
                         float dodgeSwingMultPet = SwingSpeedMultiplier(attacker);
                         float slashHalfPet = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMultPet;
 
-                        float distToPet = Vector2.Distance(attacker.transform.position, dodgePet.transform.position);
+                        // Bow (Ranged): não corre até o pet, ver IsRangedWeapon.
+                        float distToPet = IsRangedWeapon(attacker) ? 0f : Vector2.Distance(attacker.transform.position, dodgePet.transform.position);
                         if (distToPet > 1.0f)
                             yield return StartCoroutine(attacker.animationController.PlayRun(CalcPetStopPosition(attacker.transform.position, dodgePet.transform.position, CharacterPetReach(dodgePet.petType)), (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
 
@@ -1738,7 +1760,9 @@ public class CombatPlayer : MonoBehaviour
                     float slashHalf = 0f;
                     if (!evt.isThrow)
                     {
-                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+                        // Bow (Ranged): não corre até o defensor, ver IsRangedWeapon.
+                        if (!IsRangedWeapon(attacker))
+                            yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
                         string trigger = SwingTrigger(attacker);
                         dodgeSwingMult = SwingSpeedMultiplier(attacker);
@@ -1796,7 +1820,9 @@ public class CombatPlayer : MonoBehaviour
                         slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / blockSwingMult;
 
                         // Same reasoning as Dodge: sync the attacker's swing with the moment of impact.
-                        yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
+                        // Bow (Ranged): não corre até o defensor, ver IsRangedWeapon.
+                        if (!IsRangedWeapon(attacker))
+                            yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
                         if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
                         attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
                         yield return new WaitForSeconds(slashHalf);
@@ -2944,6 +2970,13 @@ public class CombatPlayer : MonoBehaviour
         return null;
     }
 
+    // Bow (Ranged): não corre até o alvo pra golpear — pedido do usuário, "ele deveria ficar no
+    // lugar pq o bow é ranged" (relatado depois de ver o atacante correndo e fazendo Slashing
+    // igual a qualquer arma corpo-a-corpo). Usado pra pular RunToDefender/RepositionIfNeeded nos
+    // cases Hit/Dodge/Block/Counter/Reversal, mesmo padrão de guard que evt.isThrow já tinha.
+    private static bool IsRangedWeapon(PlayerCombat p) =>
+        WeaponData.HasType(p?.weaponHandler?.CurrentWeaponData, WeaponType.Ranged);
+
     // Mirrors ComboStrikeRoutine's reposition step (legacy path) — só a 1ª ação do turno tinha
     // RunToDefender; combo hits após uma esquiva ou knockback do hit anterior deixavam o
     // defensor mais longe, e nada recolocava o atacante perto antes do próximo swing/dodge/block.
@@ -3131,7 +3164,29 @@ public class CombatPlayer : MonoBehaviour
             StartCoroutine(PlayWeaponTipEffect(attacker.weaponHandler.GetAttackTipWorldPosition()));
 
         if (attacking && projectileTarget.HasValue && attacker.weaponHandler.CurrentWeaponData?.projectileSprite != null)
+        {
+            // Bow (Ranged): não corre até o alvo (ver IsRangedWeapon), então o ângulo até o
+            // defensor varia turno a turno — gira a arma pra apontar de verdade pro alvo, em vez
+            // de confiar só no attackRotationOffset fixo do asset (que só fazia sentido pra quem
+            // sempre parava a uma distância/ângulo fixo do oponente, como no melee). Pedido do
+            // usuário: "a mão da arma fica alinhada com o defensor".
+            AimWeaponAt(attacker, projectileTarget.Value);
             StartCoroutine(PlayProjectileEffect(attacker, projectileTarget.Value, t));
+        }
+    }
+
+    // Gira o GameObject da arma em mão em espaço MUNDO (não local — independe de qualquer
+    // flip/escala do personagem) pra apontar na direção de worldTarget. Chamado depois de
+    // SetAttackPose acima, que mexe em localEulerAngles — a rotação em mundo aplicada aqui
+    // sobrescreve isso de propósito (mira de verdade > offset fixo por asset).
+    private void AimWeaponAt(PlayerCombat attacker, Vector3 worldTarget)
+    {
+        var weaponObj = attacker.weaponHandler.CurrentWeapon;
+        if (weaponObj == null) return;
+        Vector2 dir = (Vector2)(worldTarget - weaponObj.transform.position);
+        if (dir.sqrMagnitude < 0.0001f) return;
+        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+        weaponObj.transform.rotation = Quaternion.Euler(0, 0, angle);
     }
 
     // Bow: flecha decorativa que voa da ponta da arma até o alvo, sem a arma em si sair da mão
@@ -3151,7 +3206,7 @@ public class CombatPlayer : MonoBehaviour
         var go = new GameObject("Projectile");
         go.transform.position   = launchPos;
         go.transform.rotation   = Quaternion.Euler(0, 0, flightAngle);
-        go.transform.localScale = Vector3.one * data.scale;
+        go.transform.localScale = Vector3.one * ArrowProjectileScale;
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite           = data.projectileSprite;
         sr.sortingLayerName = "Weapons";

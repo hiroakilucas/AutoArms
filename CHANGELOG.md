@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-06: 2 ajustes no Bow depois do 1º teste — atacante não corre mais até o defensor pra atacar (`IsRangedWeapon` pula `RunToDefender`/`RepositionIfNeeded` em 7 pontos, mantendo o resto do swing), com mira dinâmica nova (`AimWeaponAt`, gira a arma em espaço mundo pra apontar de verdade pro alvo, já que a distância/ângulo agora variam); flecha reduzida de tamanho (`ArrowProjectileScale = 0.3f`, independente do `scale` da arma)
+
 - 2026-07-06: Implementada animação de arco e flecha pro Bow — trocada a tag `Thrown` (placeholder errado, fazia o arco inteiro "voar" até o defensor) por `Ranged` de verdade, caindo no fluxo de melee normal. Novo `WeaponData.projectileSprite` (flecha) viaja da ponta da arma até o defensor sem a arma sair da mão, reusando o sistema de 2 frames do Whip (`attackSprite`/`attackRotationOffset`) pra pose de "erguer o arco". Ligado nos 6 pontos que tocam `SetWeaponSwingPose` (Hit/Dodge/Block/Counter/Reversal, pet e principal)
 
 - 2026-07-05: Confirmado pelo usuário — `ThrowFlightDuration = 0.25f` resolveu de vez o "throw a mais" da Shuriken/arremessos repetidos

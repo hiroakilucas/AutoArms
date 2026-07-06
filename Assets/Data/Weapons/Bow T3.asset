@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ed0c7a0e125c40a42b05fdb965dc5526, type: 3}
   m_Name: Bow T3
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   weaponName: Bow T3
   icon: {fileID: 21300000, guid: 41148e35c5e65984eabdddf262731092, type: 3}
   inHandSprite: {fileID: 21300000, guid: 41148e35c5e65984eabdddf262731092, type: 3}
@@ -21,7 +21,7 @@ MonoBehaviour:
   showAttackTipEffect: 0
   attackTipOffset: {x: 0.5, y: 0.2, z: 0}
   projectileSprite: {fileID: 21300000, guid: e6e1d123533f70447835ad0cb0778c54, type: 3}
-  damage: 18
+  damage: 20
   speedModifier: 1
   types: 07000000
   scale: 1.4
@@ -32,16 +32,16 @@ MonoBehaviour:
   previousTier: {fileID: 11400000, guid: c3a45ac2029eab6439b0fcba9d6bf88e, type: 2}
   dropOdds: 0
   hitSpeed: 2.67
-  drawChance: 0.27
+  drawChance: 0.38
   reach: 0
   critChanceBonus: 0
-  critDamageMultiplier: 1.7
-  evasionBonus: 0.16
+  critDamageMultiplier: 1.5
+  evasionBonus: 0.2
   dexterityBonus: 0
   reversalBonus: 0
   blockBonus: -0.1
   accuracyBonus: 0
   disarmBonus: 0
-  comboBonus: 0.4
+  comboBonus: 0.5
   deflectBonus: 0
   counterBonus: 0
