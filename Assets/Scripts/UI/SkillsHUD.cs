@@ -84,6 +84,13 @@ public class SkillsHUD : MonoBehaviour
         var layout = go.AddComponent<HorizontalLayoutGroup>();
         layout.childAlignment        = _isPlayer1 ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight;
         layout.spacing               = 4f;
+        // Sem isso (default true), o LayoutGroup sobrescreve o sizeDelta de 80x80 setado em
+        // AddIcon com o "preferred size" de cada ícone — que colapsa pra ~0, já que Image sozinha
+        // não implementa ILayoutElement com tamanho próprio. O fundo/ícone somem, só o texto de
+        // usos (TextMeshProUGUI, Overflow por padrão, não clipa ao rect) continua visível fora do
+        // container colapsado — mesmo padrão já corrigido em WeaponHUD.cs.
+        layout.childControlWidth     = false;
+        layout.childControlHeight    = false;
         layout.childForceExpandWidth  = false;
         layout.childForceExpandHeight = false;
         layout.padding               = new RectOffset(4, 4, 4, 4);
@@ -99,7 +106,13 @@ public class SkillsHUD : MonoBehaviour
         rootRect.sizeDelta = new Vector2(iconSize, iconSize);
         root.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.45f);
 
-        if (skill.icon != null)
+        // T2/T3 nunca têm icon próprio (ver SkillTierGenerator) — sobe a cadeia previousTier
+        // até achar um, mesmo padrão já usado em CombatResultPanel/CharacterPanel/
+        // MainMenuCharacterPreview e no sprite de arma em WeaponHandler.EquipSpecific.
+        var iconSource = skill;
+        while (iconSource != null && iconSource.icon == null) iconSource = iconSource.previousTier;
+
+        if (iconSource != null && iconSource.icon != null)
         {
             var sprGo = new GameObject("Icon");
             sprGo.transform.SetParent(root.transform, false);
@@ -108,7 +121,7 @@ public class SkillsHUD : MonoBehaviour
             sprRect.anchorMax = new Vector2(0.95f, 0.95f);
             sprRect.offsetMin = sprRect.offsetMax = Vector2.zero;
             var img = sprGo.AddComponent<Image>();
-            img.sprite = skill.icon;
+            img.sprite = iconSource.icon;
             img.preserveAspect = true;
         }
 
