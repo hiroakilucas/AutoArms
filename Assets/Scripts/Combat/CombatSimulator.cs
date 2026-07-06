@@ -502,8 +502,8 @@ public class CombatSimulator
         if (flashFloodSkill != null && attacker.flashFloodUsesRemaining > 0
             && attacker.weaponLoadout.Count >= flashFloodMinWeapons && Roll(flashFloodSkill.bonusValue1 > 0f ? flashFloodSkill.bonusValue1 : 0.17f))
         {
-            defender.lastSuperUsed = "Flash Flood"; // Mimic tracking
-            defender.superActivationHistory.Add("Flash Flood"); // Mimic T3 tracking
+            attacker.lastSuperUsed = "Flash Flood"; // Mimic tracking
+            attacker.superActivationHistory.Add("Flash Flood"); // Mimic T3 tracking
             SimulateFlashFlood(attacker, defender);
             EmitTurnEnd(attacker);
             return;
@@ -515,8 +515,8 @@ public class CombatSimulator
         var hasteSkillCheck = attacker.GetSkillData("Haste");
         if (hasteSkillCheck != null && attacker.hasteUsesRemaining > 0 && Roll(hasteSkillCheck.bonusValue1 > 0f ? hasteSkillCheck.bonusValue1 : 0.23f))
         {
-            defender.lastSuperUsed = "Haste"; // Mimic tracking
-            defender.superActivationHistory.Add("Haste"); // Mimic T3 tracking
+            attacker.lastSuperUsed = "Haste"; // Mimic tracking
+            attacker.superActivationHistory.Add("Haste"); // Mimic T3 tracking
             SimulateHaste(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
@@ -530,8 +530,8 @@ public class CombatSimulator
         var piledriverSkillCheck = attacker.GetSkillData("Piledriver");
         if (piledriverSkillCheck != null && attacker.piledriverUsesRemaining > 0 && Roll(piledriverSkillCheck.bonusValue1 > 0f ? piledriverSkillCheck.bonusValue1 : 0.17f))
         {
-            defender.lastSuperUsed = "Piledriver"; // Mimic tracking
-            defender.superActivationHistory.Add("Piledriver"); // Mimic T3 tracking
+            attacker.lastSuperUsed = "Piledriver"; // Mimic tracking
+            attacker.superActivationHistory.Add("Piledriver"); // Mimic T3 tracking
             SimulatePiledriver(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
@@ -631,7 +631,7 @@ public class CombatSimulator
             supers.Add(() => {
                 int br = attacker.fierceBruteUsesRemaining;
                 TryActivateFierceBrute(attacker);
-                if (attacker.fierceBruteUsesRemaining < br) { defender.lastSuperUsed = "Fierce Brute"; defender.superActivationHistory.Add("Fierce Brute"); }
+                if (attacker.fierceBruteUsesRemaining < br) { attacker.lastSuperUsed = "Fierce Brute"; attacker.superActivationHistory.Add("Fierce Brute"); }
                 return false;
             });
         if (attacker.HasSkill("Bomb") && attacker.bombUsesRemaining > 0)
@@ -640,7 +640,7 @@ public class CombatSimulator
             supers.Add(() => {
                 int tp = attacker.tragicPotionUsesRemaining;
                 TryActivateTragicPotion(attacker);
-                if (attacker.tragicPotionUsesRemaining < tp) { defender.lastSuperUsed = "Tragic Potion"; defender.superActivationHistory.Add("Tragic Potion"); }
+                if (attacker.tragicPotionUsesRemaining < tp) { attacker.lastSuperUsed = "Tragic Potion"; attacker.superActivationHistory.Add("Tragic Potion"); }
                 return false;
             });
         if (attacker.HasSkill("Vampirism") && attacker.vampirismUsesRemaining > 0)
@@ -1806,8 +1806,8 @@ public class CombatSimulator
         if (attacker.netUsesRemaining <= 0 || !Roll(netSkill != null && netSkill.bonusValue1 > 0f ? netSkill.bonusValue1 : 0.50f)) return false;
 
         attacker.netUsesRemaining--;
-        defender.lastSuperUsed = "Net";
-        defender.superActivationHistory.Add("Net"); // Mimic T3 tracking
+        attacker.lastSuperUsed = "Net";
+        attacker.superActivationHistory.Add("Net"); // Mimic T3 tracking
 
         // Alvo: prioridade total nos pets — se houver qualquer pet vivo e não-enredado do
         // defensor, a rede SEMPRE pega um deles (aleatório entre os disponíveis). Só vai no
@@ -1866,8 +1866,8 @@ public class CombatSimulator
         if (attacker.bombUsesRemaining <= 0 || !Roll(bombSkill != null && bombSkill.bonusValue1 > 0f ? bombSkill.bonusValue1 : 0.17f)) return false;
 
         attacker.bombUsesRemaining--;
-        defender.lastSuperUsed = "Bomb";
-        defender.superActivationHistory.Add("Bomb"); // Mimic T3 tracking
+        attacker.lastSuperUsed = "Bomb";
+        attacker.superActivationHistory.Add("Bomb"); // Mimic T3 tracking
         int bombDmgMin = bombSkill != null && bombSkill.bonusValue2 > 0f ? Mathf.RoundToInt(bombSkill.bonusValue2) : 15;
         int bombDmgMax = bombSkill != null && bombSkill.bonusValue3 > 0f ? Mathf.RoundToInt(bombSkill.bonusValue3) : 25;
         int rawDamage = _rng.Next(bombDmgMin, bombDmgMax + 1); // Next(min, max) é max-exclusivo
@@ -1986,8 +1986,8 @@ public class CombatSimulator
         if (!Roll(vampirismSkill != null && vampirismSkill.bonusValue1 > 0f ? vampirismSkill.bonusValue1 : 0.33f)) return false;
 
         attacker.vampirismUsesRemaining--;
-        defender.lastSuperUsed = "Vampirism";
-        defender.superActivationHistory.Add("Vampirism"); // Mimic T3 tracking
+        attacker.lastSuperUsed = "Vampirism";
+        attacker.superActivationHistory.Add("Vampirism"); // Mimic T3 tracking
 
         float vampirismFraction = vampirismSkill != null && vampirismSkill.bonusValue3 > 0f ? vampirismSkill.bonusValue3 : 0.25f;
         int missingHp = attacker.maxHp - attacker.hp;
@@ -2048,8 +2048,8 @@ public class CombatSimulator
         if (!Roll(cryOfTheDamnedSkill != null && cryOfTheDamnedSkill.bonusValue1 > 0f ? cryOfTheDamnedSkill.bonusValue1 : 0.44f)) return;
 
         attacker.cryOfTheDamnedUsesRemaining--;
-        defender.lastSuperUsed = "Cry of the Damned";
-        defender.superActivationHistory.Add("Cry of the Damned"); // Mimic T3 tracking
+        attacker.lastSuperUsed = "Cry of the Damned";
+        attacker.superActivationHistory.Add("Cry of the Damned"); // Mimic T3 tracking
         Emit(new CombatEvent { type = CombatEventType.CryOfTheDamned, playerIndex = attacker.index });
 
         float perPetExpelChance = cryOfTheDamnedSkill != null && cryOfTheDamnedSkill.bonusValue2 > 0f ? cryOfTheDamnedSkill.bonusValue2 : 0.50f;
@@ -2075,8 +2075,8 @@ public class CombatSimulator
         if (livingPets.Count == 0) return;
 
         attacker.hypnosisUsesRemaining--;
-        defender.lastSuperUsed = "Hypnosis";
-        defender.superActivationHistory.Add("Hypnosis"); // Mimic T3 tracking
+        attacker.lastSuperUsed = "Hypnosis";
+        attacker.superActivationHistory.Add("Hypnosis"); // Mimic T3 tracking
         Emit(new CombatEvent { type = CombatEventType.Hypnosis, playerIndex = attacker.index });
 
         int idx = livingPets[_rng.Next(livingPets.Count)];
@@ -2117,8 +2117,8 @@ public class CombatSimulator
         if (!Roll(0.67f)) return;
 
         attacker.tamerUsesRemaining--;
-        defender.lastSuperUsed = "Tamer";
-        defender.superActivationHistory.Add("Tamer"); // Mimic T3 tracking
+        attacker.lastSuperUsed = "Tamer";
+        attacker.superActivationHistory.Add("Tamer"); // Mimic T3 tracking
 
         int choice  = _rng.Next(pets.Count);
         var carcass = pets[choice];
@@ -2166,8 +2166,8 @@ public class CombatSimulator
         if (targetPet == null || !Roll(0.33f)) return;
 
         attacker.treatUsesRemaining--;
-        defender.lastSuperUsed = "Treat";
-        defender.superActivationHistory.Add("Treat"); // Mimic T3 tracking
+        attacker.lastSuperUsed = "Treat";
+        attacker.superActivationHistory.Add("Treat"); // Mimic T3 tracking
 
         int heal = targetPet.maxHp / 2;
         targetPet.hp          = System.Math.Min(targetPet.hp + heal, targetPet.maxHp);

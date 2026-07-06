@@ -16,14 +16,13 @@ MonoBehaviour:
   characterPrefab: {fileID: 1154517427754006, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
   previewIcon: {fileID: 21300000, guid: 0e5279db325c3214f876949ad1cfcc67, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
-  weapons:
-  - {fileID: 11400000, guid: bb200000000000000000000000000016, type: 2}
+  weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 60
+  maxHealth: 65
   str: 3
   agility: 6
-  speed: 5
+  speed: 4
   armor: 0
   evasion: 0
   accuracy: 0
@@ -34,7 +33,9 @@ MonoBehaviour:
   reversalAfterBlock: 0
   criticalChance: 0
   hitSpeed: 1
-  skills: []
+  skills:
+  - {fileID: 11400000, guid: 64c7d62ad6b4c894ea6a00ff18c91db8, type: 2}
+  - {fileID: 11400000, guid: 04d0ee7066616e84bbdb1d09da3cf3e8, type: 2}
   pets: 
   level: 1
   winRate: 0

@@ -82,7 +82,7 @@ public static class SkillAssetGenerator
 
         // Relacionadas a Pets
         new SkillDef { fileName = "skill_hypnosis",           skillName = "Hypnosis",             description = "38% por turno: hipnotiza um pet inimigo vivo (90% de chance) — o pet troca permanentemente para o seu time (1x por luta)",                 category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
-        new SkillDef { fileName = "skill_cry_of_the_damned",  skillName = "Cry of the Damned",    description = "44% por turno: grito sobrenatural expulsa cada pet inimigo vivo com 50% de chance — o pet abandona a partida para sempre (2x por luta)", category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 2 },
+        new SkillDef { fileName = "skill_cry_of_the_damned",  skillName = "Cry of the Damned",    description = "44% por turno: grito sobrenatural expulsa cada pet inimigo vivo com 50% de chance — o pet abandona a partida para sempre (1x por luta)", category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 1 },
         new SkillDef { fileName = "skill_tamer",              skillName = "Tamer",                description = "Pets mais fortes e com mais HP",                             category = SkillCategory.Super,          activationType = SkillActivationType.Active,  usesPerFight = 4 },
         new SkillDef { fileName = "skill_treat",              skillName = "Treat",                description = "33% por turno: alimenta o pet aliado mais fraco (prioriza enredados), curando 50% do HP máximo, aplicando escudo de 1 golpe e forçando ataque imediato (4x por luta)", category = SkillCategory.Super, activationType = SkillActivationType.Active, usesPerFight = 4 },
     };
@@ -128,6 +128,18 @@ public static class SkillAssetGenerator
 
             EditorUtility.SetDirty(skill);
             allSkills.Add(skill);
+        }
+
+        // Inclui os T2/T3 já gerados por SkillTierGenerator (não fazem parte de Defs[], que só
+        // lista os T1) — sem isso, rodar esta tool depois de "Rebuild Skill Database From
+        // Folder" apagava silenciosamente os tiers do database (bug real: SkillDatabase.asset
+        // voltava a ter só os 53 T1, escondendo upgrades T2/T3 do level-up até alguém lembrar de
+        // rodar o rebuild de novo).
+        var guids = AssetDatabase.FindAssets("t:SkillData", new[] { folder });
+        foreach (var guid in guids)
+        {
+            var s = AssetDatabase.LoadAssetAtPath<SkillData>(AssetDatabase.GUIDToAssetPath(guid));
+            if (s != null && s.tier > 1) allSkills.Add(s);
         }
 
         // Create or update SkillDatabase
