@@ -1426,7 +1426,7 @@ public class CombatPlayer : MonoBehaviour
                             // Pose de ataque (ex: Whip estalando) só no finalzinho do swing, bem
                             // perto do impacto — não desde o início — pra dar a impressão de
                             // "chicotada" em vez de ficar esticado o swing inteiro.
-                            SetWeaponSwingPose(attacker, true);
+                            SetWeaponSwingPose(attacker, true, hitPet.transform.position, t);
                         }
 
                         Vector3 petPopupPos = hitPet.transform.position + Vector3.up * 0.8f;
@@ -1491,7 +1491,7 @@ public class CombatPlayer : MonoBehaviour
                         yield return new WaitForSeconds(slashHalf);
                         // Pose de ataque só no finalzinho do swing (impressão de "chicotada"), ver
                         // mesmo comentário no case Hit (pet) acima.
-                        SetWeaponSwingPose(attacker, true);
+                        SetWeaponSwingPose(attacker, true, defender.transform.position + Vector3.up * ThrownHitHeight, t);
                     }
 
                     // Impact moment: damage, hurt animation, knockback, and popup all fire
@@ -1613,7 +1613,7 @@ public class CombatPlayer : MonoBehaviour
                     attacker?.GetComponent<Animator>()?.SetTrigger(retTrigger);
                     yield return new WaitForSeconds(retSlashHalf);
                     // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
-                    SetWeaponSwingPose(attacker, true);
+                    SetWeaponSwingPose(attacker, true, defender.transform.position + Vector3.up * ThrownHitHeight, t);
 
                     Vector2 retPushDir = ComputePushDir(attacker, defender);
                     float   retKbDist  = attacker?.settings?.knockbackDistance ?? 0.5f;
@@ -1710,7 +1710,7 @@ public class CombatPlayer : MonoBehaviour
                         attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
                         yield return new WaitForSeconds(slashHalfPet);
                         // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
-                        SetWeaponSwingPose(attacker, true);
+                        SetWeaponSwingPose(attacker, true, dodgePet.transform.position, t);
 
                         DamagePopup.SpawnDodge(dodgePet.transform.position + Vector3.up * 0.8f);
                         attacker?.HideFierceBruteAura();
@@ -1748,7 +1748,7 @@ public class CombatPlayer : MonoBehaviour
                         slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMult;
                         yield return new WaitForSeconds(slashHalf);
                         // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
-                        SetWeaponSwingPose(attacker, true);
+                        SetWeaponSwingPose(attacker, true, defender.transform.position + Vector3.up * ThrownHitHeight, t);
                     }
 
                     Vector3 dodgePopupPos = defender.transform.position + Vector3.up * 1.5f
@@ -1801,7 +1801,7 @@ public class CombatPlayer : MonoBehaviour
                         attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
                         yield return new WaitForSeconds(slashHalf);
                         // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
-                        SetWeaponSwingPose(attacker, true);
+                        SetWeaponSwingPose(attacker, true, defender.transform.position + Vector3.up * ThrownHitHeight, t);
                     }
 
                     Vector3 blockPopupPos = defender.transform.position + Vector3.up * 1.5f
@@ -3117,7 +3117,10 @@ public class CombatPlayer : MonoBehaviour
     // de todo SetTrigger(Slashing/SlashingDagger) melee (true) e desfeito quando o swing termina
     // (false). No-op pra qualquer arma sem attackSprite configurado (sprite único de sempre).
     // Instância (não mais static) porque dispara a faísca da ponta via StartCoroutine.
-    private void SetWeaponSwingPose(PlayerCombat attacker, bool attacking)
+    // projectileTarget/t: usados só pelo Bow (WeaponData.projectileSprite) — a flecha "solta" no
+    // mesmo instante em que a pose de ataque liga (arco erguido/puxado). Parâmetros opcionais
+    // pra não quebrar as chamadas antigas (pet/sem alvo definido não passam nada, sem efeito).
+    private void SetWeaponSwingPose(PlayerCombat attacker, bool attacking, Vector3? projectileTarget = null, float t = 1f)
     {
         if (attacker?.weaponHandler == null) return;
         attacker.weaponHandler.SetAttackPose(attacking);
@@ -3126,6 +3129,38 @@ public class CombatPlayer : MonoBehaviour
         // ataque liga, nunca ao desligar.
         if (attacking && attacker.weaponHandler.CurrentWeaponData != null && attacker.weaponHandler.CurrentWeaponData.showAttackTipEffect)
             StartCoroutine(PlayWeaponTipEffect(attacker.weaponHandler.GetAttackTipWorldPosition()));
+
+        if (attacking && projectileTarget.HasValue && attacker.weaponHandler.CurrentWeaponData?.projectileSprite != null)
+            StartCoroutine(PlayProjectileEffect(attacker, projectileTarget.Value, t));
+    }
+
+    // Bow: flecha decorativa que voa da ponta da arma até o alvo, sem a arma em si sair da mão
+    // (diferente do FlyingWeapon de arremesso, que desequipa) — pedido do usuário: "levantar o
+    // bow com o braço, e sair uma flecha em direção ao oponente". Fire-and-forget (StartCoroutine
+    // sem yield na chamada) — puramente decorativo, não deve atrasar o resto da resolução do
+    // golpe (dano/hurt/popup já resolvem no fluxo normal do Hit).
+    private IEnumerator PlayProjectileEffect(PlayerCombat attacker, Vector3 targetPos, float t)
+    {
+        var data = attacker.weaponHandler.CurrentWeaponData;
+        if (data?.projectileSprite == null) yield break;
+
+        Vector3 launchPos = attacker.weaponHandler.GetAttackTipWorldPosition();
+        Vector3 flightDir   = (targetPos - launchPos).normalized;
+        float   flightAngle = Mathf.Atan2(flightDir.y, flightDir.x) * Mathf.Rad2Deg;
+
+        var go = new GameObject("Projectile");
+        go.transform.position   = launchPos;
+        go.transform.rotation   = Quaternion.Euler(0, 0, flightAngle);
+        go.transform.localScale = Vector3.one * data.scale;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite           = data.projectileSprite;
+        sr.sortingLayerName = "Weapons";
+        sr.sortingOrder     = 10;
+
+        // rotate:false — a flecha já sai apontada na direção certa (flightAngle acima), não
+        // precisa do giro contínuo de 540°/s que FlyWeapon aplica pra armas Thrown (shuriken etc.).
+        yield return StartCoroutine(attacker.FlyWeapon(go.transform, launchPos, targetPos, 0.25f * t, rotate: false));
+        Destroy(go);
     }
 
     private static Texture2D _sparkTexture;

@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-06: Implementada animação de arco e flecha pro Bow — trocada a tag `Thrown` (placeholder errado, fazia o arco inteiro "voar" até o defensor) por `Ranged` de verdade, caindo no fluxo de melee normal. Novo `WeaponData.projectileSprite` (flecha) viaja da ponta da arma até o defensor sem a arma sair da mão, reusando o sistema de 2 frames do Whip (`attackSprite`/`attackRotationOffset`) pra pose de "erguer o arco". Ligado nos 6 pontos que tocam `SetWeaponSwingPose` (Hit/Dodge/Block/Counter/Reversal, pet e principal)
+
 - 2026-07-05: Confirmado pelo usuário — `ThrowFlightDuration = 0.25f` resolveu de vez o "throw a mais" da Shuriken/arremessos repetidos
 
 - 2026-07-05: Corrigida a causa REAL do "throw a mais" (as 2 tentativas anteriores não resolviam porque o bug não era no C#) — o clipe de animação "Throwing" tem 0.4s de duração com loop ativado, e o código segurava a animação por 0.45s (0.05s a mais), fazendo ela reiniciar um 2º loop sozinha antes de conseguir sair pro Idle — o personagem "arremessava de novo" visualmente sem soltar nenhuma arma. Nova constante `ThrowFlightDuration = 0.35f` (era 0.45f) fica dentro do clipe, sem precisar de um 2º loop

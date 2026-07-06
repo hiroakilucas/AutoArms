@@ -25,6 +25,11 @@ public class WeaponData : ScriptableObject
     // WeaponHandler.GetAttackTipWorldPosition().
     public bool showAttackTipEffect = false;
     public Vector3 attackTipOffset = Vector3.zero;
+    // Projétil decorativo (ex: flecha do Bow) que voa da ponta da arma (attackTipOffset) até o
+    // defensor no instante em que o attackSprite liga — diferente de armas Thrown, a ARMA em si
+    // nunca sai da mão, só este sprite separado viaja até o alvo. null (default) = nenhuma arma
+    // nova ganha isso sem configurar (sem projétil nenhum, comportamento de sempre).
+    public Sprite projectileSprite;
     public int damage;
     public float speedModifier;
 

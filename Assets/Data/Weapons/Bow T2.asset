@@ -11,20 +11,22 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ed0c7a0e125c40a42b05fdb965dc5526, type: 3}
   m_Name: Bow T2
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier:
   weaponName: Bow T2
-  icon: {fileID: 0}
-  inHandSprite: {fileID: 0}
-  attackSprite: {fileID: 0}
+  icon: {fileID: 21300000, guid: a3a6290013d0e714ab6f42ba52447a1f, type: 3}
+  inHandSprite: {fileID: 21300000, guid: a3a6290013d0e714ab6f42ba52447a1f, type: 3}
+  attackSprite: {fileID: 21300000, guid: a3a6290013d0e714ab6f42ba52447a1f, type: 3}
   attackScaleMultiplier: {x: 1, y: 1, z: 1}
-  attackRotationOffset: {x: 0, y: 0, z: 0}
+  attackRotationOffset: {x: 0, y: 0, z: 25}
   showAttackTipEffect: 0
-  attackTipOffset: {x: 0, y: 0, z: 0}
+  attackTipOffset: {x: 0.5, y: 0.2, z: 0}
+  projectileSprite: {fileID: 21300000, guid: 026775f96305f674face659de5d562b9, type: 3}
   damage: 14
   speedModifier: 1
-  types: 06000000
+  types: 07000000
   scale: 1.4
   isBoomerang: 0
+  straightThrow: 0
   attackAnimation: 0
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000018, type: 2}
