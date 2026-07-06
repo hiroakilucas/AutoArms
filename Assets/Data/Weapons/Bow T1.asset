@@ -24,7 +24,7 @@ MonoBehaviour:
   damage: 10
   speedModifier: 1
   types: 07000000
-  scale: 1
+  scale: 1.4
   isBoomerang: 0
   straightThrow: 0
   attackAnimation: 0
