@@ -1512,10 +1512,10 @@ public class CombatPlayer : MonoBehaviour
 
                         // Bow (Ranged): sem clipe de "erguer o arco" dedicado (usuário ainda não
                         // criou), então nem dispara Slashing — o corpo fica parado em Idle e só
-                        // a ARMA se move (AimWeaponAt, dentro de SetWeaponSwingPose) + a flecha.
-                        // Reportado pelo usuário: "a animação está errada, está usando o
-                        // slashing" — Slashing era um giro de espada lateral, visualmente errado
-                        // pra um arco parado.
+                        // a ARMA se move (mira dinâmica gradual, dentro de PlayProjectileEffect)
+                        // + a flecha. Reportado pelo usuário: "a animação está errada, está
+                        // usando o slashing" — Slashing era um giro de espada lateral,
+                        // visualmente errado pra um arco parado.
                         if (!IsRangedWeapon(attacker))
                         {
                             string trigger = SwingTrigger(attacker);
@@ -3194,30 +3194,15 @@ public class CombatPlayer : MonoBehaviour
             StartCoroutine(PlayWeaponTipEffect(attacker.weaponHandler.GetAttackTipWorldPosition()));
 
         if (attacking && projectileTarget.HasValue && attacker.weaponHandler.CurrentWeaponData?.projectileSprite != null)
-        {
-            // Bow (Ranged): não corre até o alvo (ver IsRangedWeapon), então o ângulo até o
-            // defensor varia turno a turno — gira a arma pra apontar de verdade pro alvo, em vez
-            // de confiar só no attackRotationOffset fixo do asset (que só fazia sentido pra quem
-            // sempre parava a uma distância/ângulo fixo do oponente, como no melee). Pedido do
-            // usuário: "a mão da arma fica alinhada com o defensor".
-            AimWeaponAt(attacker, projectileTarget.Value);
             StartCoroutine(PlayProjectileEffect(attacker, projectileTarget.Value, t));
-        }
     }
 
-    // Gira o GameObject da arma em mão em espaço MUNDO (não local — independe de qualquer
-    // flip/escala do personagem) pra apontar na direção de worldTarget. Chamado depois de
-    // SetAttackPose acima, que mexe em localEulerAngles — a rotação em mundo aplicada aqui
-    // sobrescreve isso de propósito (mira de verdade > offset fixo por asset).
-    private void AimWeaponAt(PlayerCombat attacker, Vector3 worldTarget)
-    {
-        var weaponObj = attacker.weaponHandler.CurrentWeapon;
-        if (weaponObj == null) return;
-        Vector2 dir = (Vector2)(worldTarget - weaponObj.transform.position);
-        if (dir.sqrMagnitude < 0.0001f) return;
-        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-        weaponObj.transform.rotation = Quaternion.Euler(0, 0, angle);
-    }
+    // Duração/ângulo do "erguer o arco" antes de soltar a flecha — pedido do usuário depois de
+    // ver o pulo instantâneo de rotação: "faça um movimento sutil em cada flecha, de baixo para
+    // frente até sair a flecha". BowDrawStartOffset é graus ABAIXO do ângulo de mira final (chute
+    // inicial, calibrar visualmente); BowDrawDuration é quanto tempo esse "levantar" leva.
+    private const float BowDrawStartOffset = -35f;
+    private const float BowDrawDuration    = 0.15f;
 
     // Bow: flecha decorativa que voa da ponta da arma até o alvo, sem a arma em si sair da mão
     // (diferente do FlyingWeapon de arremesso, que desequipa) — pedido do usuário: "levantar o
@@ -3228,6 +3213,34 @@ public class CombatPlayer : MonoBehaviour
     {
         var data = attacker.weaponHandler.CurrentWeaponData;
         if (data?.projectileSprite == null) yield break;
+
+        // Gira o GameObject da arma em mão em espaço MUNDO (não local — independe de flip/
+        // escala do personagem) num movimento gradual "de baixo pra frente" até apontar de
+        // verdade pro alvo — mira dinâmica, já que o atacante não corre mais até um alcance
+        // fixo (ver IsRangedWeapon), então o ângulo até o defensor varia turno a turno. Um
+        // salto instantâneo aqui (1ª tentativa) ficava "estranho"/parecia travado quando o
+        // ângulo mal mudava de turno pra turno (defensor também parado); o movimento gradual
+        // deixa claro que a arma está agindo de novo a cada tiro, mesmo mirando quase no
+        // mesmo lugar.
+        var weaponObj = attacker.weaponHandler.CurrentWeapon;
+        if (weaponObj != null)
+        {
+            Vector2 aimDir = (Vector2)(targetPos - weaponObj.transform.position);
+            if (aimDir.sqrMagnitude > 0.0001f)
+            {
+                float aimAngle   = Mathf.Atan2(aimDir.y, aimDir.x) * Mathf.Rad2Deg;
+                float startAngle = aimAngle + BowDrawStartOffset;
+                float drawDur    = BowDrawDuration * t;
+                float elapsed    = 0f;
+                while (elapsed < drawDur)
+                {
+                    weaponObj.transform.rotation = Quaternion.Euler(0, 0, Mathf.LerpAngle(startAngle, aimAngle, elapsed / drawDur));
+                    elapsed += Time.deltaTime;
+                    yield return null;
+                }
+                weaponObj.transform.rotation = Quaternion.Euler(0, 0, aimAngle);
+            }
+        }
 
         Vector3 launchPos = attacker.weaponHandler.GetAttackTipWorldPosition();
         Vector3 flightDir   = (targetPos - launchPos).normalized;

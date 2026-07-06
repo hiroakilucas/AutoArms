@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-06: Mira do Bow virou movimento gradual em vez de salto instantâneo — o salto (`AimWeaponAt`, removido) parecia "travado, sempre apontando pra frente" porque a distância/ângulo até o defensor mal muda de turno pra turno (o atacante não corre mais). Nova lógica dentro de `PlayProjectileEffect` gira a arma de baixo pra cima (`Mathf.LerpAngle`, ~0.15s) até o ângulo de mira antes de soltar a flecha, deixando o movimento visível a cada tiro
+
 - 2026-07-06: Bow ainda disparava o trigger "Slashing" (giro de espada) mesmo depois de parar de correr até o alvo — visualmente errado pra um arco parado. `IsRangedWeapon` agora também pula `SwingTrigger`/`SetTrigger`/`SetSpeed` nos 6 pontos de swing (Hit/Dodge/Block/Counter-Reversal, pet e principal), mantendo só o tempo de espera — corpo fica em Idle, só a arma (mira dinâmica) e a flecha se movem
 
 - 2026-07-06: 2 ajustes no Bow depois do 1º teste — atacante não corre mais até o defensor pra atacar (`IsRangedWeapon` pula `RunToDefender`/`RepositionIfNeeded` em 7 pontos, mantendo o resto do swing), com mira dinâmica nova (`AimWeaponAt`, gira a arma em espaço mundo pra apontar de verdade pro alvo, já que a distância/ângulo agora variam); flecha reduzida de tamanho (`ArrowProjectileScale = 0.3f`, independente do `scale` da arma)
