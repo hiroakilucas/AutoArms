@@ -856,8 +856,8 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [ ] **Tutorial das primeiras batalhas**: fluxo guiado pro jogador novo logo após criar o primeiro personagem — explica o loop básico (combate automático, XP, level up, escolha de bônus) durante as primeiras lutas, antes de soltar o jogador sem contexto na tela principal.
 - [ ] Adicionar novos prefabs de personagens guardados
 - [ ] Atributos aleatórios ao criar personagem level 1 (vida, força, agilidade, velocidade)
-- [ ] Habilidades inspiradas no My Brute
-- [ ] Criar habilidades originais adicionais
+- [x] Habilidades inspiradas no My Brute — 54 skills implementadas (ver SKILLS_SYSTEM.md/SKILLS_PASSIVE.md/SKILLS_ACTIVE.md), maioria espelhando o roster original (Vitality, Herculean Strength, Weapon Master, Untouchable, etc.)
+- [x] Criar habilidades originais adicionais — várias sem equivalente no My Brute original ou com mecânica redefinida do zero pelo usuário: Chaining, Determination, Reconnaissance, Deity, Saboteur/Spy (exclusivas do LaBrute), Repulse, Sticky Hands, Resistant, Fast Metabolism, Mimic, entre outras
 - [ ] **Arte chibi + retrato realista do personagem**: ao criar o personagem, ter duas versões visuais — o boneco chibi (estilo atual usado em combate/seleção) na frente, e uma versão mais realista do mesmo personagem ao fundo. Pedir ajuda a alguma IA de geração de imagem pra gerar essas duas versões e definir/separar o estilo de cada uma.
 
 ### Fase 2 — Combate Robusto
@@ -892,5 +892,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 Ver ROADMAP_FUTURO.md — não carregar nesta sessão.
 
 ### Progresso
-- Total: 122 tarefas | Concluídas: 58
+- Total: 122 tarefas | Concluídas: 60
 - Histórico completo em CHANGELOG.md
