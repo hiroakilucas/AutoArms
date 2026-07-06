@@ -135,7 +135,12 @@ public class MainMenuCharacterPreview : MonoBehaviour
                 icrt.sizeDelta = new Vector2(36f, 36f);
                 iconGo.AddComponent<Image>().color = new Color(0.78f, 0.63f, 0.27f, 0.30f);
 
-                if (skill.icon != null)
+                // T2/T3 nunca têm icon próprio (ver SkillTierGenerator) — sobe a cadeia
+                // previousTier até achar um, mesmo padrão de WeaponHandler.EquipSpecific.
+                var iconSource = skill;
+                while (iconSource != null && iconSource.icon == null) iconSource = iconSource.previousTier;
+
+                if (iconSource != null && iconSource.icon != null)
                 {
                     var spGo = new GameObject("Spr");
                     spGo.transform.SetParent(iconGo.transform, false);
@@ -144,7 +149,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
                     sprt.anchorMax = new Vector2(0.94f, 0.94f);
                     sprt.offsetMin = sprt.offsetMax = Vector2.zero;
                     var spImg = spGo.AddComponent<Image>();
-                    spImg.sprite = skill.icon; spImg.preserveAspect = true;
+                    spImg.sprite = iconSource.icon; spImg.preserveAspect = true;
                 }
             }
         }

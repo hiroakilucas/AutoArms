@@ -629,7 +629,12 @@ public class CharacterPanel : MonoBehaviour
             cell.transform.SetParent(_skillsGrid, false);
             cell.AddComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.22f);
 
-            if (skill.icon != null)
+            // T2/T3 nunca têm icon próprio (ver SkillTierGenerator) — sobe a cadeia previousTier
+            // até achar um, mesmo padrão de WeaponHandler.EquipSpecific pro sprite da arma.
+            var iconSource = skill;
+            while (iconSource != null && iconSource.icon == null) iconSource = iconSource.previousTier;
+
+            if (iconSource != null && iconSource.icon != null)
             {
                 var iconGo = new GameObject("Icon");
                 iconGo.transform.SetParent(cell.transform, false);
@@ -637,7 +642,7 @@ public class CharacterPanel : MonoBehaviour
                 irt.anchorMin = new Vector2(0.08f, 0.28f); irt.anchorMax = new Vector2(0.92f, 0.92f);
                 irt.offsetMin = irt.offsetMax = Vector2.zero;
                 var img = iconGo.AddComponent<Image>();
-                img.sprite = skill.icon; img.preserveAspect = true;
+                img.sprite = iconSource.icon; img.preserveAspect = true;
             }
 
             var nameGo = new GameObject("Name");
@@ -646,7 +651,8 @@ public class CharacterPanel : MonoBehaviour
             nrt.anchorMin = Vector2.zero; nrt.anchorMax = new Vector2(1f, 0.26f);
             nrt.offsetMin = nrt.offsetMax = Vector2.zero;
             var nTxt = nameGo.AddComponent<TextMeshProUGUI>();
-            nTxt.text = skill.skillName ?? ""; nTxt.fontSize = 16; nTxt.color = Color.white;
+            string skillLabel = skill.tier > 1 ? $"{skill.skillName} (T{skill.tier})" : (skill.skillName ?? "");
+            nTxt.text = skillLabel; nTxt.fontSize = 16; nTxt.color = Color.white;
             nTxt.alignment = TextAlignmentOptions.Center;
         }
     }

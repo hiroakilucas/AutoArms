@@ -122,7 +122,7 @@ public class CombatResultPanel : MonoBehaviour
                 "+1 STR / +1 AGI", "+1 AGI / +1 SPD", "+1 STR / +1 SPD",
                 "+6 HP / +1 STR", "+6 HP / +1 AGI", "+6 HP / +1 SPD"
             }[attrIndex],
-            Kind.Skill     => skill?.skillName ?? "?",
+            Kind.Skill     => skill != null ? (skill.tier > 1 ? $"{skill.skillName} (T{skill.tier})" : skill.skillName) : "?",
             Kind.Weapon    => weapon?.weaponName ?? "?",
             Kind.Pet       => PetState.DisplayName(petType),
             _              => "?"
@@ -220,26 +220,39 @@ public class CombatResultPanel : MonoBehaviour
             case LevelUpOption.Kind.Skill:
                 if (opt.skill != null && !profile.skills.Contains(opt.skill))
                 {
+                    // Upgrade de tier: remove o tier anterior da lista antes de adicionar o novo
+                    // — mesmo padrão de WeaponData (Kind.Weapon abaixo). Comparação por
+                    // nome+tier, mesmo padrão do resto deste arquivo.
+                    if (opt.skill.previousTier != null)
+                        profile.skills.RemoveAll(ps => ps != null
+                            && ps.skillName == opt.skill.previousTier.skillName
+                            && ps.tier == opt.skill.previousTier.tier);
                     profile.skills.Add(opt.skill);
+
                     // Vitality / Herculean Strength / Feline Agility / Lightning Bolt /
-                    // Reconnaissance: flat permanente (HP/STR/AGI/SPD, bonusValue2 do asset)
-                    // aplicado uma única vez na escolha (igual a um pick de Atributo) — o
-                    // percentual restante (bonusValue1) é aplicado em runtime sobre esse valor já
-                    // somado (ApplySkillStats/GetEffectiveStats).
+                    // Reconnaissance / First Strike: flat permanente (HP/STR/AGI/SPD,
+                    // bonusValue2 do asset) aplicado uma única vez na escolha (igual a um pick de
+                    // Atributo) — o percentual restante (bonusValue1) é aplicado em runtime sobre
+                    // esse valor já somado (ApplySkillStats/GetEffectiveStats).
+                    // bonusValue2 é o TOTAL acumulado do tier (ex: Herculean T1=+3, T2=+5 total,
+                    // T3=+7 total) — não aditivo por tier. Numa troca de tier o T1/T2 antigo já
+                    // aplicou sua parcela, então só a DIFERENÇA entre o total novo e o total do
+                    // tier anterior deve ser somada agora (senão dobra a contagem).
+                    float prevBonus2 = opt.skill.previousTier != null ? opt.skill.previousTier.bonusValue2 : 0f;
+                    int   delta2     = Mathf.RoundToInt(opt.skill.bonusValue2 - prevBonus2);
+
                     if (opt.skill.skillName == "Vitality")
-                        profile.maxHealth += Mathf.RoundToInt(opt.skill.bonusValue2);
+                        profile.maxHealth += delta2;
                     else if (opt.skill.skillName == "Herculean Strength")
-                        profile.str += Mathf.RoundToInt(opt.skill.bonusValue2);
+                        profile.str += delta2;
                     else if (opt.skill.skillName == "Feline Agility")
-                        profile.agility += Mathf.RoundToInt(opt.skill.bonusValue2);
+                        profile.agility += delta2;
                     else if (opt.skill.skillName == "Lightning Bolt")
-                        profile.speed += Mathf.RoundToInt(opt.skill.bonusValue2);
+                        profile.speed += delta2;
                     else if (opt.skill.skillName == "Reconnaissance")
-                        profile.speed += Mathf.RoundToInt(opt.skill.bonusValue2);
-                    // First Strike T2/T3: SPD permanente (bonusValue2, novo — T1 fica 0, sem
-                    // efeito). Mesmo padrão das linhas acima.
+                        profile.speed += delta2;
                     else if (opt.skill.skillName == "First Strike")
-                        profile.speed += Mathf.RoundToInt(opt.skill.bonusValue2);
+                        profile.speed += delta2;
                 }
                 break;
             case LevelUpOption.Kind.Weapon:
@@ -282,11 +295,34 @@ public class CombatResultPanel : MonoBehaviour
         var availableSkills = new List<SkillData>();
         if (skillDb != null && skillDb.skills != null)
             foreach (var s in skillDb.skills)
-                // s.icon != null: testando skill por skill — só entram na lista de escolha as
-                // que já têm um ícone de volta em Assets/Data/UI/Skills/ (removidos todos,
-                // re-adicionados um a um conforme testados; immortality é a primeira).
-                if (s != null && s.icon != null && !profile.skills.Exists(ps => ps != null && ps.skillName == s.skillName))
-                    availableSkills.Add(s);
+            {
+                if (s == null) continue;
+
+                // Ícone: T1 usa o próprio; T2/T3 (icon sempre null, ver SkillTierGenerator) sobem
+                // a cadeia previousTier até achar um — mesmo padrão de herança visual do
+                // WeaponHandler.EquipSpecific. Testando skill por skill: enquanto a raiz (T1) não
+                // tiver um ícone re-adicionado em Assets/Data/UI/Skills/, NENHUM tier aparece.
+                var rootIcon = s;
+                while (rootIcon != null && rootIcon.icon == null) rootIcon = rootIcon.previousTier;
+                if (rootIcon == null || rootIcon.icon == null) continue;
+
+                if (s.tier <= 1)
+                {
+                    // T1: só aparece se o jogador ainda não tem NENHUM tier desta skill
+                    if (!profile.skills.Exists(ps => ps != null && ps.skillName == s.skillName))
+                        availableSkills.Add(s);
+                }
+                else
+                {
+                    // T2/T3: só aparece como upgrade se o jogador já tem o tier anterior
+                    // equipado — mesmo padrão de WeaponData (ver availableWeapons abaixo).
+                    // Comparação por nome+tier (não por referência), mesmo padrão do resto
+                    // deste arquivo (ex: filtro de T1 acima, IsInLoadout de armas).
+                    if (s.previousTier != null && profile.skills.Exists(ps =>
+                        ps != null && ps.skillName == s.previousTier.skillName && ps.tier == s.previousTier.tier))
+                        availableSkills.Add(s);
+                }
+            }
 
         var availableWeapons = new List<WeaponData>();
         var loadoutWeapons = profile.weaponLoadout?.weapons;
@@ -469,7 +505,7 @@ public class CombatResultPanel : MonoBehaviour
         var iconImg = iconGo.AddComponent<Image>();
 
         Sprite iconSprite = opt.kind switch {
-            LevelUpOption.Kind.Skill   => opt.skill?.icon,
+            LevelUpOption.Kind.Skill   => ResolveSkillIcon(opt.skill),
             LevelUpOption.Kind.Weapon  => opt.weapon?.inHandSprite,
             _                          => null
         };
@@ -622,6 +658,14 @@ public class CombatResultPanel : MonoBehaviour
         tmp.fontStyle = FontStyles.Bold;
 
         return btn;
+    }
+
+    // T2/T3 nunca têm icon próprio (ver SkillTierGenerator) — sobe a cadeia previousTier até
+    // achar um, mesmo padrão de WeaponHandler.EquipSpecific pro sprite da arma.
+    private static Sprite ResolveSkillIcon(SkillData s)
+    {
+        while (s != null && s.icon == null) s = s.previousTier;
+        return s?.icon;
     }
 
     private static bool IsInLoadout(WeaponData w, WeaponData[] loadout)
