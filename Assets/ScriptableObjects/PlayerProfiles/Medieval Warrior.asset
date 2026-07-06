@@ -19,9 +19,9 @@ MonoBehaviour:
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 87
+  maxHealth: 60
   str: 3
-  agility: 5
+  agility: 6
   speed: 5
   armor: 0
   evasion: 0
@@ -33,12 +33,10 @@ MonoBehaviour:
   reversalAfterBlock: 0
   criticalChance: 0
   hitSpeed: 1
-  skills:
-  - {fileID: 11400000, guid: 7e9f3632c2fd262448ff238f9bc5cbbd, type: 2}
-  - {fileID: 11400000, guid: 04d0ee7066616e84bbdb1d09da3cf3e8, type: 2}
+  skills: []
   pets: 
-  level: 3
+  level: 1
   winRate: 0
   xpCurrent: 0
-  xpRequired: 7
-  battlesRemaining: 0
+  xpRequired: 5
+  battlesRemaining: 6

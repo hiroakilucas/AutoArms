@@ -850,6 +850,8 @@ MonoBehaviour:
   player2Profile: {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
   useSimulator: 1
   shieldWeaponData: {fileID: 11400000, guid: 8478c50742c3418e9eaca51076d96a5d, type: 2}
+  shieldWeaponDataT2: {fileID: 11400000, guid: 3771cd2b79444f98b29ee561501b4081, type: 2}
+  shieldWeaponDataT3: {fileID: 11400000, guid: 1f2c0bb7392444d0afdb1b727cb40f7d, type: 2}
   piledriverEffectPrefab: {fileID: 1658514718516592994, guid: 5f7e146aa5be0e148a138bde0f0407b9, type: 3}
   netFlyingSprite: {fileID: 21300000, guid: dc7fda0a3cc05f348bd70634c4abf146, type: 3}
   netLandedSprite: {fileID: 21300000, guid: 447749ab3346b6b40a280fb00b482de9, type: 3}

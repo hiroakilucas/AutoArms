@@ -21,8 +21,12 @@ public class CombatSceneLoader : MonoBehaviour
     [SerializeField] private bool useSimulator = true;
 
     [Header("Shield")]
-    [Tooltip("WeaponData usado como visual permanente da skill Shield (Assets/Data/UI/Weapons/Shield/Shield1.asset).")]
+    [Tooltip("WeaponData usado como visual permanente da skill Shield T1 (Assets/Data/UI/Weapons/Shield/Shield1.asset).")]
     [SerializeField] private WeaponData shieldWeaponData;
+    [Tooltip("Visual da skill Shield T2 (Assets/Data/UI/Weapons/Shield/Shield2.asset). Se vazio, usa o visual do T1.")]
+    [SerializeField] private WeaponData shieldWeaponDataT2;
+    [Tooltip("Visual da skill Shield T3 (Assets/Data/UI/Weapons/Shield/Shield3.asset). Se vazio, usa o visual do T2/T1.")]
+    [SerializeField] private WeaponData shieldWeaponDataT3;
 
     [Header("Piledriver")]
     [Tooltip("Prefab do efeito de explosão da skill Piledriver (Assets/Data/UI/SkillEffect/Piledriver/PiledriverExplosion.prefab, gerado por Tools > AutoArms > Generate Piledriver Effect Prefab).")]
@@ -181,9 +185,10 @@ public class CombatSceneLoader : MonoBehaviour
 
         // Shield: item visual permanente no braço oposto (offHandBone), fora do WeaponLoadout —
         // equipado uma única vez aqui, igual ao ajuste de escala da Deity acima, não pelo ciclo
-        // normal de troca de armas (handler.EquipNext/EquipRandom nunca tocam isso).
+        // normal de troca de armas (handler.EquipNext/EquipRandom nunca tocam isso). Visual
+        // varia por tier da skill equipada (T1/T2/T3), ver ResolveShieldVisual.
         if (handler != null && profile.HasSkill("Shield"))
-            handler.EquipShield(shieldWeaponData);
+            handler.EquipShield(ResolveShieldVisual(profile.GetSkill("Shield")));
 
         // useSimulator path computes all of Player2's HP off player2Profile.maxHealth (see
         // CombatSimulator.BuildState) — health2 must start from the same number, or every
@@ -231,7 +236,7 @@ public class CombatSceneLoader : MonoBehaviour
 
         // Espelha o equip de Shield do Player1 acima.
         if (p2Handler != null && player2Profile != null && player2Profile.HasSkill("Shield"))
-            p2Handler.EquipShield(shieldWeaponData);
+            p2Handler.EquipShield(ResolveShieldVisual(player2Profile.GetSkill("Shield")));
 
         // Skills HUD: exibe skills ativas (Supers) com contador de usos abaixo do WeaponHUD.
         SkillsHUD p1SkillsHUD = null, p2SkillsHUD = null;
@@ -339,6 +344,17 @@ public class CombatSceneLoader : MonoBehaviour
 
             combatHUD.AddSpeedControls(combatPlayer);
         }
+    }
+
+    // Escudo visual muda de sprite por tier da skill Shield equipada (T1/T2/T3) — cai pro tier
+    // anterior se o campo do tier atual não estiver wireado no Inspector (T2 sem asset
+    // assinado, por exemplo), e por fim pro T1 (sempre esperado presente).
+    private WeaponData ResolveShieldVisual(SkillData shieldSkill)
+    {
+        int tier = shieldSkill != null ? shieldSkill.tier : 1;
+        if (tier >= 3 && shieldWeaponDataT3 != null) return shieldWeaponDataT3;
+        if (tier >= 2 && shieldWeaponDataT2 != null) return shieldWeaponDataT2;
+        return shieldWeaponData;
     }
 
     // Editor-only convenience: if player2Profile wasn't wired in the Inspector, fetch

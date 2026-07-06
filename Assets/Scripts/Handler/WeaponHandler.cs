@@ -201,9 +201,17 @@ public class WeaponHandler : MonoBehaviour
 
         var sr = currentShield.GetComponent<SpriteRenderer>();
         sr.sprite = data.inHandSprite;
-        sr.sortingLayerName = sortingLayer;
-        sr.sortingOrder = sortingOrder;
+        // Layer própria ("Accessories", sempre a mais à frente de Characters/Characters2) — não
+        // reusa o `sortingLayer`/`sortingOrder` da arma normal (default "Weapons"), que fica
+        // ATRÁS do corpo (Weapons < Characters na ordem fixa do projeto, ver Sorting Layers no
+        // CLAUDE.md). O escudo é permanente (nunca participa do swap Weapons/Weapons2 de
+        // atacante/defensor, ver SetAttackerLayers) — bug real reportado pelo usuário: escudo
+        // renderizava atrás do próprio corpo o tempo todo.
+        sr.sortingLayerName = ShieldSortingLayer;
+        sr.sortingOrder = 0;
     }
+
+    private const string ShieldSortingLayer = "Accessories";
 
     public void RemoveShield()
     {

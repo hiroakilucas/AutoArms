@@ -19,10 +19,10 @@ MonoBehaviour:
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 70
-  str: 5
-  agility: 3
-  speed: 4
+  maxHealth: 60
+  str: 2
+  agility: 7
+  speed: 5
   armor: 0
   evasion: 0
   accuracy: 0
