@@ -112,10 +112,12 @@ public class CombatPlayer : MonoBehaviour
     // fazia ele completar 1 loop inteiro e reiniciar do zero — o personagem "arremessava de
     // novo" visualmente (sem soltar outra arma) já perto do fim do voo. Bug real reportado pelo
     // usuário: "atacante faz throwing > shuriken sai > shuriken no meio do caminho > atacante
-    // faz throwing sem necessidade (não sai shuriken)". 0.35f fica dentro do clipe (entre o
-    // ExitTime de 75% = 0.3s e o fim em 0.4s), então o Idle=true cai bem na janela de saída
-    // válida, sem esperar um 2º loop.
-    private const float ThrowFlightDuration = 0.35f;
+    // faz throwing sem necessidade (não sai shuriken)". 0.35f (1ª tentativa, dentro do clipe
+    // mas ainda com o bug reportado) reduzido pra 0.25f a pedido do usuário — abaixo do
+    // ExitTime de 75% (0.3s), então a saída de fato só acontece quando o Animator cruza esse
+    // marco (a transição não dispara antes disso de qualquer forma), mas o VOO do projétil em
+    // si fica mais curto/rápido.
+    private const float ThrowFlightDuration = 0.25f;
 
     // Bumerangue: em vez de parar no ponto de impacto e só voltar quando o case BoomerangReturn
     // for processado (o que deixava a arma parada, imóvel, durante todo o Hit/knockback do meio
