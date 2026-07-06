@@ -105,6 +105,18 @@ public class CombatPlayer : MonoBehaviour
     // reportou o mesmo problema ("pegando no pé") testando a Shuriken.
     private const float ThrownHitHeight = 0.9f;
 
+    // Duração do voo do arremesso normal (case ThrowWeapon) — era 0.45f, MAIOR que o clipe de
+    // animação "Throwing" (m_StopTime: 0.4, m_LoopTime: 1 — confirmado nos 3 personagens).
+    // Como o código só chama SetIdle(true) depois desse tempo todo (condição de saída do estado
+    // Throwing exige Idle==true, ver .controller), segurar por mais tempo que o próprio clipe
+    // fazia ele completar 1 loop inteiro e reiniciar do zero — o personagem "arremessava de
+    // novo" visualmente (sem soltar outra arma) já perto do fim do voo. Bug real reportado pelo
+    // usuário: "atacante faz throwing > shuriken sai > shuriken no meio do caminho > atacante
+    // faz throwing sem necessidade (não sai shuriken)". 0.35f fica dentro do clipe (entre o
+    // ExitTime de 75% = 0.3s e o fim em 0.4s), então o Idle=true cai bem na janela de saída
+    // válida, sem esperar um 2º loop.
+    private const float ThrowFlightDuration = 0.35f;
+
     // Bumerangue: em vez de parar no ponto de impacto e só voltar quando o case BoomerangReturn
     // for processado (o que deixava a arma parada, imóvel, durante todo o Hit/knockback do meio
     // — sentido como uma "travada" pelo usuário), o próprio case ThrowWeapon já dispara o voo de
@@ -2117,7 +2129,7 @@ public class CombatPlayer : MonoBehaviour
                         // straightThrow força voo reto (sem arco/pêndulo) mesmo em arma Thrown —
                         // pedido do usuário pra Shuriken, que voa reta/girando na vida real.
                         float arc    = (rotate && !weaponData.straightThrow) ? 0.5f : 0f;
-                        yield return StartCoroutine(attacker.FlyWeapon(flyingWeapon.transform, launchPos, targetPos, 0.45f * t, rotate, arc));
+                        yield return StartCoroutine(attacker.FlyWeapon(flyingWeapon.transform, launchPos, targetPos, ThrowFlightDuration * t, rotate, arc));
 
                         // Bumerangue: dispara o voo de volta JÁ AQUI, em paralelo (fire-and-forget),
                         // em vez de deixar o objeto parado esperando o case BoomerangReturn (que só
@@ -2146,7 +2158,7 @@ public class CombatPlayer : MonoBehaviour
                     }
                     else
                     {
-                        yield return new WaitForSeconds(0.45f * t);
+                        yield return new WaitForSeconds(ThrowFlightDuration * t);
                     }
 
                     // Sai do estado Throwing assim que o arremesso termina — a transição
