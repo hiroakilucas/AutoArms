@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-06: Bow ainda disparava o trigger "Slashing" (giro de espada) mesmo depois de parar de correr até o alvo — visualmente errado pra um arco parado. `IsRangedWeapon` agora também pula `SwingTrigger`/`SetTrigger`/`SetSpeed` nos 6 pontos de swing (Hit/Dodge/Block/Counter-Reversal, pet e principal), mantendo só o tempo de espera — corpo fica em Idle, só a arma (mira dinâmica) e a flecha se movem
+
 - 2026-07-06: 2 ajustes no Bow depois do 1º teste — atacante não corre mais até o defensor pra atacar (`IsRangedWeapon` pula `RunToDefender`/`RepositionIfNeeded` em 7 pontos, mantendo o resto do swing), com mira dinâmica nova (`AimWeaponAt`, gira a arma em espaço mundo pra apontar de verdade pro alvo, já que a distância/ângulo agora variam); flecha reduzida de tamanho (`ArrowProjectileScale = 0.3f`, independente do `scale` da arma)
 
 - 2026-07-06: Implementada animação de arco e flecha pro Bow — trocada a tag `Thrown` (placeholder errado, fazia o arco inteiro "voar" até o defensor) por `Ranged` de verdade, caindo no fluxo de melee normal. Novo `WeaponData.projectileSprite` (flecha) viaja da ponta da arma até o defensor sem a arma sair da mão, reusando o sistema de 2 frames do Whip (`attackSprite`/`attackRotationOffset`) pra pose de "erguer o arco". Ligado nos 6 pontos que tocam `SetWeaponSwingPose` (Hit/Dodge/Block/Counter/Reversal, pet e principal)

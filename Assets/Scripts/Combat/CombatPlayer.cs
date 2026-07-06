@@ -1436,9 +1436,14 @@ public class CombatPlayer : MonoBehaviour
                                 yield return StartCoroutine(attacker.animationController.PlayRun(hitPetStopPos, (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
                             }
 
-                            string triggerPet = SwingTrigger(attacker);
-                            if (swingMultPet != 1f) attacker?.animationController.SetSpeed(swingMultPet);
-                            attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
+                            // Bow (Ranged): sem trigger de corpo, ver mesmo comentário no case
+                            // Hit (principal) acima.
+                            if (!IsRangedWeapon(attacker))
+                            {
+                                string triggerPet = SwingTrigger(attacker);
+                                if (swingMultPet != 1f) attacker?.animationController.SetSpeed(swingMultPet);
+                                attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
+                            }
                             yield return new WaitForSeconds(slashHalfPet);
                             // Pose de ataque (ex: Whip estalando) só no finalzinho do swing, bem
                             // perto do impacto — não desde o início — pra dar a impressão de
@@ -1505,9 +1510,18 @@ public class CombatPlayer : MonoBehaviour
                         if (evt.isFierceBrute && attacker != null)
                             yield return StartCoroutine(PlayFierceBrutePose(attacker, t));
 
-                        string trigger = SwingTrigger(attacker);
-                        if (swingMult != 1f) attacker?.animationController.SetSpeed(swingMult);
-                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        // Bow (Ranged): sem clipe de "erguer o arco" dedicado (usuário ainda não
+                        // criou), então nem dispara Slashing — o corpo fica parado em Idle e só
+                        // a ARMA se move (AimWeaponAt, dentro de SetWeaponSwingPose) + a flecha.
+                        // Reportado pelo usuário: "a animação está errada, está usando o
+                        // slashing" — Slashing era um giro de espada lateral, visualmente errado
+                        // pra um arco parado.
+                        if (!IsRangedWeapon(attacker))
+                        {
+                            string trigger = SwingTrigger(attacker);
+                            if (swingMult != 1f) attacker?.animationController.SetSpeed(swingMult);
+                            attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        }
                         yield return new WaitForSeconds(slashHalf);
                         // Pose de ataque só no finalzinho do swing (impressão de "chicotada"), ver
                         // mesmo comentário no case Hit (pet) acima.
@@ -1629,9 +1643,13 @@ public class CombatPlayer : MonoBehaviour
 
                     float retSwingMult = SwingSpeedMultiplier(attacker);
                     float retSlashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / retSwingMult;
-                    string retTrigger = SwingTrigger(attacker);
-                    if (retSwingMult != 1f) attacker?.animationController.SetSpeed(retSwingMult);
-                    attacker?.GetComponent<Animator>()?.SetTrigger(retTrigger);
+                    // Bow (Ranged): sem trigger de corpo, ver mesmo comentário no case Hit acima.
+                    if (!IsRangedWeapon(attacker))
+                    {
+                        string retTrigger = SwingTrigger(attacker);
+                        if (retSwingMult != 1f) attacker?.animationController.SetSpeed(retSwingMult);
+                        attacker?.GetComponent<Animator>()?.SetTrigger(retTrigger);
+                    }
                     yield return new WaitForSeconds(retSlashHalf);
                     // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
                     SetWeaponSwingPose(attacker, true, defender.transform.position + Vector3.up * ThrownHitHeight, t);
@@ -1727,9 +1745,13 @@ public class CombatPlayer : MonoBehaviour
                         if (distToPet > 1.0f)
                             yield return StartCoroutine(attacker.animationController.PlayRun(CalcPetStopPosition(attacker.transform.position, dodgePet.transform.position, CharacterPetReach(dodgePet.petType)), (attacker.settings?.runSpeed ?? 35f) * t, attacker.movement));
 
-                        string triggerPet = SwingTrigger(attacker);
-                        if (dodgeSwingMultPet != 1f) attacker?.animationController.SetSpeed(dodgeSwingMultPet);
-                        attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
+                        // Bow (Ranged): sem trigger de corpo, ver mesmo comentário no case Hit acima.
+                        if (!IsRangedWeapon(attacker))
+                        {
+                            string triggerPet = SwingTrigger(attacker);
+                            if (dodgeSwingMultPet != 1f) attacker?.animationController.SetSpeed(dodgeSwingMultPet);
+                            attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
+                        }
                         yield return new WaitForSeconds(slashHalfPet);
                         // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
                         SetWeaponSwingPose(attacker, true, dodgePet.transform.position, t);
@@ -1764,10 +1786,14 @@ public class CombatPlayer : MonoBehaviour
                         if (!IsRangedWeapon(attacker))
                             yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
 
-                        string trigger = SwingTrigger(attacker);
                         dodgeSwingMult = SwingSpeedMultiplier(attacker);
-                        if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(dodgeSwingMult);
-                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        // Bow (Ranged): sem trigger de corpo, ver mesmo comentário no case Hit acima.
+                        if (!IsRangedWeapon(attacker))
+                        {
+                            string trigger = SwingTrigger(attacker);
+                            if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(dodgeSwingMult);
+                            attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        }
 
                         slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMult;
                         yield return new WaitForSeconds(slashHalf);
@@ -1815,7 +1841,6 @@ public class CombatPlayer : MonoBehaviour
                     float slashHalf = 0f;
                     if (!evt.isThrow)
                     {
-                        string trigger = SwingTrigger(attacker);
                         blockSwingMult = SwingSpeedMultiplier(attacker);
                         slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / blockSwingMult;
 
@@ -1823,8 +1848,13 @@ public class CombatPlayer : MonoBehaviour
                         // Bow (Ranged): não corre até o defensor, ver IsRangedWeapon.
                         if (!IsRangedWeapon(attacker))
                             yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
-                        if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
-                        attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        // Bow (Ranged): sem trigger de corpo, ver mesmo comentário no case Hit acima.
+                        if (!IsRangedWeapon(attacker))
+                        {
+                            string trigger = SwingTrigger(attacker);
+                            if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
+                            attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
+                        }
                         yield return new WaitForSeconds(slashHalf);
                         // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
                         SetWeaponSwingPose(attacker, true, defender.transform.position + Vector3.up * ThrownHitHeight, t);
