@@ -6,11 +6,118 @@
 
 | Arquivo | Tipo | Propósito |
 |---|---|---|
-| `Assets/Scripts/Data/SkillData.cs` | ScriptableObject | Dados de uma skill (nome, ícone, categoria, ativação) |
-| `Assets/Scripts/Data/SkillDatabase.cs` | ScriptableObject | Lista mestre de todas as 38 skills |
-| `Assets/ScriptableObjects/Skills/` | Assets | Um `SkillData.asset` por skill + `SkillDatabase.asset` |
-| `Assets/Data/UI/Skills/` | Sprites | `skill_<nome>.png` — ícone de cada skill |
-| `Assets/Editor/SkillAssetGenerator.cs` | Editor tool | Gera todos os assets via **Tools → AutoArms → Generate Skill Assets** |
+| `Assets/Scripts/Data/SkillData.cs` | ScriptableObject | Dados de uma skill (nome, ícone, categoria, ativação, `tier`/`previousTier`, `bonusValue1..7`) |
+| `Assets/Scripts/Data/SkillDatabase.cs` | ScriptableObject | Lista mestre de todas as skills (53 T1 no `SkillAssetGenerator.Defs[]` + T2/T3 gerados, 153 assets no total) |
+| `Assets/ScriptableObjects/Skills/` | Assets | Um `SkillData.asset` T1 por skill + `SkillDatabase.asset` + assets T2/T3 gerados |
+| `Assets/Data/UI/Skills/` | Sprites | `skill_<nome>.png` — ícone de cada skill (só T1 tem ícone; T2/T3 herdam visual nenhum, ficam fora do level-up) |
+| `Assets/Editor/SkillAssetGenerator.cs` | Editor tool | Gera os 53 assets T1 via **Tools → AutoArms → Generate Skill Assets** |
+| `Assets/Editor/SkillTierGenerator.cs` | Editor tool | **Populate Skill T1 Bonus Values** (grava `bonusValue1..7` dos T1 com os valores literais da tabela abaixo) / **Generate Skill Tiers (T2 & T3)** (cria/atualiza T2/T3 com os valores literais de cada tier, sem nenhuma escala por multiplicador) / **Delete Extra Thick Skin Asset** / **Rebuild Skill Database From Folder** (reconstrói `SkillDatabase.asset` escaneando a pasta inteira — necessário porque `SkillAssetGenerator` só conhece os T1) |
+
+### Sistema de Tiers (T1/T2/T3) — 2026-07-06
+
+Valores numéricos de cada skill vivem nos campos `bonusValue1..7` do próprio `SkillData` (mesmo espírito do `WeaponData`, mas **sem** um único campo escalável tipo `damage`) — cada skill usa de 0 a 7 slots com significado próprio, documentado na tabela completa abaixo e nos comentários de `CombatSimulator.cs`/`CombatSceneLoader.cs`/`CombatResultPanel.cs`/`PlayerProfile.cs`, no ponto de leitura de cada skill. `PlayerState.GetSkillData(name)` (simulador) / `PlayerCombat.GetSkill(name)` / `PlayerProfile.GetSkill(name)` resolvem o `SkillData` equipado; `HasSkill(name)` continua funcionando do jeito de sempre para skills sem nenhum valor numérico (ex: Martial Arts como flag).
+
+**T2/T3 não existem no My Brute original** — mecânica nova deste projeto. Os valores de cada tier são **literais**, definidos manualmente por skill numa tabela de balanceamento do usuário (ver tabela completa abaixo) — não há mais nenhuma escala automática por multiplicador (a versão anterior usava ×1.35/×1.75 com exceções `InverseSlots`; removida por completo, já que os números reais não eram múltiplos simples).
+
+**Exceções/observações**:
+- **Deity**: usa os 7 slots (`bonusValue1..7`) pra hp/str/agi/spd/evasion/iniciativa/reversal — único caso que precisou do 7º slot, já que os outros 6 já tinham significado fixo; `+50%` de tamanho (em `CombatSceneLoader.Initialize`) continua hardcoded em todos os tiers (não varia por skill).
+- **Shield**: `bonusValue2` mudou de semântica — era `armor +=` (reduz dano recebido), agora é `shieldDamagePenalty` (reduz o PRÓPRIO dano causado pelo usuário do escudo, trade-off do `blockBonus` alto). O desarme do escudo (`ShieldDisarm`/`ShieldDrop`) usa a fórmula real `DisarmChance(attacker, defender)` do atacante em vez de uma chance fixa — `bonusValue3` não é mais usado (fica 0).
+- **Saboteur**: ganhou `bonusValue1` (penalidade de iniciativa no oponente, reintroduzida por tier — antes não tinha nenhum valor numérico).
+- **Mimic T3**: em vez de sempre copiar a Super mais recente do oponente (`lastSuperUsed`, comportamento de T1/T2), copia o HISTÓRICO cronológico (`PlayerState.superActivationHistory`, novo — com repetição) indexado pela própria contagem de uso: a 1ª ativação de Mimic T3 copia a 1ª Super que o oponente ativou na luta, a 2ª copia a 2ª, a 3ª copia a 3ª.
+- **First Strike**: ganhou `bonusValue2` (SPD permanente em T2/T3 — antes só tinha `bonusValue1`/iniciativa; T1 fica 0, sem efeito).
+- **Chaining**: ganhou `bonusValue3` (`comboChanceBonus` adicional em T2/T3 — T1 fica 0).
+- **Extra Thick Skin**: removida do jogo (skill, 3 assets T1/T2/T3, todas as referências em código).
+- **Tamer**: fora da tabela de balanceamento fornecida — sem T2/T3, mesmo tratamento de Garimpeiro/Magneto.
+- **Garimpeiro/Magneto**: ainda não implementadas (T1 nem existe de verdade em código) — sem tier.
+- Caminho legado `PlayerCombat.AttackRoutine`/`ThrowChance()`/`DisarmChance()` (dead code enquanto `useSimulator=true`) **não foi migrado** — continua com os literais antigos, mesmo padrão de outras partes do legado já não atualizadas (ver Logging Policy/CLAUDE.md).
+
+**Level-up**: T2/T3 não têm ícone (`icon = null`) — `ShowLevelUpChoice`/`ShowAllOptionsChoice` já filtram `icon != null`, então os tiers **não aparecem** no level-up ainda (fora do escopo desta migração, que só criou a infraestrutura de dados — wiring de progressão de tier fica pra depois, mesmo padrão de "criar T2/T3 de arma" antes de existir o `HasUpgradeInLoadout`).
+
+### Tabela de valores T1/T2/T3
+
+Valores exatos gravados em cada asset (`bonusValueN`/`usesPerFight`). "—" = não se aplica/não muda por tier.
+
+**Passivas de Combate**
+
+| Skill | T1 | T2 | T3 |
+|---|---|---|---|
+| Relentless | accuracy +30% | +40% | +50% |
+| Counter Attack | blockBonus +10%, reversalAfterBlock +90% | +15%, +95% | +20%, +99% |
+| Sixth Sense | counter +10% | +15% | +20% |
+| Monk | counter +40%, iniciativa -200 | +45%, -200 | +50%, -200 |
+| Iron Head | 40% derrubar arma do atacante | 50% | 60% |
+| Shock | disarmChanceBonus +50% | +60% | +70% |
+| Sabotage | 50% por golpe acertado | 75% | 90% |
+| Saboteur | quebra 100% + iniciativa -100 | iniciativa -150 | iniciativa -200 |
+| Thief | 44%/turno, 2x/luta | 3x/luta | 4x/luta |
+| Untouchable | evasion +30% | +40% | +50% |
+| First Strike | iniciativa +200 | +300, +2 SPD permanente | +500, +4 SPD permanente (total) |
+| Determination | 60% retry | 70% | 80% |
+| Chaining | 3 hits sem dano = stun 1 ação + desarme garantido | + comboChanceBonus +10% | + comboChanceBonus +20% |
+| Chef | veneno 1.5% HP máx/turno | 3%/turno | 5%/turno |
+| Hostility | reversal +30% | +35% | +40% |
+| Fists of Fury | comboChanceBonus +20% | +30% | +40% |
+
+**Passivas de Defesa**
+
+| Skill | T1 | T2 | T3 |
+|---|---|---|---|
+| Shield | blockBonus +45%, dano causado -25% | +50%, -25% | +55%, -25% |
+| Armour | armor +25%, SPD -15% | +30%, -15% | +35%, -15% |
+| Lead Skeleton | armor +15%, evasion -15%, dano Heavy -15% | +25%, -15%, -20% | +35%, -15%, -25% |
+| Toughened Skin | armor +10% | +15% | +20% |
+| Survival | evasion/block +20% enquanto em 1 HP | +30% | +40% |
+| Ballet Shoes | evasion +10% | +15% | +20% |
+| Resistant | teto 25% do HP máximo por hit | 20% | 17% |
+| Sticky Hands | -50% desarme/arremesso próprio | -60% | -70% |
+| Fast Metabolism | regen 1%/turno (burst 10×5% <50%HP, -50% hitSpeed, -5% crit) | regen 2%/turno (resto igual) | regen 3%/turno (resto igual) |
+| Repulse | 30% deflect, +5% crit no deflect | 35%, +10% | 40%, +15% |
+
+**Passivas de Stats**
+
+| Skill | T1 | T2 | T3 |
+|---|---|---|---|
+| Vitality | +18 HP permanente, hpPct +50% | +30 HP (total), +60% | +42 HP (total), +70% |
+| Herculean Strength | +3 STR permanente, strPct +50% | +5 STR (total), +60% | +7 STR (total), +70% |
+| Feline Agility | +3 AGI permanente, agiPct +50% | +5 AGI (total), +60% | +7 AGI (total), +70% |
+| Lightning Bolt | +3 SPD permanente, spdPct +50% | +5 SPD (total), +60% | +7 SPD (total), +70% |
+| Reconnaissance | +5 SPD perm., spdPct +150%, iniciativa -200, critDmg +50% | +10 SPD, +200%, -200, +60% | +15 SPD, +250%, -200, +70% |
+| Immortal | hpPct +250%, str/agi/spd -25% cada | +300%, -25% | +350%, -25% |
+| Deity | hp+100%, str+100%, agi-100%, spd-90%, evasion-100%, iniciativa-200, reversal+40% | hp+125%, str+125%, resto igual, reversal+50% | hp+150%, str+150%, resto igual, reversal+60% |
+
+**Passivas de Armas**
+
+| Skill | T1 | T2 | T3 |
+|---|---|---|---|
+| Weapon Master | sharpMult 1.5× | 1.75× | 2.0× |
+| Martial Arts | 2× dano desarmado | 2.5× | 3× |
+| Bodybuilder | dexterityBonus +10%, hitSpeedBonus +40% (Heavy) | +15%, +50% | +20%, +60% |
+| Hideaway | throw 50% fixo, bloqueio contra arremesso +25% | +30% | +35% |
+| Spy | -20% dano em metade das armas do oponente | -25% | -30% |
+
+**Supers (ativas)**
+
+| Skill | T1 | T2 | T3 |
+|---|---|---|---|
+| Fierce Brute | 33%/turno, dobra dano, +10% crit, usos 1+STR/30 | +20% crit, usos 2+STR/30 | +30% crit, usos 3+STR/30 |
+| Tragic Potion | 1x/luta | 2x/luta | 3x/luta |
+| Flash Flood | 1x/luta | 2x/luta | 3x/luta |
+| Haste | +5% crit, 1x/luta | +10% crit, 2x/luta | +15% crit, 3x/luta |
+| Piledriver | 1x/luta | 2x/luta | 3x/luta |
+| Net | 1x/luta | 2x/luta | 3x/luta |
+| Bomb | 2x/luta | 3x/luta | 4x/luta |
+| Vampirism | 1x/luta | 2x/luta | 3x/luta |
+| Mimic | 1x/luta, copia a última Super do oponente | 2x/luta, copia a última Super | 3x/luta, copia a 1ª/2ª/3ª Super que o oponente ativou, na ordem |
+
+**Relacionadas a Pets**
+
+| Skill | T1 | T2 | T3 |
+|---|---|---|---|
+| Hypnosis | 1x/luta | 2x/luta | 3x/luta |
+| Cry of the Damned | 1x/luta | 2x/luta | 3x/luta |
+| Treat | 4x/luta | 5x/luta | 6x/luta |
+
+Sem tier (fora da tabela): **Tamer** (mecânica não fornecida na tabela), **Garimpeiro**/**Magneto** (não implementadas).
 
 ### Enums
 - `SkillCategory`: `CombatPassive`, `DefensePassive`, `StatBoost`, `WeaponPassive`, `Super`

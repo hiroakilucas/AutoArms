@@ -221,20 +221,25 @@ public class CombatResultPanel : MonoBehaviour
                 if (opt.skill != null && !profile.skills.Contains(opt.skill))
                 {
                     profile.skills.Add(opt.skill);
-                    // Vitality / Herculean Strength / Feline Agility / Lightning Bolt: flat
-                    // permanente (HP/STR/AGI/SPD) aplicado uma única vez na escolha (igual a um
-                    // pick de Atributo) — o +50% restante é percentual em runtime sobre esse
-                    // valor já somado (ApplySkillStats/GetEffectiveStats).
+                    // Vitality / Herculean Strength / Feline Agility / Lightning Bolt /
+                    // Reconnaissance: flat permanente (HP/STR/AGI/SPD, bonusValue2 do asset)
+                    // aplicado uma única vez na escolha (igual a um pick de Atributo) — o
+                    // percentual restante (bonusValue1) é aplicado em runtime sobre esse valor já
+                    // somado (ApplySkillStats/GetEffectiveStats).
                     if (opt.skill.skillName == "Vitality")
-                        profile.maxHealth += 18;
+                        profile.maxHealth += Mathf.RoundToInt(opt.skill.bonusValue2);
                     else if (opt.skill.skillName == "Herculean Strength")
-                        profile.str += 3;
+                        profile.str += Mathf.RoundToInt(opt.skill.bonusValue2);
                     else if (opt.skill.skillName == "Feline Agility")
-                        profile.agility += 3;
+                        profile.agility += Mathf.RoundToInt(opt.skill.bonusValue2);
                     else if (opt.skill.skillName == "Lightning Bolt")
-                        profile.speed += 3;
+                        profile.speed += Mathf.RoundToInt(opt.skill.bonusValue2);
                     else if (opt.skill.skillName == "Reconnaissance")
-                        profile.speed += 5;
+                        profile.speed += Mathf.RoundToInt(opt.skill.bonusValue2);
+                    // First Strike T2/T3: SPD permanente (bonusValue2, novo — T1 fica 0, sem
+                    // efeito). Mesmo padrão das linhas acima.
+                    else if (opt.skill.skillName == "First Strike")
+                        profile.speed += Mathf.RoundToInt(opt.skill.bonusValue2);
                 }
                 break;
             case LevelUpOption.Kind.Weapon:

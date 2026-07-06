@@ -19,3 +19,12 @@ MonoBehaviour:
   category: 3
   activationType: 0
   usesPerFight: 1
+  tier: 1
+  previousTier: {fileID: 0}
+  bonusValue1: 0
+  bonusValue2: 0
+  bonusValue3: 0
+  bonusValue4: 0
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

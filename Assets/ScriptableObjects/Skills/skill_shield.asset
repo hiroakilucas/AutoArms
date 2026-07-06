@@ -13,8 +13,17 @@ MonoBehaviour:
   m_Name: skill_shield
   m_EditorClassIdentifier: 
   skillName: Shield
-  description: +45% block rate
+  description: +45% block rate, -25% dano causado (penalidade do escudo)
   icon: {fileID: 21300000, guid: 2d214f1befea8bd4ebe0c5471df299ce, type: 3}
   category: 1
   activationType: 0
   usesPerFight: 1
+  tier: 1
+  previousTier: {fileID: 0}
+  bonusValue1: 0.45
+  bonusValue2: 0.25
+  bonusValue3: 0
+  bonusValue4: 0
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

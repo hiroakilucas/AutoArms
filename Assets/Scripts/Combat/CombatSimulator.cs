@@ -77,9 +77,12 @@ public class CombatSimulator
     private List<string> ApplySpySabotage(PlayerState spy, PlayerState victim)
     {
         var sabotaged = new List<string>();
-        if (!spy.HasSkill("Spy")) return sabotaged;
+        var spySkill = spy.GetSkillData("Spy");
+        if (spySkill == null) return sabotaged;
 
-        int count = Mathf.FloorToInt(victim.weaponLoadout.Count / 2f);
+        float fraction = spySkill.bonusValue2 > 0f ? spySkill.bonusValue2 : 0.5f;
+        float damageMult = 1f - (spySkill.bonusValue1 > 0f ? spySkill.bonusValue1 : 0.20f);
+        int count = Mathf.FloorToInt(victim.weaponLoadout.Count * fraction);
         if (count <= 0) return sabotaged;
 
         var pool = new List<int>();
@@ -93,7 +96,7 @@ public class CombatSimulator
 
             var original = victim.weaponLoadout[idx];
             var sabotagedWeapon = Object.Instantiate(original);
-            sabotagedWeapon.damage = Mathf.RoundToInt(original.damage * 0.80f);
+            sabotagedWeapon.damage = Mathf.RoundToInt(original.damage * damageMult);
             victim.weaponLoadout[idx] = sabotagedWeapon;
             sabotaged.Add(sabotagedWeapon.weaponName);
         }
@@ -103,17 +106,20 @@ public class CombatSimulator
     }
 
     // Saboteur (LaBrute, redefinida pelo usuário — antes destruía 1 arma aleatória do loadout
-    // ANTES da luta e dava -100 initiative; agora não destrói nada de antemão): marca
-    // `victim.saboteurPending = true` — a 1ª arma que a vítima conseguir empunhar de fato
-    // durante a luta (via pickup normal OU roubo via Thief, ver checagem em SimulateTurn logo
-    // depois do bloco de Pegar Arma/Thief/Swap) quebra na hora, com 100% de certeza, sem
-    // nenhum Roll envolvido. Sem efeito até a vítima de fato puxar uma arma — se ela nunca
-    // empunhar nenhuma na luta inteira (raro, mas possível), a skill simplesmente não tem
-    // efeito visível algum.
+    // ANTES da luta; agora não destrói nada de antemão): marca `victim.saboteurPending = true`
+    // — a 1ª arma que a vítima conseguir empunhar de fato durante a luta (via pickup normal OU
+    // roubo via Thief, ver checagem em SimulateTurn logo depois do bloco de Pegar Arma/
+    // Thief/Swap) quebra na hora, com 100% de certeza, sem nenhum Roll envolvido. Sem efeito
+    // até a vítima de fato puxar uma arma — se ela nunca empunhar nenhuma na luta inteira
+    // (raro, mas possível), a skill simplesmente não tem efeito visível algum.
+    // Penalidade de iniciativa (bonusValue1, novo — reintroduzida por tier, 100/150/200)
+    // aplicada uma única vez, pré-luta, na vítima.
     private void ApplySaboteur(PlayerState saboteur, PlayerState victim)
     {
-        if (!saboteur.HasSkill("Saboteur")) return;
+        var saboteurSkill = saboteur.GetSkillData("Saboteur");
+        if (saboteurSkill == null) return;
         victim.saboteurPending = true;
+        victim.initiative -= Mathf.RoundToInt(saboteurSkill.bonusValue1);
     }
 
     // --- State building ---
@@ -145,7 +151,7 @@ public class CombatSimulator
 
         if (profile.skills != null)
             foreach (var sk in profile.skills)
-                if (sk?.skillName != null) s.skills.Add(sk.skillName);
+                if (sk?.skillName != null) { s.skills.Add(sk.skillName); s.skillAssets.Add(sk); }
 
         // Pets (Fase 3) — instâncias independentes a partir de PlayerProfile.pets, sem
         // restrição de duplicatas (3 Ratos geram 3 PetState separados, cada um com seu
@@ -164,6 +170,10 @@ public class CombatSimulator
         return s;
     }
 
+    // Valores de efeito (bonusValue1..6) migrados de literais pro SkillData asset — ver
+    // mapeamento completo em SKILLS_SYSTEM.md ("Migração de valores pro SkillData"). Fallback
+    // (`?? literal`) preserva o comportamento de hoje caso um asset ainda não tenha sido
+    // populado (ex: rodando antes do editor preencher os .asset em disco).
     private void ApplySkillStats(PlayerState s)
     {
         // Percentuais de HP/STR/AGI/SPD somados num percentual líquido por status e aplicados
@@ -174,57 +184,62 @@ public class CombatSimulator
         // total mesmo que outra skill já tenha somado evasion antes.
         float hpPct = 0f, strPct = 0f, agiPct = 0f, spdPct = 0f, evasionPct = 0f;
 
-        // +18 flat já aplicado permanentemente em profile.maxHealth na escolha (CombatResultPanel.ApplyBonus).
-        if (s.HasSkill("Vitality"))            hpPct += 0.5f;
-        // +3 flat já aplicado permanentemente em profile.str na escolha (CombatResultPanel.ApplyBonus).
-        if (s.HasSkill("Herculean Strength"))  strPct += 0.5f;
-        if (s.HasSkill("Feline Agility"))       agiPct += 0.5f;
-        // +3 flat já aplicado permanentemente em profile.speed na escolha. Antes afetava
-        // runSpeedMultiplier; agora afeta o atributo speed real (ações extra no Speed System).
-        if (s.HasSkill("Lightning Bolt"))      spdPct += 0.5f;
-        // +5 flat já aplicado permanentemente em profile.speed na escolha. -200 iniciativa e
-        // +50% dano crítico são flat puro (não entram no percentual líquido).
-        if (s.HasSkill("Reconnaissance"))
+        // +18/+3/+3/+3/+5 flat já aplicados permanentemente em profile.maxHealth/str/speed na
+        // escolha (CombatResultPanel.ApplyBonus, lê o mesmo bonusValue2 dessas 4 skills — ver lá).
+        var vitality = s.GetSkillData("Vitality");
+        if (vitality != null)           hpPct += vitality.bonusValue1;
+        var herculean = s.GetSkillData("Herculean Strength");
+        if (herculean != null)         strPct += herculean.bonusValue1;
+        var feline = s.GetSkillData("Feline Agility");
+        if (feline != null)             agiPct += feline.bonusValue1;
+        // Antes afetava runSpeedMultiplier; agora afeta o atributo speed real (ações extra no Speed System).
+        var lightning = s.GetSkillData("Lightning Bolt");
+        if (lightning != null)          spdPct += lightning.bonusValue1;
+        // initiative/critDamageBonus são flat puro (não entram no percentual líquido).
+        var reconnaissance = s.GetSkillData("Reconnaissance");
+        if (reconnaissance != null)
         {
-            spdPct += 1.5f;
-            s.initiative -= 200;
-            s.critDamageBonus += 0.5f;
+            spdPct += reconnaissance.bonusValue1;
+            s.initiative -= Mathf.RoundToInt(reconnaissance.bonusValue3);
+            s.critDamageBonus += reconnaissance.bonusValue4;
         }
-        if (s.HasSkill("Immortal"))
+        var immortal = s.GetSkillData("Immortal");
+        if (immortal != null)
         {
-            hpPct  += 2.5f;
-            strPct -= 0.25f;
-            agiPct -= 0.25f;
-            spdPct -= 0.25f;
+            hpPct  += immortal.bonusValue1;
+            strPct -= immortal.bonusValue2;
+            agiPct -= immortal.bonusValue2;
+            spdPct -= immortal.bonusValue2;
         }
         // Bodybuilder (redefinida pelo usuário — era strPct += 0.5f/"STR × 1.5"): agora só dá
         // +10% evasion e +40% hit speed enquanto empunha arma Heavy, checado vivo em
         // DodgeChance() (evasion) e em CombatPlayer (hit speed, puramente visual — ver nota lá).
         // Sem estado fixo aqui: a arma equipada pode trocar durante a luta.
 
-        // +25% armor (flat, fora do percentual líquido — armor não é um dos quatro status
-        // que stackeiam em percentual) e -15% SPD (entra no percentual líquido normalmente).
-        if (s.HasSkill("Armour"))
+        // armor (flat, fora do percentual líquido — armor não é um dos quatro status que
+        // stackeiam em percentual) e spd (entra no percentual líquido normalmente, subtraído).
+        var armour = s.GetSkillData("Armour");
+        if (armour != null)
         {
-            s.armor += 0.25f;
-            spdPct  -= 0.15f;
+            s.armor += armour.bonusValue1;
+            spdPct  -= armour.bonusValue2;
         }
 
-        // +100% HP, +100% STR, -100% AGI, -90% SPD (não -100%: speed fixo em 0 travava o
-        // player pra nunca ter ação própria nem chance de pegar arma — com -90% ainda existe
-        // chance de arredondar > 0 dependendo do speed base), -100% evasion ("Dexterity" — sem
-        // resistência a ser atingido), -200 initiative, +40% reversal (cancela o hit do
-        // atacante antes dele conectar — ver SimulateHit).
-        if (s.HasSkill("Deity"))
+        // hpPct/strPct positivos, agiPct/spdPct/evasionPct negativos (magnitude em bonusValueN,
+        // subtraída), noEvasion = true incondicional enquanto a skill estiver equipada. +50% de
+        // tamanho (CombatSceneLoader) fica como exceção hardcoded (constante em todos os tiers).
+        // reversal agora varia por tier — bonusValue7 (7º slot, adicionado só pra Deity).
+        var deity = s.GetSkillData("Deity");
+        if (deity != null)
         {
-            hpPct      += 1.0f;
-            strPct     += 1.0f;
-            agiPct     -= 1.0f;
-            spdPct     -= 0.90f;
-            evasionPct -= 1.0f;
+            hpPct      += deity.bonusValue1;
+            strPct     += deity.bonusValue2;
+            agiPct     -= deity.bonusValue3;
+            spdPct     -= deity.bonusValue4;
+            evasionPct -= deity.bonusValue5;
             s.noEvasion  = true;
-            s.reversal   += 0.40f;
-            s.initiative -= 200;
+            s.reversal   += deity.bonusValue7;
+            s.initiative -= Mathf.RoundToInt(deity.bonusValue6);
         }
 
         if (hpPct != 0f || strPct != 0f || agiPct != 0f || spdPct != 0f)
@@ -236,54 +251,103 @@ public class CombatSimulator
             s.speed   = Mathf.RoundToInt(s.speed * (1f + spdPct));
         }
 
-        if (s.HasSkill("Extra Thick Skin"))    { s.armor += 0.50f; }
-        if (s.HasSkill("Toughened Skin"))      { s.armor += 0.10f; }
-        // Shield: +45% block rate (blockBonus, mesmo campo de Counter Attack — soma em
-        // BlockChance) e +25% armor (penalidade de mobilidade do escudo equipado). hasShield
-        // habilita o desarme próprio do escudo (ver ShieldDisarmChance/SimulateHit) — se cair,
-        // os dois bônus são revertidos (ver case ShieldDisarm). Visual (sprite no braço oposto)
-        // é equipado fora daqui, em CombatSceneLoader.Initialize — PlayerState não tem GameObject.
-        if (s.HasSkill("Shield"))              { s.blockBonus += 0.45f; s.armor += 0.25f; s.hasShield = true; }
-        if (s.HasSkill("Untouchable"))         { s.evasion += 0.30f; }
-        if (s.HasSkill("Relentless"))          { s.accuracy += 0.30f; }
-        if (s.HasSkill("Fists of Fury"))       { s.comboChanceBonus += 0.20f; }
-        // Lead Skeleton (redefinida — antes só dava -15% dano de Heavy): +15% armor, -15%
-        // evasion, mantendo o -15% dano de arma blunt (Heavy) já existente (ver SimulateHit/
-        // SimulateRetaliation). Floor de evasion em 0 garantido pelo clamp incondicional abaixo.
-        if (s.HasSkill("Lead Skeleton"))       { s.leadSkeleton = true; s.armor += 0.15f; s.evasion -= 0.15f; }
-        if (s.HasSkill("Ballet Shoes"))        { s.evasion += 0.10f; s.firstHitAvoided = true; }
-        if (s.HasSkill("First Strike"))        { s.initiative += 200; }
-        if (s.HasSkill("Counter Attack"))      { s.blockBonus += 0.10f; s.reversalAfterBlock += 0.90f; }
-        if (s.HasSkill("Sixth Sense"))         { s.counter += 0.10f; }
-        if (s.HasSkill("Hostility"))            { s.reversal += 0.30f; }
+        var toughenedSkin = s.GetSkillData("Toughened Skin");
+        if (toughenedSkin != null) { s.armor += toughenedSkin.bonusValue1; }
+        // Shield: blockBonus (mesmo campo de Counter Attack — soma em BlockChance) e
+        // shieldDamagePenalty (redução no PRÓPRIO dano causado — trade-off do blockBonus alto,
+        // era "armor +=" antes, redefinida pelo usuário). hasShield habilita o desarme próprio
+        // do escudo, que agora usa a fórmula real de DisarmChance(attacker, defender) em vez de
+        // uma chance fixa (ver SimulateHit) — se cair, os dois bônus são revertidos (ver case
+        // ShieldDisarm/ShieldDrop). Visual (sprite no braço oposto) é equipado fora daqui, em
+        // CombatSceneLoader.Initialize — PlayerState não tem GameObject.
+        var shield = s.GetSkillData("Shield");
+        if (shield != null) { s.blockBonus += shield.bonusValue1; s.shieldDamagePenalty += shield.bonusValue2; s.hasShield = true; }
+        var untouchable = s.GetSkillData("Untouchable");
+        if (untouchable != null) { s.evasion += untouchable.bonusValue1; }
+        var relentless = s.GetSkillData("Relentless");
+        if (relentless != null) { s.accuracy += relentless.bonusValue1; }
+        var fistsOfFury = s.GetSkillData("Fists of Fury");
+        if (fistsOfFury != null) { s.comboChanceBonus += fistsOfFury.bonusValue1; }
+        // Chaining T2/T3: comboChanceBonus adicional (bonusValue3, novo — T1 fica 0). O resto
+        // da mecânica (threshold/stun) é lido vivo em SimulateHit, não aqui.
+        var chainingStats = s.GetSkillData("Chaining");
+        if (chainingStats != null) { s.comboChanceBonus += chainingStats.bonusValue3; }
+        // Lead Skeleton (redefinida — antes só dava -15% dano de Heavy): armor/evasion (bonusValue1/2,
+        // evasion subtraída) mantendo o dano de arma blunt (Heavy) multiplicado por bonusValue3
+        // (0.85 = -15%) já existente (ver SimulateHit/SimulateRetaliation). Floor de evasion em 0
+        // garantido pelo clamp incondicional abaixo.
+        var leadSkeleton = s.GetSkillData("Lead Skeleton");
+        if (leadSkeleton != null) { s.leadSkeleton = true; s.armor += leadSkeleton.bonusValue1; s.evasion -= leadSkeleton.bonusValue2; }
+        var balletShoes = s.GetSkillData("Ballet Shoes");
+        if (balletShoes != null) { s.evasion += balletShoes.bonusValue1; s.firstHitAvoided = true; }
+        var firstStrike = s.GetSkillData("First Strike");
+        if (firstStrike != null) { s.initiative += Mathf.RoundToInt(firstStrike.bonusValue1); }
+        var counterAttack = s.GetSkillData("Counter Attack");
+        if (counterAttack != null) { s.blockBonus += counterAttack.bonusValue1; s.reversalAfterBlock += counterAttack.bonusValue2; }
+        var sixthSense = s.GetSkillData("Sixth Sense");
+        if (sixthSense != null) { s.counter += sixthSense.bonusValue1; }
+        var hostility = s.GetSkillData("Hostility");
+        if (hostility != null) { s.reversal += hostility.bonusValue1; }
         // Monk: NÃO guarda mais (era hitSpeed = 0f, removido — Monk ataca normalmente, igual a
         // qualquer personagem) — só o bônus de counter e o malus de iniciativa permanecem,
         // redefinido pelo usuário.
-        if (s.HasSkill("Monk"))                { s.counter += 0.40f; s.initiative -= 200; }
-        if (s.HasSkill("Martial Arts"))         { s.martialArts = true; }
-        if (s.HasSkill("Shock"))                { s.disarmChanceBonus += 0.50f; }
-        if (s.HasSkill("Weapon Master"))        { s.weaponsMaster = true; }
-        // Sticky Hands: -50% chance de ser desarmado (DisarmChance) e -50% chance de arremesso,
-        // incluindo o próprio (ThrowChance) — campo numérico em vez de bool, lido direto como
-        // multiplicador (1 - stickyHands) nas duas fórmulas, ver CLAUDE.md.
-        if (s.HasSkill("Sticky Hands"))         { s.stickyHands += 0.50f; }
-        // Fierce Brute: 1 uso base + 1 extra pra cada 30 de STR (já com strPct aplicado acima —
-        // lido depois do bloco de hpPct/strPct/agiPct/spdPct, então usa o STR final do
-        // personagem, não o base do profile).
-        if (s.HasSkill("Fierce Brute"))         { s.fierceBruteUsesRemaining = 1 + Mathf.FloorToInt(s.str / 30f); }
-        // Fast Metabolism: penalidades fixas do My Brute original ("-50% Hit speed, -5%
-        // Critical chance") — a regeneração/pulso em si não depende de nenhum campo aqui, ver
-        // SimulateTurn/ApplyDamage. hitSpeed não tem mais nenhum guard (`> 0f`) no simulador
-        // desde que Monk parou de zerá-lo — sem efeito nenhum no caminho ativo hoje (o
-        // simulador não usa hitSpeed pra escalar nenhuma animação; só o caminho legado,
-        // `PlayerCombat.HitRoutine`, multiplica `slashSpeed` por ele).
-        if (s.HasSkill("Fast Metabolism"))      { s.hitSpeed -= 0.50f; s.criticalChance -= 0.05f; }
+        var monk = s.GetSkillData("Monk");
+        if (monk != null) { s.counter += monk.bonusValue1; s.initiative -= Mathf.RoundToInt(monk.bonusValue2); }
+        var martialArts = s.GetSkillData("Martial Arts");
+        if (martialArts != null) { s.martialArts = true; }
+        var shock = s.GetSkillData("Shock");
+        if (shock != null) { s.disarmChanceBonus += shock.bonusValue1; }
+        var weaponMaster = s.GetSkillData("Weapon Master");
+        if (weaponMaster != null) { s.weaponsMaster = true; }
+        // Sticky Hands: multiplicador (1 - stickyHands) lido direto em DisarmChance/ThrowChance.
+        var stickyHands = s.GetSkillData("Sticky Hands");
+        if (stickyHands != null) { s.stickyHands += stickyHands.bonusValue1; }
+        // Fierce Brute: usesPerFight (asset) = uso base; bonusValue4 = STR necessário por uso
+        // extra (30 hoje) — já com strPct aplicado acima (lido depois do bloco de
+        // hpPct/strPct/agiPct/spdPct, então usa o STR final do personagem, não o base do profile).
+        var fierceBrute = s.GetSkillData("Fierce Brute");
+        if (fierceBrute != null)
+        {
+            float strPerExtraUse = fierceBrute.bonusValue4 > 0f ? fierceBrute.bonusValue4 : 30f;
+            s.fierceBruteUsesRemaining = fierceBrute.usesPerFight + Mathf.FloorToInt(s.str / strPerExtraUse);
+        }
+        // Fast Metabolism: penalidades (bonusValue1/2, subtraídas) — a regeneração/pulso em si é
+        // lida vivo em SimulateTurn/ApplyDamage (bonusValue3/4). hitSpeed não tem mais nenhum
+        // guard (`> 0f`) no simulador desde que Monk parou de zerá-lo — sem efeito nenhum no
+        // caminho ativo hoje (o simulador não usa hitSpeed pra escalar nenhuma animação; só o
+        // caminho legado, `PlayerCombat.HitRoutine`, multiplica `slashSpeed` por ele).
+        var fastMetabolism = s.GetSkillData("Fast Metabolism");
+        if (fastMetabolism != null) { s.hitSpeed -= fastMetabolism.bonusValue1; s.criticalChance -= fastMetabolism.bonusValue2; }
+
+        // Usos por luta dos Supers/skills com contador — lidos do próprio usesPerFight do asset
+        // equipado (antes eram só o default hardcoded do campo em PlayerState, usesPerFight nunca
+        // era consultado). Não substitui o default quando a skill não está equipada.
+        ApplyUsesPerFight(s, "Thief",             v => s.thiefUsesRemaining = v);
+        ApplyUsesPerFight(s, "Flash Flood",       v => s.flashFloodUsesRemaining = v);
+        ApplyUsesPerFight(s, "Haste",             v => s.hasteUsesRemaining = v);
+        ApplyUsesPerFight(s, "Piledriver",        v => s.piledriverUsesRemaining = v);
+        ApplyUsesPerFight(s, "Net",               v => s.netUsesRemaining = v);
+        ApplyUsesPerFight(s, "Bomb",              v => s.bombUsesRemaining = v);
+        ApplyUsesPerFight(s, "Tragic Potion",     v => s.tragicPotionUsesRemaining = v);
+        ApplyUsesPerFight(s, "Vampirism",         v => s.vampirismUsesRemaining = v);
+        ApplyUsesPerFight(s, "Cry of the Damned", v => s.cryOfTheDamnedUsesRemaining = v);
+        ApplyUsesPerFight(s, "Hypnosis",          v => s.hypnosisUsesRemaining = v);
+        ApplyUsesPerFight(s, "Tamer",             v => s.tamerUsesRemaining = v);
+        ApplyUsesPerFight(s, "Treat",             v => s.treatUsesRemaining = v);
+        ApplyUsesPerFight(s, "Mimic",             v => s.mimicUsesRemaining = v);
+        // Fierce Brute não passa por ApplyUsesPerFight — tem cálculo próprio acima (escala com STR).
 
         // Aplicado por último, depois de Untouchable/Ballet Shoes/Lead Skeleton já terem somado
         // ou subtraído evasion — garante que Deity zere o total mesmo que outra skill já tenha
         // alterado evasion antes. Incondicional (não só quando evasionPct != 0) pra também
         // garantir o floor em 0 quando só Lead Skeleton (-15% flat) deixa o total negativo.
         s.evasion = Mathf.Max(0f, s.evasion * (1f + evasionPct));
+    }
+
+    private static void ApplyUsesPerFight(PlayerState s, string skillName, System.Action<int> setter)
+    {
+        var sk = s.GetSkillData(skillName);
+        if (sk != null) setter(sk.usesPerFight);
     }
 
     // --- Round / turn dispatch ---
@@ -433,10 +497,13 @@ public class CombatSimulator
         // arma em mão é sempre incluída quando armado. Checado ANTES de Thief/pickup/swap/
         // throw normal/melee — consome a ação inteira do turno (sem mais nada acontecendo
         // neste mesmo turno).
-        if (attacker.HasSkill("Flash Flood") && attacker.flashFloodUsesRemaining > 0
-            && attacker.weaponLoadout.Count >= 3 && Roll(0.17f))
+        var flashFloodSkill = attacker.GetSkillData("Flash Flood");
+        int flashFloodMinWeapons = flashFloodSkill != null && flashFloodSkill.bonusValue2 > 0f ? Mathf.RoundToInt(flashFloodSkill.bonusValue2) : 3;
+        if (flashFloodSkill != null && attacker.flashFloodUsesRemaining > 0
+            && attacker.weaponLoadout.Count >= flashFloodMinWeapons && Roll(flashFloodSkill.bonusValue1 > 0f ? flashFloodSkill.bonusValue1 : 0.17f))
         {
             defender.lastSuperUsed = "Flash Flood"; // Mimic tracking
+            defender.superActivationHistory.Add("Flash Flood"); // Mimic T3 tracking
             SimulateFlashFlood(attacker, defender);
             EmitTurnEnd(attacker);
             return;
@@ -445,9 +512,11 @@ public class CombatSimulator
         // 0b. Haste (Super, 1x por luta): 23% de chance por turno quando disponível. Não exige
         // arma nenhuma (dano vem só de Speed, ver SimulateHaste) — diferente de Flash Flood.
         // Checado ANTES de Thief/pickup/swap/throw normal/melee — consome a ação inteira do turno.
-        if (attacker.HasSkill("Haste") && attacker.hasteUsesRemaining > 0 && Roll(0.23f))
+        var hasteSkillCheck = attacker.GetSkillData("Haste");
+        if (hasteSkillCheck != null && attacker.hasteUsesRemaining > 0 && Roll(hasteSkillCheck.bonusValue1 > 0f ? hasteSkillCheck.bonusValue1 : 0.23f))
         {
             defender.lastSuperUsed = "Haste"; // Mimic tracking
+            defender.superActivationHistory.Add("Haste"); // Mimic T3 tracking
             SimulateHaste(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
@@ -458,9 +527,11 @@ public class CombatSimulator
         // DodgeChance/BlockChance inteiramente (o atacante já agarrou o defensor antes de
         // pular; não há janela pra reagir depois do grab). Dano escala com a STR do
         // DEFENSOR, não do atacante — ver SimulatePiledriver.
-        if (attacker.HasSkill("Piledriver") && attacker.piledriverUsesRemaining > 0 && Roll(0.17f))
+        var piledriverSkillCheck = attacker.GetSkillData("Piledriver");
+        if (piledriverSkillCheck != null && attacker.piledriverUsesRemaining > 0 && Roll(piledriverSkillCheck.bonusValue1 > 0f ? piledriverSkillCheck.bonusValue1 : 0.17f))
         {
             defender.lastSuperUsed = "Piledriver"; // Mimic tracking
+            defender.superActivationHistory.Add("Piledriver"); // Mimic T3 tracking
             SimulatePiledriver(attacker, defender, targetPet);
             EmitTurnEnd(attacker);
             return;
@@ -477,8 +548,12 @@ public class CombatSimulator
         // posição de antes. Nota: como isso fica DEPOIS de Flash Flood/Haste/Piledriver (0/0b/
         // 0c, que retornam antes se ativarem), um personagem com Fast Metabolism + uma dessas
         // Supers não regenera/burst no turno em que a Super consome a ação.
-        if (attacker.HasSkill("Fast Metabolism"))
+        var fastMetabolismCheck = attacker.GetSkillData("Fast Metabolism");
+        if (fastMetabolismCheck != null)
         {
+            float regenPct = fastMetabolismCheck.bonusValue3 > 0f ? fastMetabolismCheck.bonusValue3 : 0.01f;
+            float burstPct = fastMetabolismCheck.bonusValue4 > 0f ? fastMetabolismCheck.bonusValue4 : 0.05f;
+
             // Captura ANTES de resetar — representa "sofreu dano desde a última checagem dele",
             // setado por ApplyDamage (mesma regra do My Brute: "if they don't take damage") —
             // exceto no próprio hit que ativa o pulso (ver ApplyDamage), que não conta como
@@ -494,12 +569,13 @@ public class CombatSimulator
                 }
                 else
                 {
-                    // Burst: as 10 curas de 5% acontecem todas neste turno, em sequência —
-                    // CombatPlayer pausa o personagem (parado) durante toda a sequência visual
-                    // (ver case FastMetabolismPulse).
+                    // Burst: as 10 curas acontecem todas neste turno, em sequência — CombatPlayer
+                    // pausa o personagem (parado) durante toda a sequência visual (ver case
+                    // FastMetabolismPulse). Contagem de 10 pulsos permanece fixa (estrutural, não
+                    // um bonusValue) — só o % de cada pulso escala por tier.
                     for (int i = 0; i < 10; i++)
                     {
-                        int heal2 = Mathf.Max(1, Mathf.RoundToInt(attacker.maxHp * 0.05f));
+                        int heal2 = Mathf.Max(1, Mathf.RoundToInt(attacker.maxHp * burstPct));
                         attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal2);
                         attacker.fastMetabolismPulseCount++;
                         Emit(new CombatEvent { type = CombatEventType.FastMetabolismPulse, playerIndex = attacker.index, healAmount = heal2, newHp = attacker.hp, pulseCount = attacker.fastMetabolismPulseCount });
@@ -508,10 +584,10 @@ public class CombatSimulator
                 }
             }
 
-            // Regeneração de 1% — incondicional, e colocada DEPOIS do burst de propósito: quando
-            // o burst acontece neste turno, o usuário pediu que a cura de 1% normal aconteça só
-            // depois da animação do burst terminar, "em seguida", não antes.
-            int heal1 = Mathf.Max(1, Mathf.RoundToInt(attacker.maxHp * 0.01f));
+            // Regeneração — incondicional, e colocada DEPOIS do burst de propósito: quando o
+            // burst acontece neste turno, o usuário pediu que a cura normal aconteça só depois da
+            // animação do burst terminar, "em seguida", não antes.
+            int heal1 = Mathf.Max(1, Mathf.RoundToInt(attacker.maxHp * regenPct));
             attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal1);
             Emit(new CombatEvent { type = CombatEventType.FastMetabolismRegen, playerIndex = attacker.index, healAmount = heal1, newHp = attacker.hp });
         }
@@ -525,11 +601,13 @@ public class CombatSimulator
         // duração — dura até o fim da luta ou até curar (Tragic Potion, ver
         // TryActivateTragicPotion) — e tica no fim de TODO turno do defensor a partir de agora
         // (ver EmitTurnEnd).
-        if (attacker.HasSkill("Chef") && !attacker.chefPizzaThrown)
+        var chefSkill = attacker.GetSkillData("Chef");
+        if (chefSkill != null && !attacker.chefPizzaThrown)
         {
             attacker.chefPizzaThrown = true;
             defender.poisoned = true;
-            defender.poisonDamagePerTurn = Mathf.Max(1, Mathf.CeilToInt(defender.maxHp * 0.01f));
+            float poisonPct = chefSkill.bonusValue1 > 0f ? chefSkill.bonusValue1 : 0.01f;
+            defender.poisonDamagePerTurn = Mathf.Max(1, Mathf.CeilToInt(defender.maxHp * poisonPct));
             Emit(new CombatEvent { type = CombatEventType.ChefPizzaThrow, playerIndex = attacker.index, targetIndex = defender.index });
         }
 
@@ -553,7 +631,7 @@ public class CombatSimulator
             supers.Add(() => {
                 int br = attacker.fierceBruteUsesRemaining;
                 TryActivateFierceBrute(attacker);
-                if (attacker.fierceBruteUsesRemaining < br) defender.lastSuperUsed = "Fierce Brute";
+                if (attacker.fierceBruteUsesRemaining < br) { defender.lastSuperUsed = "Fierce Brute"; defender.superActivationHistory.Add("Fierce Brute"); }
                 return false;
             });
         if (attacker.HasSkill("Bomb") && attacker.bombUsesRemaining > 0)
@@ -562,7 +640,7 @@ public class CombatSimulator
             supers.Add(() => {
                 int tp = attacker.tragicPotionUsesRemaining;
                 TryActivateTragicPotion(attacker);
-                if (attacker.tragicPotionUsesRemaining < tp) defender.lastSuperUsed = "Tragic Potion";
+                if (attacker.tragicPotionUsesRemaining < tp) { defender.lastSuperUsed = "Tragic Potion"; defender.superActivationHistory.Add("Tragic Potion"); }
                 return false;
             });
         if (attacker.HasSkill("Vampirism") && attacker.vampirismUsesRemaining > 0)
@@ -602,8 +680,9 @@ public class CombatSimulator
         // Thief não triggar (sem usos restantes, oponente desarmado, ou o roll falhar), cai pro
         // pickup comum normalmente.
         bool stoleWeapon = false;
+        var thiefSkill = attacker.GetSkillData("Thief");
         if (attacker.currentWeaponData == null && defender.currentWeaponData != null
-            && attacker.HasSkill("Thief") && attacker.thiefUsesRemaining > 0 && Roll(0.44f))
+            && thiefSkill != null && attacker.thiefUsesRemaining > 0 && Roll(thiefSkill.bonusValue1 > 0f ? thiefSkill.bonusValue1 : 0.44f))
         {
             var stolen = defender.currentWeaponData;
             defender.weaponLoadout.Remove(stolen);
@@ -903,8 +982,10 @@ public class CombatSimulator
         float agiBonus      = Mathf.Max(0, defender.agility - 3) * 0.02f;
         float weaponEvasion = defender.currentWeaponData != null
             ? defender.currentWeaponData.evasionBonus : UnarmedStats.EvasionBonus;
-        float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
-        float bodybuilderBonus = (WeaponData.HasType(defender.currentWeaponData, WeaponType.Heavy) && defender.HasSkill("Bodybuilder")) ? 0.10f : 0f;
+        var survivalSkillCheck = defender.hp == 1 ? defender.GetSkillData("Survival") : null;
+        float survivalBonus = survivalSkillCheck != null ? (survivalSkillCheck.bonusValue1 > 0f ? survivalSkillCheck.bonusValue1 : 0.20f) : 0f;
+        var bodybuilderSkillCheck = WeaponData.HasType(defender.currentWeaponData, WeaponType.Heavy) ? defender.GetSkillData("Bodybuilder") : null;
+        float bodybuilderBonus = bodybuilderSkillCheck != null ? (bodybuilderSkillCheck.bonusValue1 > 0f ? bodybuilderSkillCheck.bonusValue1 : 0.10f) : 0f;
         float total = baseChance + agiBonus + defender.evasion + weaponEvasion + survivalBonus + bodybuilderBonus;
         return Mathf.Clamp(total, 0f, 0.60f);
     }
@@ -951,7 +1032,9 @@ public class CombatSimulator
         bool interrupted = SimulateHit(attacker, defender, isCombo, out damageDealt, targetPet);
 
         bool targetAlive = targetPet != null ? targetPet.isAlive : defender.isAlive;
-        while (!damageDealt && attacker.HasSkill("Determination") && attacker.isAlive && targetAlive && Roll(0.60f))
+        var determinationSkill = attacker.GetSkillData("Determination");
+        while (!damageDealt && determinationSkill != null && attacker.isAlive && targetAlive
+               && Roll(determinationSkill.bonusValue1 > 0f ? determinationSkill.bonusValue1 : 0.60f))
         {
             interrupted = SimulateHit(attacker, defender, isCombo: false, out damageDealt, targetPet);
             targetAlive = targetPet != null ? targetPet.isAlive : defender.isAlive;
@@ -994,7 +1077,8 @@ public class CombatSimulator
             float dmgPet    = CalcDamage(attacker, isCritPet);
             if (fierceBruteThisPetHit)
             {
-                dmgPet *= 2f;
+                var fierceBruteDmgSkillPet = attacker.GetSkillData("Fierce Brute");
+                dmgPet *= fierceBruteDmgSkillPet != null && fierceBruteDmgSkillPet.bonusValue2 > 0f ? fierceBruteDmgSkillPet.bonusValue2 : 2f;
                 attacker.fierceBruteActive = false;
             }
             int finalDamagePet = Mathf.Max(1, Mathf.RoundToInt(dmgPet));
@@ -1069,16 +1153,20 @@ public class CombatSimulator
             // defensor tiver Shield equipado, só o escudo pode cair neste hit (protege a arma
             // por baixo dele, igual ao My Brute); só depois que o escudo já caiu (aqui ou em
             // hit anterior) é que a arma propriamente passa a correr risco de cair ao bloquear.
-            // Shield usa o mesmo ShieldDisarmChance fixo (sem disarmChanceBonus/disarmBonus) e
-            // popup "DROP!" (não "DISARM!" — foi o próprio impacto do bloqueio, não um desarme
-            // ativo do atacante, mesma distinção de WeaponDrop vs Disarm).
+            // Shield agora usa a fórmula real de DisarmChance(attacker, defender) do atacante
+            // (tags de arma, disarmChanceBonus de Shock etc.) em vez de uma chance fixa — o
+            // escudo continua tendo prioridade sobre a arma (mutuamente exclusivo, mesma
+            // estrutura de sempre), só a magnitude da chance mudou. Popup "DROP!" (não
+            // "DISARM!" — foi o próprio impacto do bloqueio, não um desarme ativo do atacante,
+            // mesma distinção de WeaponDrop vs Disarm).
             if (defender.hasShield)
             {
-                if (Roll(ShieldDisarmChance))
+                var shieldSkillDrop = defender.GetSkillData("Shield");
+                if (Roll(DisarmChance(attacker, defender)))
                 {
                     defender.hasShield   = false;
-                    defender.blockBonus -= 0.45f;
-                    defender.armor      -= 0.25f;
+                    defender.blockBonus -= shieldSkillDrop != null && shieldSkillDrop.bonusValue1 > 0f ? shieldSkillDrop.bonusValue1 : 0.45f;
+                    defender.shieldDamagePenalty -= shieldSkillDrop != null && shieldSkillDrop.bonusValue2 > 0f ? shieldSkillDrop.bonusValue2 : 0.25f;
                     Emit(new CombatEvent { type = CombatEventType.ShieldDrop, playerIndex = defender.index });
                 }
             }
@@ -1118,7 +1206,8 @@ public class CombatSimulator
         // de fato conectou.
         if (fierceBruteThisHit)
         {
-            dmg *= 2f;
+            var fierceBruteDmgSkill = attacker.GetSkillData("Fierce Brute");
+            dmg *= fierceBruteDmgSkill != null && fierceBruteDmgSkill.bonusValue2 > 0f ? fierceBruteDmgSkill.bonusValue2 : 2f;
             attacker.fierceBruteActive = false;
 
             // Rato (Mouse) como escudo vivo: 50% de chance dele interceptar o hit já dobrado no
@@ -1147,9 +1236,12 @@ public class CombatSimulator
         // Resistant: cap no dano bruto, antes de Lead Skeleton/armadura (ver ApplyResistantCap).
         dmg = ApplyResistantCap(defender, dmg);
 
-        // Lead Skeleton: -15% dano de arma blunt (Heavy)
+        // Lead Skeleton: dano de arma blunt (Heavy) multiplicado (bonusValue3, 0.85 = -15%)
         if (defender.leadSkeleton && WeaponData.IsBlunt(attacker.currentWeaponData))
-            dmg *= 0.85f;
+        {
+            var leadSkeletonSkill = defender.GetSkillData("Lead Skeleton");
+            dmg *= leadSkeletonSkill != null && leadSkeletonSkill.bonusValue3 > 0f ? leadSkeletonSkill.bonusValue3 : 0.85f;
+        }
 
         // Armor reduction
         int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
@@ -1167,13 +1259,16 @@ public class CombatSimulator
         // o atacante toma qualquer dano, de qualquer origem — Hit, Counter, Reversal ou Throw)
         // estuna o defensor por 1 ação dele. Só conta hit melee de verdade (este ponto) — não
         // Counter/Reversal/Throw, fora do escopo descrito pelo usuário ("atacar"/"combar").
-        if (attacker.HasSkill("Chaining"))
+        var chainingSkill = attacker.GetSkillData("Chaining");
+        if (chainingSkill != null)
         {
             attacker.chainHitStreak++;
-            if (attacker.chainHitStreak >= 3)
+            int chainThreshold = chainingSkill.bonusValue1 > 0f ? Mathf.RoundToInt(chainingSkill.bonusValue1) : 3;
+            int chainStunActions = chainingSkill.bonusValue2 > 0f ? Mathf.RoundToInt(chainingSkill.bonusValue2) : 1;
+            if (attacker.chainHitStreak >= chainThreshold)
             {
                 attacker.chainHitStreak = 0;
-                defender.stunnedActions++;
+                defender.stunnedActions += chainStunActions;
                 Emit(new CombatEvent { type = CombatEventType.Stunned, playerIndex = attacker.index, targetIndex = defender.index });
 
                 // Estuna também derruba a arma do estunado, se ele tiver uma — pedido pelo
@@ -1201,13 +1296,14 @@ public class CombatSimulator
         // até o chão) — único emissor restante desse tipo de evento, já que a skill Saboteur
         // (mecânica distinta, ver ApplySaboteur/SaboteurBreak acima) passou a quebrar a 1ª arma
         // puxada em vez de destruir uma do HUD antes da luta.
-        if (attacker.HasSkill("Sabotage"))
+        var sabotageSkill = attacker.GetSkillData("Sabotage");
+        if (sabotageSkill != null)
         {
             var sabotagePool = new List<WeaponData>();
             foreach (var w in defender.weaponLoadout)
                 if (w != defender.currentWeaponData) sabotagePool.Add(w);
 
-            if (sabotagePool.Count > 0 && Roll(0.50f))
+            if (sabotagePool.Count > 0 && Roll(sabotageSkill.bonusValue1 > 0f ? sabotageSkill.bonusValue1 : 0.50f))
             {
                 var destroyed = sabotagePool[_rng.Next(sabotagePool.Count)];
                 defender.weaponLoadout.Remove(destroyed);
@@ -1221,7 +1317,8 @@ public class CombatSimulator
         // Counter, interrompe o resto do combo deste turno — sem arma na mão, o atacante não
         // continua a sequência (antes só zerava a arma e o combo seguia normalmente, desarmado).
         bool ironHeadTriggered = false;
-        if (defender.HasSkill("Iron Head") && attacker.currentWeaponData != null && Roll(0.40f))
+        var ironHeadSkill = defender.GetSkillData("Iron Head");
+        if (ironHeadSkill != null && attacker.currentWeaponData != null && Roll(ironHeadSkill.bonusValue1 > 0f ? ironHeadSkill.bonusValue1 : 0.40f))
         {
             ironHeadTriggered = true;
             string ihWn = attacker.currentWeaponData.weaponName;
@@ -1245,18 +1342,20 @@ public class CombatSimulator
         // defensor que acabou de contra-atacar. Escudo tem prioridade — enquanto o defensor
         // tiver Shield equipado, só ele pode ser desarmado neste hit (protege a arma por baixo
         // dele); só depois que o escudo já caiu (aqui ou em hit/bloqueio anterior) a arma passa
-        // a correr risco de desarme de verdade. ShieldDisarmChance é fixa, sem somar
-        // DisarmChance(attacker) (disarmChanceBonus de Shock, disarmBonus da arma do atacante,
-        // ou a futura Impact não afetam essa chance, ver CLAUDE.md).
+        // a correr risco de desarme de verdade. Escudo agora usa a mesma fórmula real de
+        // DisarmChance(attacker, defender) do desarme de arma normal (soma disarmChanceBonus de
+        // Shock, disarmBonus da arma do atacante etc.) em vez de uma chance fixa — redefinida
+        // pelo usuário; a prioridade escudo-antes-da-arma continua igual.
         if (attacker.isAlive && !isCombo)
         {
             if (defender.hasShield)
             {
-                if (Roll(ShieldDisarmChance))
+                var shieldSkillDisarm = defender.GetSkillData("Shield");
+                if (Roll(DisarmChance(attacker, defender)))
                 {
                     defender.hasShield   = false;
-                    defender.blockBonus -= 0.45f;
-                    defender.armor      -= 0.25f;
+                    defender.blockBonus -= shieldSkillDisarm != null && shieldSkillDisarm.bonusValue1 > 0f ? shieldSkillDisarm.bonusValue1 : 0.45f;
+                    defender.shieldDamagePenalty -= shieldSkillDisarm != null && shieldSkillDisarm.bonusValue2 > 0f ? shieldSkillDisarm.bonusValue2 : 0.25f;
                     Emit(new CombatEvent { type = CombatEventType.ShieldDisarm, playerIndex = attacker.index, targetIndex = defender.index });
                 }
             }
@@ -1311,7 +1410,10 @@ public class CombatSimulator
         dmg = ApplyResistantCap(target, dmg);
 
         if (target.leadSkeleton && WeaponData.IsBlunt(retaliator.currentWeaponData))
-            dmg *= 0.85f;
+        {
+            var leadSkeletonSkillRetal = target.GetSkillData("Lead Skeleton");
+            dmg *= leadSkeletonSkillRetal != null && leadSkeletonSkillRetal.bonusValue3 > 0f ? leadSkeletonSkillRetal.bonusValue3 : 0.85f;
+        }
 
         int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - target.armor)));
 
@@ -1321,7 +1423,8 @@ public class CombatSimulator
 
         // Iron Head: mesma checagem de SimulateHit — target acabou de sofrer o dano da
         // retaliação, então pode derrubar a arma de quem retaliou.
-        if (target.HasSkill("Iron Head") && retaliator.currentWeaponData != null && Roll(0.40f))
+        var ironHeadRetalSkill = target.GetSkillData("Iron Head");
+        if (ironHeadRetalSkill != null && retaliator.currentWeaponData != null && Roll(ironHeadRetalSkill.bonusValue1 > 0f ? ironHeadRetalSkill.bonusValue1 : 0.40f))
         {
             string ihWn = retaliator.currentWeaponData.weaponName;
             retaliator.weaponLoadout.Remove(retaliator.currentWeaponData);
@@ -1383,7 +1486,8 @@ public class CombatSimulator
         // estiver enredado (Net — sem mobilidade pra rebater) nem sem nenhuma fonte de deflect
         // (chance 0, Roll(0f) nunca dispara de qualquer forma, mas o guard evita computar
         // CalcThrowDamage/SimulateRepulse à toa).
-        float deflectChance = (defender.HasSkill("Repulse") ? 0.30f : 0f)
+        var repulseSkill = defender.GetSkillData("Repulse");
+        float deflectChance = (repulseSkill != null ? (repulseSkill.bonusValue1 > 0f ? repulseSkill.bonusValue1 : 0.30f) : 0f)
             + (defender.currentWeaponData?.deflectBonus ?? 0f);
         if (!defender.netEnsnared && deflectChance > 0f && Roll(deflectChance))
         {
@@ -1399,7 +1503,9 @@ public class CombatSimulator
             // papel de "defesa extra contra arremesso", só que agora somado direto no Block em
             // vez de reduzir uma chance fixa de acerto. Net força acerto (sem mobilidade pra
             // reagir), mesma regra de qualquer arremesso.
-            float boomerangBlockChance = BlockChance(attacker, defender) + (defender.HasSkill("Hideaway") ? 0.25f : 0f);
+            var hideawaySkillBoomerang = defender.GetSkillData("Hideaway");
+            float hideawayBlockBonus = hideawaySkillBoomerang != null ? (hideawaySkillBoomerang.bonusValue2 > 0f ? hideawaySkillBoomerang.bonusValue2 : 0.25f) : 0f;
+            float boomerangBlockChance = BlockChance(attacker, defender) + hideawayBlockBonus;
             if (!defender.netEnsnared && Roll(boomerangBlockChance))
             {
                 Emit(new CombatEvent { type = CombatEventType.Block, playerIndex = attacker.index, targetIndex = defender.index, isThrow = true });
@@ -1430,7 +1536,9 @@ public class CombatSimulator
             // Net: defensor enredado não pode evadir o arremesso também — força acerto, ignorando
             // hitChance/Hideaway por completo (mesmo "sempre acerta" das outras checagens, ver
             // Counter/Block/Dodge gated em SimulateHit/SimulateHaste).
-            float hitChance = 0.80f - (defender.HasSkill("Hideaway") ? 0.25f : 0f);
+            var hideawaySkillThrow = defender.GetSkillData("Hideaway");
+            float hideawayHitReduction = hideawaySkillThrow != null ? (hideawaySkillThrow.bonusValue2 > 0f ? hideawaySkillThrow.bonusValue2 : 0.25f) : 0f;
+            float hitChance = 0.80f - hideawayHitReduction;
             if (defender.netEnsnared || Roll(hitChance))
             {
                 int dmg = CalcThrowDamage(attacker, weaponData);
@@ -1476,8 +1584,10 @@ public class CombatSimulator
 
     private void SimulateRepulse(PlayerState deflector, PlayerState originalThrower, WeaponData weaponData)
     {
-        // +5% de crítico adicional do Repulse; CritChance base usa o weapon atual do deflector
-        bool  isCrit   = Roll(CritChance(deflector) + 0.05f);
+        // +crítico adicional do Repulse; CritChance base usa o weapon atual do deflector
+        var repulseSkillCrit = deflector.GetSkillData("Repulse");
+        float repulseCritBonus = repulseSkillCrit != null && repulseSkillCrit.bonusValue2 > 0f ? repulseSkillCrit.bonusValue2 : 0.05f;
+        bool  isCrit   = Roll(CritChance(deflector) + repulseCritBonus);
         // Dano: weaponDamage + STR do lançador original (força do arremesso original)
         int   dmg      = CalcThrowDamage(originalThrower, weaponData);
         float critMult = (weaponData != null ? weaponData.critDamageMultiplier : UnarmedStats.CritDamageMultiplier)
@@ -1521,6 +1631,9 @@ public class CombatSimulator
     {
         attacker.flashFloodUsesRemaining--;
 
+        var flashFloodSkill = attacker.GetSkillData("Flash Flood");
+        int throwCount = flashFloodSkill != null && flashFloodSkill.bonusValue3 > 0f ? Mathf.RoundToInt(flashFloodSkill.bonusValue3) : 3;
+
         var pool = new List<int>();
         for (int i = 0; i < attacker.weaponLoadout.Count; i++) pool.Add(i);
 
@@ -1530,7 +1643,7 @@ public class CombatSimulator
             chosen.Add(attacker.currentWeaponData);
             pool.Remove(attacker.weaponLoadout.IndexOf(attacker.currentWeaponData));
         }
-        while (chosen.Count < 3 && pool.Count > 0)
+        while (chosen.Count < throwCount && pool.Count > 0)
         {
             int pick = _rng.Next(pool.Count);
             int idx  = pool[pick];
@@ -1585,6 +1698,10 @@ public class CombatSimulator
     {
         attacker.hasteUsesRemaining--;
 
+        var hasteSkill = attacker.GetSkillData("Haste");
+        float hasteDmgMult  = hasteSkill != null && hasteSkill.bonusValue2 > 0f ? hasteSkill.bonusValue2 : 1.5f;
+        float hasteCritBonus = hasteSkill != null && hasteSkill.bonusValue3 > 0f ? hasteSkill.bonusValue3 : 0.05f;
+
         // Pets como alvo válido: dash contra um pet só rola a esquiva dele (evasionBase) — sem
         // Block (pets não têm), sem CheckNetFreed (netEnsnared de pet é permanente).
         if (targetPet != null)
@@ -1596,8 +1713,8 @@ public class CombatSimulator
                 return;
             }
 
-            bool  isCritPet = Roll(CritChance(attacker) + 0.05f);
-            float dmgPet    = attacker.speed * 1.5f;
+            bool  isCritPet = Roll(CritChance(attacker) + hasteCritBonus);
+            float dmgPet    = attacker.speed * hasteDmgMult;
             if (isCritPet) dmgPet *= CritDamageMultiplier(attacker);
             int finalDamagePet = Mathf.Max(1, Mathf.RoundToInt(dmgPet));
             ApplyDamageToPet(targetPet, finalDamagePet);
@@ -1621,8 +1738,8 @@ public class CombatSimulator
             return;
         }
 
-        bool  isCrit = Roll(CritChance(attacker) + 0.05f);
-        float dmg    = attacker.speed * 1.5f;
+        bool  isCrit = Roll(CritChance(attacker) + hasteCritBonus);
+        float dmg    = attacker.speed * hasteDmgMult;
         if (isCrit) dmg *= CritDamageMultiplier(attacker);
         dmg = ApplyResistantCap(defender, dmg);
         int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
@@ -1645,6 +1762,9 @@ public class CombatSimulator
     {
         attacker.piledriverUsesRemaining--;
 
+        var piledriverSkill = attacker.GetSkillData("Piledriver");
+        float piledriverDmgMult = piledriverSkill != null && piledriverSkill.bonusValue2 > 0f ? piledriverSkill.bonusValue2 : 2.5f;
+
         // Pets como alvo válido: igual ao personagem, NUNCA esquivado — mas a STR usada na
         // fórmula passa a ser a do próprio PET agarrado (targetPet.str), não a do dono
         // (PetState tem o campo str, ver tabela de stats dos pets).
@@ -1652,7 +1772,7 @@ public class CombatSimulator
         {
             int petIdx = defender.pets.IndexOf(targetPet);
             bool  isCritPet = Roll(CritChance(attacker));
-            float dmgPet    = targetPet.str * 2.5f;
+            float dmgPet    = targetPet.str * piledriverDmgMult;
             if (isCritPet) dmgPet *= CritDamageMultiplier(attacker);
             int finalDamagePet = Mathf.Max(1, Mathf.RoundToInt(dmgPet));
             ApplyDamageToPet(targetPet, finalDamagePet);
@@ -1664,7 +1784,7 @@ public class CombatSimulator
         }
 
         bool  isCrit = Roll(CritChance(attacker));
-        float dmg    = defender.str * 2.5f;
+        float dmg    = defender.str * piledriverDmgMult;
         if (isCrit) dmg *= CritDamageMultiplier(attacker);
         dmg = ApplyResistantCap(defender, dmg);
         int finalDamage = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - defender.armor)));
@@ -1682,10 +1802,12 @@ public class CombatSimulator
     // turno inteiro do atacante (única das três que faz isso; ver SimulateTurn).
     private bool TryActivateNet(PlayerState attacker, PlayerState defender)
     {
-        if (attacker.netUsesRemaining <= 0 || !Roll(0.50f)) return false;
+        var netSkill = attacker.GetSkillData("Net");
+        if (attacker.netUsesRemaining <= 0 || !Roll(netSkill != null && netSkill.bonusValue1 > 0f ? netSkill.bonusValue1 : 0.50f)) return false;
 
         attacker.netUsesRemaining--;
         defender.lastSuperUsed = "Net";
+        defender.superActivationHistory.Add("Net"); // Mimic T3 tracking
 
         // Alvo: prioridade total nos pets — se houver qualquer pet vivo e não-enredado do
         // defensor, a rede SEMPRE pega um deles (aleatório entre os disponíveis). Só vai no
@@ -1720,7 +1842,8 @@ public class CombatSimulator
     // esse cenário nem existia — ver TryActivateBomb.
     private void TryActivateFierceBrute(PlayerState attacker)
     {
-        if (attacker.fierceBruteUsesRemaining <= 0 || !Roll(0.33f)) return;
+        var fierceBruteSkillCheck = attacker.GetSkillData("Fierce Brute");
+        if (attacker.fierceBruteUsesRemaining <= 0 || !Roll(fierceBruteSkillCheck != null && fierceBruteSkillCheck.bonusValue1 > 0f ? fierceBruteSkillCheck.bonusValue1 : 0.33f)) return;
 
         attacker.fierceBruteUsesRemaining--;
         attacker.fierceBruteActive = true;
@@ -1739,11 +1862,15 @@ public class CombatSimulator
     // normal — Thief/pickup/throw/melee — continuar no mesmo turno; redefinido pelo usuário).
     private bool TryActivateBomb(PlayerState attacker, PlayerState defender)
     {
-        if (attacker.bombUsesRemaining <= 0 || !Roll(0.17f)) return false;
+        var bombSkill = attacker.GetSkillData("Bomb");
+        if (attacker.bombUsesRemaining <= 0 || !Roll(bombSkill != null && bombSkill.bonusValue1 > 0f ? bombSkill.bonusValue1 : 0.17f)) return false;
 
         attacker.bombUsesRemaining--;
         defender.lastSuperUsed = "Bomb";
-        int rawDamage = _rng.Next(15, 26); // Next(min, max) é max-exclusivo: sorteia 15..25 inclusive
+        defender.superActivationHistory.Add("Bomb"); // Mimic T3 tracking
+        int bombDmgMin = bombSkill != null && bombSkill.bonusValue2 > 0f ? Mathf.RoundToInt(bombSkill.bonusValue2) : 15;
+        int bombDmgMax = bombSkill != null && bombSkill.bonusValue3 > 0f ? Mathf.RoundToInt(bombSkill.bonusValue3) : 25;
+        int rawDamage = _rng.Next(bombDmgMin, bombDmgMax + 1); // Next(min, max) é max-exclusivo
 
         var targets       = GetEnemyTargets(attacker);
         var targetIndexes = new List<int>();
@@ -1821,12 +1948,16 @@ public class CombatSimulator
     // veneno do Chef (skill ainda não implementada, ver PlayerState.poisoned).
     private void TryActivateTragicPotion(PlayerState attacker)
     {
+        var tragicPotionSkill = attacker.GetSkillData("Tragic Potion");
         if (attacker.tragicPotionUsesRemaining <= 0) return;
-        if (attacker.hp >= attacker.maxHp * 0.60f) return;
-        if (!Roll(0.50f)) return;
+        float tpThreshold = tragicPotionSkill != null && tragicPotionSkill.bonusValue2 > 0f ? tragicPotionSkill.bonusValue2 : 0.60f;
+        if (attacker.hp >= attacker.maxHp * tpThreshold) return;
+        if (!Roll(tragicPotionSkill != null && tragicPotionSkill.bonusValue1 > 0f ? tragicPotionSkill.bonusValue1 : 0.50f)) return;
 
         attacker.tragicPotionUsesRemaining--;
-        float healPct = 0.25f + (float)_rng.NextDouble() * 0.25f; // 25%–50% do HP máximo
+        float healMin = tragicPotionSkill != null && tragicPotionSkill.bonusValue3 > 0f ? tragicPotionSkill.bonusValue3 : 0.25f;
+        float healMax = tragicPotionSkill != null && tragicPotionSkill.bonusValue4 > 0f ? tragicPotionSkill.bonusValue4 : 0.50f;
+        float healPct = healMin + (float)_rng.NextDouble() * (healMax - healMin); // healMin–healMax do HP máximo
         int heal = Mathf.RoundToInt(healPct * attacker.maxHp);
         attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal);
         attacker.poisoned = false;
@@ -1848,15 +1979,19 @@ public class CombatSimulator
     // continuarem.
     private bool TryActivateVampirism(PlayerState attacker, PlayerState defender, PetState targetPet = null)
     {
+        var vampirismSkill = attacker.GetSkillData("Vampirism");
         if (attacker.vampirismUsesRemaining <= 0) return false;
-        if (attacker.hp >= attacker.maxHp * 0.50f) return false;
-        if (!Roll(0.33f)) return false;
+        float vampirismThreshold = vampirismSkill != null && vampirismSkill.bonusValue2 > 0f ? vampirismSkill.bonusValue2 : 0.50f;
+        if (attacker.hp >= attacker.maxHp * vampirismThreshold) return false;
+        if (!Roll(vampirismSkill != null && vampirismSkill.bonusValue1 > 0f ? vampirismSkill.bonusValue1 : 0.33f)) return false;
 
         attacker.vampirismUsesRemaining--;
         defender.lastSuperUsed = "Vampirism";
+        defender.superActivationHistory.Add("Vampirism"); // Mimic T3 tracking
 
+        float vampirismFraction = vampirismSkill != null && vampirismSkill.bonusValue3 > 0f ? vampirismSkill.bonusValue3 : 0.25f;
         int missingHp = attacker.maxHp - attacker.hp;
-        int damage    = Mathf.Max(1, Mathf.RoundToInt(missingHp * 0.25f));
+        int damage    = Mathf.Max(1, Mathf.RoundToInt(missingHp * vampirismFraction));
         int heal      = damage;
 
         // Pets como alvo válido: a mordida (garantida, sem Dodge) atinge o pet em vez do
@@ -1908,18 +2043,21 @@ public class CombatSimulator
 
     private void TryActivateCryOfTheDamned(PlayerState attacker, PlayerState defender)
     {
+        var cryOfTheDamnedSkill = attacker.GetSkillData("Cry of the Damned");
         if (attacker.cryOfTheDamnedUsesRemaining <= 0) return;
-        if (!Roll(0.44f)) return;
+        if (!Roll(cryOfTheDamnedSkill != null && cryOfTheDamnedSkill.bonusValue1 > 0f ? cryOfTheDamnedSkill.bonusValue1 : 0.44f)) return;
 
         attacker.cryOfTheDamnedUsesRemaining--;
         defender.lastSuperUsed = "Cry of the Damned";
+        defender.superActivationHistory.Add("Cry of the Damned"); // Mimic T3 tracking
         Emit(new CombatEvent { type = CombatEventType.CryOfTheDamned, playerIndex = attacker.index });
 
+        float perPetExpelChance = cryOfTheDamnedSkill != null && cryOfTheDamnedSkill.bonusValue2 > 0f ? cryOfTheDamnedSkill.bonusValue2 : 0.50f;
         for (int i = 0; i < defender.pets.Count; i++)
         {
             var pet = defender.pets[i];
             if (!pet.isAlive) continue;
-            if (!Roll(0.50f)) continue;
+            if (!Roll(perPetExpelChance)) continue;
             pet.hp = 0;
             Emit(new CombatEvent { type = CombatEventType.PetFlee, playerIndex = defender.index, petIndex = i });
         }
@@ -1927,8 +2065,9 @@ public class CombatSimulator
 
     private void TryActivateHypnosis(PlayerState attacker, PlayerState defender)
     {
+        var hypnosisSkill = attacker.GetSkillData("Hypnosis");
         if (attacker.hypnosisUsesRemaining <= 0) return;
-        if (!Roll(0.38f)) return;
+        if (!Roll(hypnosisSkill != null && hypnosisSkill.bonusValue1 > 0f ? hypnosisSkill.bonusValue1 : 0.38f)) return;
 
         var livingPets = new List<int>();
         for (int i = 0; i < defender.pets.Count; i++)
@@ -1937,10 +2076,11 @@ public class CombatSimulator
 
         attacker.hypnosisUsesRemaining--;
         defender.lastSuperUsed = "Hypnosis";
+        defender.superActivationHistory.Add("Hypnosis"); // Mimic T3 tracking
         Emit(new CombatEvent { type = CombatEventType.Hypnosis, playerIndex = attacker.index });
 
         int idx = livingPets[_rng.Next(livingPets.Count)];
-        if (!Roll(0.90f)) return;
+        if (!Roll(hypnosisSkill != null && hypnosisSkill.bonusValue2 > 0f ? hypnosisSkill.bonusValue2 : 0.90f)) return;
 
         var pet = defender.pets[idx];
         defender.pets.RemoveAt(idx);
@@ -1978,6 +2118,7 @@ public class CombatSimulator
 
         attacker.tamerUsesRemaining--;
         defender.lastSuperUsed = "Tamer";
+        defender.superActivationHistory.Add("Tamer"); // Mimic T3 tracking
 
         int choice  = _rng.Next(pets.Count);
         var carcass = pets[choice];
@@ -2026,6 +2167,7 @@ public class CombatSimulator
 
         attacker.treatUsesRemaining--;
         defender.lastSuperUsed = "Treat";
+        defender.superActivationHistory.Add("Treat"); // Mimic T3 tracking
 
         int heal = targetPet.maxHp / 2;
         targetPet.hp          = System.Math.Min(targetPet.hp + heal, targetPet.maxHp);
@@ -2054,15 +2196,38 @@ public class CombatSimulator
 
     // --- Mimic (Super, 1x) ---
 
-    // Copia a última Super do oponente (defender.lastSuperUsed) e executa diretamente,
+    // T1/T2 copiam a última Super do oponente (defender.lastSuperUsed) e executam diretamente,
     // ignorando HasSkill/usesRemaining/Roll da skill original — Mimic já passou pelo próprio Roll.
+    // T3 ("copia as 3 primeiras skills ativas"): copia o HISTÓRICO cronológico de ativações do
+    // oponente (defender.superActivationHistory, com repetição) indexado pela própria contagem
+    // de uso do Mimic — a 1ª ativação de Mimic T3 copia a 1ª Super que o oponente ativou na
+    // luta, a 2ª ativação copia a 2ª, a 3ª copia a 3ª (falha se o oponente ainda não tiver
+    // ativado Supers suficientes).
     // Filtragem inteligente impede copias sem sentido (Treat sem pet, Thief sem arma, etc.).
     private bool TryActivateMimic(PlayerState attacker, PlayerState defender, PetState targetPet = null)
     {
         if (attacker.mimicUsesRemaining <= 0) return false;
-        string copied = defender.lastSuperUsed;
+        // Mimic é a skill do próprio atacante (não do defensor) — lê o bonusValue1 dela mesma.
+        var mimicSkill = attacker.GetSkillData("Mimic");
+
+        string copied;
+        if (mimicSkill != null && mimicSkill.tier == 3)
+        {
+            int activationIndex = mimicSkill.usesPerFight - attacker.mimicUsesRemaining;
+            if (activationIndex < 0 || activationIndex >= defender.superActivationHistory.Count) return false;
+            copied = defender.superActivationHistory[activationIndex];
+        }
+        else
+        {
+            copied = defender.lastSuperUsed;
+        }
         if (string.IsNullOrEmpty(copied)) return false;
-        if (!Roll(0.25f)) return false;
+        if (!Roll(mimicSkill != null && mimicSkill.bonusValue1 > 0f ? mimicSkill.bonusValue1 : 0.25f)) return false;
+
+        // Valores de threshold/quantidade do Super copiado lidos do SkillData do DEFENSOR (é ele
+        // quem tem a skill equipada de verdade, com o tier dela) — attacker só está imitando o
+        // efeito, sem ter a skill no próprio loadout.
+        var copiedSkillForFilter = defender.GetSkillData(copied);
 
         // Filtragem: não copiar skills que não têm efeito no contexto atual
         switch (copied)
@@ -2090,14 +2255,23 @@ public class CombatSimulator
                 if (!defHasPet) return false;
                 break;
             case "Flash Flood":
-                if (attacker.weaponLoadout == null || attacker.weaponLoadout.Count < 3) return false;
+            {
+                int mimicMinWeapons = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue2 > 0f ? Mathf.RoundToInt(copiedSkillForFilter.bonusValue2) : 3;
+                if (attacker.weaponLoadout == null || attacker.weaponLoadout.Count < mimicMinWeapons) return false;
                 break;
+            }
             case "Tragic Potion":
-                if (attacker.hp >= attacker.maxHp * 0.60f) return false;
+            {
+                float mimicTpThreshold = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue2 > 0f ? copiedSkillForFilter.bonusValue2 : 0.60f;
+                if (attacker.hp >= attacker.maxHp * mimicTpThreshold) return false;
                 break;
+            }
             case "Vampirism":
-                if (attacker.hp >= attacker.maxHp * 0.50f) return false;
+            {
+                float mimicVampThreshold = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue2 > 0f ? copiedSkillForFilter.bonusValue2 : 0.50f;
+                if (attacker.hp >= attacker.maxHp * mimicVampThreshold) return false;
                 break;
+            }
         }
 
         attacker.mimicUsesRemaining--;
@@ -2129,7 +2303,9 @@ public class CombatSimulator
 
             case "Bomb":
             {
-                int raw   = _rng.Next(15, 26);
+                int mimicBombMin = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue2 > 0f ? Mathf.RoundToInt(copiedSkillForFilter.bonusValue2) : 15;
+                int mimicBombMax = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue3 > 0f ? Mathf.RoundToInt(copiedSkillForFilter.bonusValue3) : 25;
+                int raw   = _rng.Next(mimicBombMin, mimicBombMax + 1);
                 var tgts  = GetEnemyTargets(attacker);
                 var tIdxs = new List<int>(); var tDmg = new List<int>();
                 var tHp   = new List<int>(); var nFr  = new List<int>();
@@ -2156,7 +2332,9 @@ public class CombatSimulator
 
             case "Tragic Potion":
             {
-                float pct  = 0.25f + (float)_rng.NextDouble() * 0.25f;
+                float mimicHealMin = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue3 > 0f ? copiedSkillForFilter.bonusValue3 : 0.25f;
+                float mimicHealMax = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue4 > 0f ? copiedSkillForFilter.bonusValue4 : 0.50f;
+                float pct  = mimicHealMin + (float)_rng.NextDouble() * (mimicHealMax - mimicHealMin);
                 int   heal = Mathf.RoundToInt(pct * attacker.maxHp);
                 attacker.hp = Mathf.Min(attacker.maxHp, attacker.hp + heal);
                 attacker.poisoned = false;
@@ -2166,8 +2344,9 @@ public class CombatSimulator
 
             case "Vampirism":
             {
+                float mimicVampFraction = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue3 > 0f ? copiedSkillForFilter.bonusValue3 : 0.25f;
                 int miss = attacker.maxHp - attacker.hp;
-                int dmg  = Mathf.Max(1, Mathf.RoundToInt(miss * 0.25f));
+                int dmg  = Mathf.Max(1, Mathf.RoundToInt(miss * mimicVampFraction));
                 if (targetPet != null)
                 {
                     int pi = defender.pets.IndexOf(targetPet);
@@ -2192,10 +2371,11 @@ public class CombatSimulator
             case "Cry of the Damned":
             {
                 Emit(new CombatEvent { type = CombatEventType.CryOfTheDamned, playerIndex = attacker.index });
+                float mimicExpelChance = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue2 > 0f ? copiedSkillForFilter.bonusValue2 : 0.50f;
                 for (int i = 0; i < defender.pets.Count; i++)
                 {
                     var pet = defender.pets[i];
-                    if (!pet.isAlive || !Roll(0.50f)) continue;
+                    if (!pet.isAlive || !Roll(mimicExpelChance)) continue;
                     pet.hp = 0;
                     Emit(new CombatEvent { type = CombatEventType.PetFlee, playerIndex = defender.index, petIndex = i });
                 }
@@ -2210,7 +2390,8 @@ public class CombatSimulator
                 if (living.Count == 0) return false;
                 Emit(new CombatEvent { type = CombatEventType.Hypnosis, playerIndex = attacker.index });
                 int idx = living[_rng.Next(living.Count)];
-                if (!Roll(0.90f)) return false;
+                float mimicHypnosisSuccess = copiedSkillForFilter != null && copiedSkillForFilter.bonusValue2 > 0f ? copiedSkillForFilter.bonusValue2 : 0.90f;
+                if (!Roll(mimicHypnosisSuccess)) return false;
                 var hpet = defender.pets[idx];
                 defender.pets.RemoveAt(idx);
                 attacker.pets.Add(hpet);
@@ -2386,10 +2567,12 @@ public class CombatSimulator
         // atacante. Sistema separado de dexterityBonus abaixo (arma) — não mexer aqui.
         // Survival: +20% evasion, só enquanto hp == 1 (sai do estado se recuperar HP, e nunca
         // ativa em outro valor de HP, mesmo baixo) — checado vivo a cada chamada, sem flag fixa.
-        float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
+        var survivalSkillCheck = defender.hp == 1 ? defender.GetSkillData("Survival") : null;
+        float survivalBonus = survivalSkillCheck != null ? (survivalSkillCheck.bonusValue1 > 0f ? survivalSkillCheck.bonusValue1 : 0.20f) : 0f;
         // Bodybuilder: +10% evasion ("dexterity"), só enquanto empunha arma Heavy — checado
         // vivo contra a arma atual, igual ao Survival acima (sem flag fixa de ApplySkillStats).
-        float bodybuilderBonus = (WeaponData.HasType(defender.currentWeaponData, WeaponType.Heavy) && defender.HasSkill("Bodybuilder")) ? 0.10f : 0f;
+        var bodybuilderSkillCheck = WeaponData.HasType(defender.currentWeaponData, WeaponType.Heavy) ? defender.GetSkillData("Bodybuilder") : null;
+        float bodybuilderBonus = bodybuilderSkillCheck != null ? (bodybuilderSkillCheck.bonusValue1 > 0f ? bodybuilderSkillCheck.bonusValue1 : 0.10f) : 0f;
         // dexterityBonus da arma do ATACANTE (campo por arma, ex: Branch -1.0) — termo negativo
         // separado de attacker.accuracy acima: dexterity positivo dificulta o dodge do defensor
         // (subtrai), dexterity negativo facilita (soma, já que -(-1) = +1). Auditado antes desta
@@ -2408,7 +2591,8 @@ public class CombatSimulator
         float weaponBlockBonus = defender.currentWeaponData != null
             ? defender.currentWeaponData.blockBonus : UnarmedStats.BlockBonus;
         // Survival: +20% block, mesma condição de hp == 1 do DodgeChance acima.
-        float survivalBonus = (defender.hp == 1 && defender.HasSkill("Survival")) ? 0.20f : 0f;
+        var survivalSkillCheck = defender.hp == 1 ? defender.GetSkillData("Survival") : null;
+        float survivalBonus = survivalSkillCheck != null ? (survivalSkillCheck.bonusValue1 > 0f ? survivalSkillCheck.bonusValue1 : 0.20f) : 0f;
         // accuracyBonus da arma do ATACANTE (campo por arma, ex: Branch +2.0) — termo negativo:
         // quanto maior o accuracy do atacante, menor a chance de block do defensor (o ataque
         // "penetra" o block com mais frequência). Auditado antes desta mudança: campo existia no
@@ -2445,9 +2629,10 @@ public class CombatSimulator
             : TagSum(attacker.currentWeaponData, sharp: 0.05f, fast: 0.03f, heavy: 0.03f);
         float weaponBonus = attacker.currentWeaponData != null
             ? attacker.currentWeaponData.critChanceBonus : UnarmedStats.CritChanceBonus;
-        // Fierce Brute: +10% crítico enquanto o buff estiver ativo (lido ANTES de SimulateHit
+        // Fierce Brute: +crítico enquanto o buff estiver ativo (lido ANTES de SimulateHit
         // consumir/zerar fierceBruteActive depois do hit — ver lá).
-        float fierceBruteBonus = attacker.fierceBruteActive ? 0.10f : 0f;
+        var fierceBruteCritSkill = attacker.fierceBruteActive ? attacker.GetSkillData("Fierce Brute") : null;
+        float fierceBruteBonus = fierceBruteCritSkill != null ? (fierceBruteCritSkill.bonusValue3 > 0f ? fierceBruteCritSkill.bonusValue3 : 0.10f) : 0f;
         return baseChance + weaponBonus + attacker.criticalChance + fierceBruteBonus;
     }
 
@@ -2488,11 +2673,6 @@ public class CombatSimulator
         return total * (1f - defender.stickyHands);
     }
 
-    // Shield: chance fixa de cair, bem menor que arma normal — diferente de DisarmChance(),
-    // não soma disarmChanceBonus (Shock) nem disarmBonus de arma do atacante, e a futura Impact
-    // (+15% disarm) também não deve aumentar essa chance (ver CLAUDE.md, roadmap de Shield).
-    private const float ShieldDisarmChance = 0.10f;
-
     // Hideaway: 50% fixo, substitui a soma por tag (não soma a ela) — valores oficiais do
     // LaBrute. Sticky Hands multiplica o resultado por (1 - stickyHands), seja a chance base ou
     // o fixo de Hideaway — dificulta jogar a própria arma fora até por acidente.
@@ -2503,8 +2683,9 @@ public class CombatSimulator
     private float ThrowChance(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null) return 0f;
-        float chance = attacker.HasSkill("Hideaway")
-            ? 0.50f
+        var hideawaySkillThrowChance = attacker.GetSkillData("Hideaway");
+        float chance = hideawaySkillThrowChance != null
+            ? (hideawaySkillThrowChance.bonusValue1 > 0f ? hideawaySkillThrowChance.bonusValue1 : 0.50f)
             : TagSum(attacker.currentWeaponData, sharp: 0.15f, heavy: 0.10f, thrown: 1.00f, longTag: 0.12f);
         return chance * (1f - attacker.stickyHands);
     }
@@ -2551,7 +2732,12 @@ public class CombatSimulator
     private int WeaponBaseDamage(PlayerState attacker)
     {
         if (attacker.currentWeaponData == null)
-            return attacker.martialArts ? UnarmedStats.Damage * 2 : UnarmedStats.Damage;
+        {
+            if (!attacker.martialArts) return UnarmedStats.Damage;
+            var martialArtsSkill = attacker.GetSkillData("Martial Arts");
+            float martialArtsMult = martialArtsSkill != null && martialArtsSkill.bonusValue1 > 0f ? martialArtsSkill.bonusValue1 : 2f;
+            return Mathf.RoundToInt(UnarmedStats.Damage * martialArtsMult);
+        }
         return RollWeaponDamage(attacker.currentWeaponData);
     }
 
@@ -2573,8 +2759,13 @@ public class CombatSimulator
         // Weapon Master: +50% dano com arma "sharp" (tag Sharp) — checado vivo contra a
         // arma atual (pode trocar de arma durante a luta), não um flag fixo de ApplySkillStats.
         bool  isSharp          = WeaponData.IsSharp(attacker.currentWeaponData);
-        float sharpMult        = (attacker.weaponsMaster && isSharp) ? 1.5f : 1f;
+        var   weaponMasterSkill = (attacker.weaponsMaster && isSharp) ? attacker.GetSkillData("Weapon Master") : null;
+        float sharpMult        = weaponMasterSkill != null ? (weaponMasterSkill.bonusValue1 > 0f ? weaponMasterSkill.bonusValue1 : 1.5f) : 1f;
         float result            = (weaponBaseDamage + attacker.str) * critMult * sharpMult;
+
+        // Shield: penalidade no PRÓPRIO dano causado (trade-off do blockBonus alto) — aplicada
+        // por último, sobre o resultado já calculado.
+        result *= (1f - attacker.shieldDamagePenalty);
 
         return result;
     }
@@ -2587,8 +2778,10 @@ public class CombatSimulator
     // morrer de um hit, o cap só limita o quanto UM hit isolado pode arrancar da barra cheia.
     private static float ApplyResistantCap(PlayerState target, float damage)
     {
-        if (!target.HasSkill("Resistant")) return damage;
-        return Mathf.Min(damage, target.maxHp * 0.25f);
+        var resistantSkill = target.GetSkillData("Resistant");
+        if (resistantSkill == null) return damage;
+        float cap = resistantSkill.bonusValue1 > 0f ? resistantSkill.bonusValue1 : 0.25f;
+        return Mathf.Min(damage, target.maxHp * cap);
     }
 
     // Survival: se o dano aplicaria HP <= 0 e a skill ainda não foi usada nesta luta, o
@@ -2618,9 +2811,11 @@ public class CombatSimulator
         // burst não conta como "sofreu dano" pra fins de interrupção (`crossedThreshold`) — sem
         // essa exceção, o burst seria cancelado na 1ª checagem por causa do hit que o ativou, e
         // nunca chegaria a disparar de verdade.
-        if (target.HasSkill("Fast Metabolism"))
+        var fastMetabolismDamageSkill = target.GetSkillData("Fast Metabolism");
+        if (fastMetabolismDamageSkill != null)
         {
-            bool crossedThreshold = finalHp < target.maxHp * 0.5f && !target.fastMetabolismPulseActive && target.fastMetabolismPulseCount == 0;
+            float pulseThreshold = fastMetabolismDamageSkill.bonusValue5 > 0f ? fastMetabolismDamageSkill.bonusValue5 : 0.5f;
+            bool crossedThreshold = finalHp < target.maxHp * pulseThreshold && !target.fastMetabolismPulseActive && target.fastMetabolismPulseCount == 0;
             if (crossedThreshold)
                 target.fastMetabolismPulseActive = true;
             else

@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_fierce_brute_t2
+  m_EditorClassIdentifier: 
+  skillName: Fierce Brute
+  description: "33% por turno: dobra o dano do pr\xF3ximo golpe e +10% cr\xEDtico
+    (1 uso base + 1 a cada 30 de STR) (T2)"
+  icon: {fileID: 0}
+  category: 4
+  activationType: 1
+  usesPerFight: 2
+  tier: 2
+  previousTier: {fileID: 11400000, guid: 22eb5f9e49f87de459addafba984db4d, type: 2}
+  bonusValue1: 0.33
+  bonusValue2: 2
+  bonusValue3: 0.2
+  bonusValue4: 30
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

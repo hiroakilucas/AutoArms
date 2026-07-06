@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_iron_head_t2
+  m_EditorClassIdentifier: 
+  skillName: Iron Head
+  description: +40% chance de derrubar a arma do atacante ao sofrer um hit (T2)
+  icon: {fileID: 0}
+  category: 0
+  activationType: 0
+  usesPerFight: 1
+  tier: 2
+  previousTier: {fileID: 11400000, guid: 4aed6c5f14f334e4d9aaa4f2564fd84b, type: 2}
+  bonusValue1: 0.5
+  bonusValue2: 0
+  bonusValue3: 0
+  bonusValue4: 0
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_lead_skeleton_t3
+  m_EditorClassIdentifier: 
+  skillName: Lead Skeleton
+  description: -15% dano de armas Heavy (T3)
+  icon: {fileID: 0}
+  category: 1
+  activationType: 0
+  usesPerFight: 1
+  tier: 3
+  previousTier: {fileID: 11400000, guid: c5caadfa79f64c845a63535e2432a69b, type: 2}
+  bonusValue1: 0.35
+  bonusValue2: 0.15
+  bonusValue3: 0.75
+  bonusValue4: 0
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_flash_flood_t2
+  m_EditorClassIdentifier: 
+  skillName: Flash Flood
+  description: "17% por a\xE7\xE3o: com 3+ armas no invent\xE1rio, arremessa 3 aleat\xF3rias
+    que sempre acertam (1x por luta) (T2)"
+  icon: {fileID: 0}
+  category: 4
+  activationType: 1
+  usesPerFight: 2
+  tier: 2
+  previousTier: {fileID: 11400000, guid: be94a735247bd5b48ab3a628ef0f3df4, type: 2}
+  bonusValue1: 0.17
+  bonusValue2: 3
+  bonusValue3: 3
+  bonusValue4: 0
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

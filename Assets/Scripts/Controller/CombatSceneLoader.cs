@@ -372,87 +372,91 @@ public class CombatSceneLoader : MonoBehaviour
         // Ballet Shoes) — aplicado depois delas, no fim da função.
         float hpPct = 0f, strPct = 0f, agiPct = 0f, spdPct = 0f, evasionPct = 0f;
 
-        if (combat.HasSkill("Vitality"))
+        // Valores de efeito lidos do SkillData equipado (bonusValue1..6) — mesmo mapeamento de
+        // CombatSimulator.ApplySkillStats, ver SKILLS_SYSTEM.md. Fallback (`?? literal`) só entra
+        // em jogo se o asset ainda não tiver sido populado.
+        var vitalitySkill = combat.GetSkill("Vitality");
+        if (vitalitySkill != null)
         {
             // +18 flat já aplicado permanentemente em profile.maxHealth na escolha
-            // (CombatResultPanel.ApplyBonus) — aqui só acumula o +50%.
-            hpPct += 0.5f;
-            combat.LogSkillCheck("Vitality", true, "hp% += 50%");
+            // (CombatResultPanel.ApplyBonus, lê bonusValue2 da mesma skill).
+            hpPct += vitalitySkill.bonusValue1;
+            combat.LogSkillCheck("Vitality", true, $"hp% += {vitalitySkill.bonusValue1:P0}");
         }
 
-        if (combat.HasSkill("Herculean Strength"))
+        var herculeanSkill = combat.GetSkill("Herculean Strength");
+        if (herculeanSkill != null)
         {
-            // +3 flat já foi aplicado permanentemente em profile.str no momento da escolha
-            // (CombatResultPanel.ApplyBonus) — aqui só acumula o +50%.
-            strPct += 0.5f;
-            combat.LogSkillCheck("Herculean Strength", true, "str% += 50%");
+            strPct += herculeanSkill.bonusValue1;
+            combat.LogSkillCheck("Herculean Strength", true, $"str% += {herculeanSkill.bonusValue1:P0}");
         }
 
-        if (combat.HasSkill("Feline Agility"))
+        var felineSkill = combat.GetSkill("Feline Agility");
+        if (felineSkill != null)
         {
-            agiPct += 0.5f;
-            combat.LogSkillCheck("Feline Agility", true, "agility% += 50%");
+            agiPct += felineSkill.bonusValue1;
+            combat.LogSkillCheck("Feline Agility", true, $"agility% += {felineSkill.bonusValue1:P0}");
         }
 
-        if (combat.HasSkill("Lightning Bolt"))
+        var lightningSkill = combat.GetSkill("Lightning Bolt");
+        if (lightningSkill != null)
         {
-            // +3 flat já aplicado permanentemente em profile.speed na escolha
-            // (CombatResultPanel.ApplyBonus) — aqui só acumula o +50%. Antes afetava
-            // runSpeedMultiplier (velocidade de animação de correr); agora afeta o atributo
-            // speed real (ações extra no Speed System), mesmo padrão de Herculean/Feline.
-            spdPct += 0.5f;
-            combat.LogSkillCheck("Lightning Bolt", true, "speed% += 50%");
+            // Antes afetava runSpeedMultiplier; agora afeta o atributo speed real (ações extra
+            // no Speed System), mesmo padrão de Herculean/Feline.
+            spdPct += lightningSkill.bonusValue1;
+            combat.LogSkillCheck("Lightning Bolt", true, $"speed% += {lightningSkill.bonusValue1:P0}");
         }
 
-        if (combat.HasSkill("Reconnaissance"))
+        var reconnaissanceSkill = combat.GetSkill("Reconnaissance");
+        if (reconnaissanceSkill != null)
         {
-            // +5 flat já aplicado permanentemente em profile.speed na escolha
-            // (CombatResultPanel.ApplyBonus) — aqui acumula o +150% de SPD, -200 iniciativa
-            // (não entra no percentual líquido — flat puro, igual First Strike/Monk) e +50%
-            // de dano crítico (critDamageBonus, somado ao critDamageMultiplier da arma).
-            spdPct += 1.5f;
-            combat.initiative -= 200;
-            combat.critDamageBonus += 0.5f;
+            // initiative/critDamageBonus são flat puro (não entram no percentual líquido).
+            spdPct += reconnaissanceSkill.bonusValue1;
+            combat.initiative -= Mathf.RoundToInt(reconnaissanceSkill.bonusValue3);
+            combat.critDamageBonus += reconnaissanceSkill.bonusValue4;
             combat.LogSkillCheck("Reconnaissance", true,
-                $"speed% += 150%, initiative → {combat.initiative}, critDamageBonus → {combat.critDamageBonus:P0}");
+                $"speed% += {reconnaissanceSkill.bonusValue1:P0}, initiative → {combat.initiative}, critDamageBonus → {combat.critDamageBonus:P0}");
         }
 
-        if (combat.HasSkill("Immortal"))
+        var immortalSkill = combat.GetSkill("Immortal");
+        if (immortalSkill != null)
         {
-            hpPct  += 2.5f;
-            strPct -= 0.25f;
-            agiPct -= 0.25f;
-            spdPct -= 0.25f;
-            combat.LogSkillCheck("Immortal", true, "hp% += 250%, str/agi/speed% -= 25%");
+            hpPct  += immortalSkill.bonusValue1;
+            strPct -= immortalSkill.bonusValue2;
+            agiPct -= immortalSkill.bonusValue2;
+            spdPct -= immortalSkill.bonusValue2;
+            combat.LogSkillCheck("Immortal", true, $"hp% += {immortalSkill.bonusValue1:P0}, str/agi/speed% -= {immortalSkill.bonusValue2:P0}");
         }
 
-        // Bodybuilder (redefinida — era strPct += 0.5f/"STR × 1.5"): +10% evasion e +40% hit
-        // speed enquanto empunha Heavy, checado vivo (DodgeChance/CombatPlayer), sem estado
-        // fixo aqui já que a arma equipada pode trocar durante a luta.
+        // Bodybuilder (redefinida — era strPct += 0.5f/"STR × 1.5"): +evasion e +hit speed
+        // enquanto empunha Heavy, checado vivo (DodgeChance/CombatPlayer), sem estado fixo aqui
+        // já que a arma equipada pode trocar durante a luta.
 
-        if (combat.HasSkill("Armour"))
+        var armourSkill = combat.GetSkill("Armour");
+        if (armourSkill != null)
         {
-            // +25% armor (flat, fora do percentual líquido) e -15% SPD (entra normalmente).
-            combat.armor += 0.25f;
-            spdPct       -= 0.15f;
-            combat.LogSkillCheck("Armour", true, $"armor → {combat.armor:P0}, speed% -= 15%");
+            // armor (flat, fora do percentual líquido) e spd (entra normalmente, subtraído).
+            combat.armor += armourSkill.bonusValue1;
+            spdPct       -= armourSkill.bonusValue2;
+            combat.LogSkillCheck("Armour", true, $"armor → {combat.armor:P0}, speed% -= {armourSkill.bonusValue2:P0}");
         }
 
-        if (combat.HasSkill("Deity"))
+        var deitySkill = combat.GetSkill("Deity");
+        if (deitySkill != null)
         {
-            // +100% HP, +100% STR, -100% AGI, -90% SPD (não -100%: ver CombatSimulator, mesmo
-            // motivo — speed fixo em 0 travava o player sem chance de ação própria/pegar
-            // arma), -100% evasion ("Dexterity" — sem resistência a ser atingido), -200
-            // initiative, +40% reversal (cancela o hit do atacante antes de conectar).
-            hpPct      += 1.0f;
-            strPct     += 1.0f;
-            agiPct     -= 1.0f;
-            spdPct     -= 0.90f;
-            evasionPct -= 1.0f;
-            combat.reversal   += 0.40f;
-            combat.initiative -= 200;
+            // hpPct/strPct positivos, agiPct/spdPct/evasionPct negativos (magnitude em
+            // bonusValueN, subtraída). reversal e o +50% de tamanho (abaixo, em Initialize)
+            // ficam como exceção hardcoded — não coube nos 6 bonusValue já usados aqui, ver
+            // SKILLS_SYSTEM.md.
+            hpPct      += deitySkill.bonusValue1;
+            strPct     += deitySkill.bonusValue2;
+            agiPct     -= deitySkill.bonusValue3;
+            spdPct     -= deitySkill.bonusValue4;
+            evasionPct -= deitySkill.bonusValue5;
+            combat.reversal   += 0.40f; // exceção hardcoded (7º valor de Deity)
+            combat.initiative -= Mathf.RoundToInt(deitySkill.bonusValue6);
             combat.LogSkillCheck("Deity", true,
-                $"hp/str% += 100%, agi% -= 100%, spd% -= 90%, evasion% -= 100%, reversal → {combat.reversal:P0}, initiative → {combat.initiative}");
+                $"hp/str% += {deitySkill.bonusValue1:P0}, agi% -= {deitySkill.bonusValue3:P0}, spd% -= {deitySkill.bonusValue4:P0}, evasion% -= {deitySkill.bonusValue5:P0}, reversal → {combat.reversal:P0}, initiative → {combat.initiative}");
         }
 
         if (hpPct != 0f || strPct != 0f || agiPct != 0f || spdPct != 0f)
@@ -466,122 +470,142 @@ public class CombatSceneLoader : MonoBehaviour
                 $"hp {prevHp}→{hp}, str {prevStr}→{combat.str}, agi {prevAgi}→{combat.agility}, speed {prevSpd}→{combat.speed}");
         }
 
-        if (combat.HasSkill("Extra Thick Skin"))
+        var toughenedSkinSkill = combat.GetSkill("Toughened Skin");
+        if (toughenedSkinSkill != null)
         {
-            combat.armor += 0.50f;
-            combat.LogSkillCheck("Extra Thick Skin", true, $"armor → {combat.armor:P0}");
-        }
-
-        if (combat.HasSkill("Toughened Skin"))
-        {
-            combat.armor += 0.10f;
+            combat.armor += toughenedSkinSkill.bonusValue1;
             combat.LogSkillCheck("Toughened Skin", true, $"armor → {combat.armor:P0}");
         }
 
-        if (combat.HasSkill("Shield"))
+        var shieldSkill = combat.GetSkill("Shield");
+        if (shieldSkill != null)
         {
-            // +45% block rate (blockBonus, mesmo campo de Counter Attack — soma em BlockChance)
-            // e +25% armor (penalidade de mobilidade do escudo equipado). hasShield habilita o
-            // desarme próprio do escudo (ver CombatSimulator.ShieldDisarmChance) — se cair, os
-            // dois bônus são revertidos. Visual (sprite no braço oposto) equipado fora daqui,
-            // em CombatSceneLoader.Initialize.
-            combat.blockBonus += 0.45f;
-            combat.armor      += 0.25f;
+            // blockBonus (mesmo campo de Counter Attack — soma em BlockChance). A penalidade de
+            // dano causado (bonusValue2, era "armor +=" antes) só existe no simulador
+            // (CombatSimulator.CalcDamage) — não é um stat exibido no CharacterPanel, então não
+            // entra aqui. hasShield habilita o desarme próprio do escudo (agora usando
+            // DisarmChance real, ver CombatSimulator) — se cair, os bônus são revertidos.
+            // Visual (sprite no braço oposto) equipado fora daqui, em Initialize.
+            combat.blockBonus += shieldSkill.bonusValue1;
             combat.hasShield   = true;
-            combat.LogSkillCheck("Shield", true, $"blockBonus → {combat.blockBonus:P0}, armor → {combat.armor:P0}");
+            combat.LogSkillCheck("Shield", true, $"blockBonus → {combat.blockBonus:P0}");
         }
 
-        if (combat.HasSkill("Untouchable"))
+        var untouchableSkill = combat.GetSkill("Untouchable");
+        if (untouchableSkill != null)
         {
-            combat.evasion += 0.30f;
+            combat.evasion += untouchableSkill.bonusValue1;
             combat.LogSkillCheck("Untouchable", true, $"evasion → {combat.evasion:P0}");
         }
 
-        if (combat.HasSkill("Relentless"))
+        var relentlessSkill = combat.GetSkill("Relentless");
+        if (relentlessSkill != null)
         {
-            combat.accuracy += 0.30f;
+            combat.accuracy += relentlessSkill.bonusValue1;
             combat.LogSkillCheck("Relentless", true, $"accuracy → {combat.accuracy:P0}");
         }
 
-        if (combat.HasSkill("Fists of Fury"))
+        var fistsOfFurySkill = combat.GetSkill("Fists of Fury");
+        if (fistsOfFurySkill != null)
         {
-            combat.comboChanceBonus += 0.20f;
+            combat.comboChanceBonus += fistsOfFurySkill.bonusValue1;
             combat.LogSkillCheck("Fists of Fury", true, $"comboChanceBonus → {combat.comboChanceBonus:P0}");
         }
 
-        if (combat.HasSkill("Lead Skeleton"))
+        // Chaining T2/T3: comboChanceBonus adicional (bonusValue3, novo — T1 fica 0). O resto
+        // da mecânica (threshold/stun) só existe no simulador, não entra no preview de stats.
+        var chainingSkillStats = combat.GetSkill("Chaining");
+        if (chainingSkillStats != null && chainingSkillStats.bonusValue3 != 0f)
         {
-            // Redefinida — antes só dava -15% dano de Heavy. Agora também +15% armor, -15%
-            // evasion (floor em 0 garantido pelo clamp incondicional de evasionPct abaixo).
+            combat.comboChanceBonus += chainingSkillStats.bonusValue3;
+            combat.LogSkillCheck("Chaining", true, $"comboChanceBonus → {combat.comboChanceBonus:P0}");
+        }
+
+        var leadSkeletonSkill = combat.GetSkill("Lead Skeleton");
+        if (leadSkeletonSkill != null)
+        {
+            // armor/evasion (bonusValue1/2, evasion subtraída; floor em 0 garantido pelo clamp
+            // incondicional de evasionPct abaixo) mantendo o dano de arma blunt multiplicado por
+            // bonusValue3 (0.85 = -15%) já existente.
             combat.leadSkeleton = true;
-            combat.armor   += 0.15f;
-            combat.evasion -= 0.15f;
-            combat.LogSkillCheck("Lead Skeleton", true, $"armor → {combat.armor:P0}, evasion → {combat.evasion:P0}, blunt damage ×0.85");
+            combat.armor   += leadSkeletonSkill.bonusValue1;
+            combat.evasion -= leadSkeletonSkill.bonusValue2;
+            combat.LogSkillCheck("Lead Skeleton", true, $"armor → {combat.armor:P0}, evasion → {combat.evasion:P0}, blunt damage ×{leadSkeletonSkill.bonusValue3:0.00}");
         }
 
-        if (combat.HasSkill("Ballet Shoes"))
+        var balletShoesSkill = combat.GetSkill("Ballet Shoes");
+        if (balletShoesSkill != null)
         {
-            combat.evasion        += 0.10f;
+            combat.evasion        += balletShoesSkill.bonusValue1;
             combat.firstHitAvoided = true;
-            combat.LogSkillCheck("Ballet Shoes", true, $"evasion +10% → {combat.evasion:P0}, first hit auto-avoided");
+            combat.LogSkillCheck("Ballet Shoes", true, $"evasion +{balletShoesSkill.bonusValue1:P0} → {combat.evasion:P0}, first hit auto-avoided");
         }
 
-        if (combat.HasSkill("First Strike"))
+        var firstStrikeSkill = combat.GetSkill("First Strike");
+        if (firstStrikeSkill != null)
         {
-            combat.initiative += 200;
+            combat.initiative += Mathf.RoundToInt(firstStrikeSkill.bonusValue1);
             combat.LogSkillCheck("First Strike", true, $"initiative → {combat.initiative}");
         }
 
-        if (combat.HasSkill("Counter Attack"))
+        var counterAttackSkill = combat.GetSkill("Counter Attack");
+        if (counterAttackSkill != null)
         {
-            combat.blockBonus += 0.10f;
-            combat.reversalAfterBlock += 0.90f;
+            combat.blockBonus += counterAttackSkill.bonusValue1;
+            combat.reversalAfterBlock += counterAttackSkill.bonusValue2;
             combat.LogSkillCheck("Counter Attack", true,
                 $"blockBonus → {combat.blockBonus:P0}, reversalAfterBlock → {combat.reversalAfterBlock:P0}");
         }
 
-        if (combat.HasSkill("Sixth Sense"))
+        var sixthSenseSkill = combat.GetSkill("Sixth Sense");
+        if (sixthSenseSkill != null)
         {
-            combat.counter += 0.10f;
+            combat.counter += sixthSenseSkill.bonusValue1;
             combat.LogSkillCheck("Sixth Sense", true, $"counter → {combat.counter:P0}");
         }
 
-        if (combat.HasSkill("Hostility"))
+        var hostilitySkill = combat.GetSkill("Hostility");
+        if (hostilitySkill != null)
         {
-            combat.reversal += 0.30f;
+            combat.reversal += hostilitySkill.bonusValue1;
             combat.LogSkillCheck("Hostility", true, $"reversal → {combat.reversal:P0}");
         }
 
-        if (combat.HasSkill("Monk"))
+        var monkSkill = combat.GetSkill("Monk");
+        if (monkSkill != null)
         {
             // Não guarda mais (era hitSpeed = 0f, removido — Monk ataca normalmente, igual a
             // qualquer personagem) — só o bônus de counter e o malus de iniciativa permanecem.
-            combat.counter    += 0.40f;
-            combat.initiative -= 200;
-            combat.LogSkillCheck("Monk", true, $"counter +40%, initiative −200");
+            combat.counter    += monkSkill.bonusValue1;
+            combat.initiative -= Mathf.RoundToInt(monkSkill.bonusValue2);
+            combat.LogSkillCheck("Monk", true, $"counter +{monkSkill.bonusValue1:P0}, initiative −{monkSkill.bonusValue2}");
         }
 
-        if (combat.HasSkill("Martial Arts"))
+        var martialArtsSkill = combat.GetSkill("Martial Arts");
+        if (martialArtsSkill != null)
         {
             combat.martialArts = true;
-            combat.LogSkillCheck("Martial Arts", true, "unarmed damage ×2");
+            combat.LogSkillCheck("Martial Arts", true, $"unarmed damage ×{martialArtsSkill.bonusValue1:0.00}");
         }
 
-        if (combat.HasSkill("Shock"))
+        var shockSkill = combat.GetSkill("Shock");
+        if (shockSkill != null)
         {
-            combat.disarmChanceBonus += 0.50f;
+            combat.disarmChanceBonus += shockSkill.bonusValue1;
             combat.LogSkillCheck("Shock", true, $"disarmChanceBonus → {combat.disarmChanceBonus:P0}");
         }
 
-        if (combat.HasSkill("Weapon Master"))
+        var weaponMasterSkill = combat.GetSkill("Weapon Master");
+        if (weaponMasterSkill != null)
         {
             combat.weaponsMaster = true;
-            combat.LogSkillCheck("Weapon Master", true, "+50% damage with sharp-tagged weapons");
+            combat.LogSkillCheck("Weapon Master", true, $"×{weaponMasterSkill.bonusValue1:0.00} damage with sharp-tagged weapons");
         }
 
-        if (combat.HasSkill("Sticky Hands"))
+        var stickyHandsSkill = combat.GetSkill("Sticky Hands");
+        if (stickyHandsSkill != null)
         {
-            combat.stickyHands += 0.50f;
+            combat.stickyHands += stickyHandsSkill.bonusValue1;
             combat.LogSkillCheck("Sticky Hands", true, $"stickyHands → {combat.stickyHands:P0}");
         }
 

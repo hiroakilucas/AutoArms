@@ -94,6 +94,14 @@ public class PlayerProfile : ScriptableObject
         return false;
     }
 
+    public SkillData GetSkill(string skillName)
+    {
+        if (skills == null) return null;
+        foreach (var s in skills)
+            if (s != null && s.skillName == skillName) return s;
+        return null;
+    }
+
     // Preview-only: mirrors the HP/str/agility/speed/initiative/critChance/critDamageBonus/
     // evasion/reversal/counter/comboChanceBonus/armor bonuses from CombatSimulator.ApplySkillStats /
     // CombatSceneLoader.ApplySkillStats, for display purposes (e.g. MainMenuCharacterPreview)
@@ -113,57 +121,88 @@ public class PlayerProfile : ScriptableObject
         // que outra skill já tenha somado evasion).
         float hpPct = 0f, sPct = 0f, aPct = 0f, spPct = 0f, evaPct = 0f;
 
+        // Valores de efeito lidos do SkillData equipado (bonusValue1..6) — mesmo mapeamento de
+        // CombatSimulator.ApplySkillStats, ver SKILLS_SYSTEM.md.
         // +18 flat já está em profile.maxHealth (aplicado na escolha, CombatResultPanel.ApplyBonus).
-        if (HasSkill("Vitality")) hpPct += 0.5f;
+        var vitalitySk = GetSkill("Vitality");
+        if (vitalitySk != null) hpPct += vitalitySk.bonusValue1;
         // +3 flat já está em profile.str (aplicado na escolha, CombatResultPanel.ApplyBonus);
-        // aqui só o +50%, sem penalidade de agilidade.
-        if (HasSkill("Herculean Strength")) sPct += 0.5f;
-        if (HasSkill("Feline Agility")) aPct += 0.5f;
-        if (HasSkill("Lightning Bolt")) spPct += 0.5f;
-        // +5 flat já está em profile.speed (aplicado na escolha); -200 iniciativa e +50% dano
-        // crítico são flat puro.
-        if (HasSkill("Reconnaissance")) { spPct += 1.5f; init -= 200; critDmgBonus += 0.5f; }
-        if (HasSkill("First Strike")) init += 200;
-        if (HasSkill("Monk")) { init -= 200; cnt += 0.40f; }
-        if (HasSkill("Counter Attack")) { blk += 0.10f; revBlk += 0.90f; }
-        if (HasSkill("Sixth Sense")) cnt += 0.10f;
-        if (HasSkill("Hostility")) rev += 0.30f;
-        if (HasSkill("Relentless")) acc += 0.30f;
-        if (HasSkill("Fists of Fury")) combo += 0.20f;
-        if (HasSkill("Shock")) disarm += 0.50f;
-        if (HasSkill("Weapon Master")) sharp += 0.50f;
+        // aqui só o percentual, sem penalidade de agilidade.
+        var herculeanSk = GetSkill("Herculean Strength");
+        if (herculeanSk != null) sPct += herculeanSk.bonusValue1;
+        var felineSk = GetSkill("Feline Agility");
+        if (felineSk != null) aPct += felineSk.bonusValue1;
+        var lightningSk = GetSkill("Lightning Bolt");
+        if (lightningSk != null) spPct += lightningSk.bonusValue1;
+        // +5 flat já está em profile.speed (aplicado na escolha); initiative/critDmgBonus são flat puro.
+        var reconnaissanceSk = GetSkill("Reconnaissance");
+        if (reconnaissanceSk != null) { spPct += reconnaissanceSk.bonusValue1; init -= Mathf.RoundToInt(reconnaissanceSk.bonusValue3); critDmgBonus += reconnaissanceSk.bonusValue4; }
+        var firstStrikeSk = GetSkill("First Strike");
+        if (firstStrikeSk != null) init += Mathf.RoundToInt(firstStrikeSk.bonusValue1);
+        var monkSk = GetSkill("Monk");
+        if (monkSk != null) { init -= Mathf.RoundToInt(monkSk.bonusValue2); cnt += monkSk.bonusValue1; }
+        var counterAttackSk = GetSkill("Counter Attack");
+        if (counterAttackSk != null) { blk += counterAttackSk.bonusValue1; revBlk += counterAttackSk.bonusValue2; }
+        var sixthSenseSk = GetSkill("Sixth Sense");
+        if (sixthSenseSk != null) cnt += sixthSenseSk.bonusValue1;
+        var hostilitySk = GetSkill("Hostility");
+        if (hostilitySk != null) rev += hostilitySk.bonusValue1;
+        var relentlessSk = GetSkill("Relentless");
+        if (relentlessSk != null) acc += relentlessSk.bonusValue1;
+        var fistsOfFurySk = GetSkill("Fists of Fury");
+        if (fistsOfFurySk != null) combo += fistsOfFurySk.bonusValue1;
+        // Chaining T2/T3: comboChanceBonus adicional (bonusValue3, novo — T1 fica 0).
+        var chainingSk = GetSkill("Chaining");
+        if (chainingSk != null) combo += chainingSk.bonusValue3;
+        var shockSk = GetSkill("Shock");
+        if (shockSk != null) disarm += shockSk.bonusValue1;
+        var weaponMasterSk = GetSkill("Weapon Master");
+        if (weaponMasterSk != null) sharp += weaponMasterSk.bonusValue1 - 1f; // bonusValue1 é o multiplicador (1.5); sharp é exibido como bônus (+0.5)
         // Informativo apenas: o bônus real só vale enquanto empunha arma Heavy (checado vivo
         // em DodgeChance/CombatPlayer) — aqui só confirma a magnitude da skill, igual ao padrão
         // de Disarm/Sharp acima.
-        if (HasSkill("Bodybuilder")) { heavyDex += 0.10f; heavyHitSpd += 0.40f; }
-        if (HasSkill("Armour")) { arm += 0.25f; spPct -= 0.15f; }
-        if (HasSkill("Extra Thick Skin")) arm += 0.50f;
-        if (HasSkill("Toughened Skin")) arm += 0.10f;
-        if (HasSkill("Shield")) { blk += 0.45f; arm += 0.25f; }
+        var bodybuilderSk = GetSkill("Bodybuilder");
+        if (bodybuilderSk != null) { heavyDex += bodybuilderSk.bonusValue1; heavyHitSpd += bodybuilderSk.bonusValue2; }
+        var armourSk = GetSkill("Armour");
+        if (armourSk != null) { arm += armourSk.bonusValue1; spPct -= armourSk.bonusValue2; }
+        var toughenedSkinSk = GetSkill("Toughened Skin");
+        if (toughenedSkinSk != null) arm += toughenedSkinSk.bonusValue1;
+        // Shield: a penalidade de dano causado (bonusValue2, era "armor +=" antes) só existe no
+        // simulador (CombatSimulator.CalcDamage) — não é um dos stats desta tupla, então não
+        // entra aqui.
+        var shieldSk = GetSkill("Shield");
+        if (shieldSk != null) blk += shieldSk.bonusValue1;
         // Lead Skeleton (redefinida — antes só dava -15% dano de Heavy, sem entrar aqui):
-        // +15% armor, -15% evasion. O -15% dano de arma blunt (Heavy) continua existindo
-        // (ver CombatSimulator/PlayerCombat), só não aparece aqui por não ser um % de stat.
-        if (HasSkill("Lead Skeleton")) { arm += 0.15f; eva -= 0.15f; }
-        if (HasSkill("Immortal"))
+        // armor/evasion (bonusValue1/2). O dano de arma blunt (Heavy) continua existindo
+        // (ver CombatSimulator/PlayerCombat, bonusValue3), só não aparece aqui por não ser
+        // um % de stat.
+        var leadSkeletonSk = GetSkill("Lead Skeleton");
+        if (leadSkeletonSk != null) { arm += leadSkeletonSk.bonusValue1; eva -= leadSkeletonSk.bonusValue2; }
+        var immortalSk = GetSkill("Immortal");
+        if (immortalSk != null)
         {
-            hpPct += 2.5f;
-            sPct  -= 0.25f;
-            aPct  -= 0.25f;
-            spPct -= 0.25f;
+            hpPct += immortalSk.bonusValue1;
+            sPct  -= immortalSk.bonusValue2;
+            aPct  -= immortalSk.bonusValue2;
+            spPct -= immortalSk.bonusValue2;
         }
-        if (HasSkill("Deity"))
+        var deitySk = GetSkill("Deity");
+        if (deitySk != null)
         {
-            // -90% SPD, não -100%: ver CombatSimulator/CombatSceneLoader, mesmo motivo.
-            hpPct  += 1.0f;
-            sPct   += 1.0f;
-            aPct   -= 1.0f;
-            spPct  -= 0.90f;
-            evaPct -= 1.0f;
+            // reversal e iniciativa mantêm o valor hardcoded (7º/8º valor de Deity, excedente
+            // aos 6 bonusValue — ver CombatSimulator.ApplySkillStats).
+            hpPct  += deitySk.bonusValue1;
+            sPct   += deitySk.bonusValue2;
+            aPct   -= deitySk.bonusValue3;
+            spPct  -= deitySk.bonusValue4;
+            evaPct -= deitySk.bonusValue5;
             rev    += 0.40f;
-            init   -= 200;
+            init   -= Mathf.RoundToInt(deitySk.bonusValue6);
         }
-        if (HasSkill("Untouchable")) eva += 0.30f;
-        if (HasSkill("Ballet Shoes")) eva += 0.10f;
+        var untouchableSk = GetSkill("Untouchable");
+        if (untouchableSk != null) eva += untouchableSk.bonusValue1;
+        var balletShoesSk = GetSkill("Ballet Shoes");
+        if (balletShoesSk != null) eva += balletShoesSk.bonusValue1;
 
         if (hpPct != 0f || sPct != 0f || aPct != 0f || spPct != 0f)
         {
@@ -199,9 +238,11 @@ public class PlayerProfile : ScriptableObject
     public (int unarmedMin, int unarmedMax, int daggerMin, int daggerMax, int swordMin, int swordMax, int heavyMin, int heavyMax) GetWeaponDamageRanges()
     {
         int   str = GetEffectiveStats().str;
-        int unarmedBase = HasSkill("Martial Arts") ? UnarmedStats.Damage * 2 : UnarmedStats.Damage;
+        var martialArtsSk = GetSkill("Martial Arts");
+        int unarmedBase = martialArtsSk != null ? Mathf.RoundToInt(UnarmedStats.Damage * (martialArtsSk.bonusValue1 > 0f ? martialArtsSk.bonusValue1 : 2f)) : UnarmedStats.Damage;
         int u  = Mathf.Max(1, unarmedBase + str);
-        float sharpMult = HasSkill("Weapon Master") ? 1.5f : 1f;
+        var weaponMasterSk = GetSkill("Weapon Master");
+        float sharpMult = weaponMasterSk != null ? (weaponMasterSk.bonusValue1 > 0f ? weaponMasterSk.bonusValue1 : 1.5f) : 1f;
         int d  = Mathf.Max(1, Mathf.RoundToInt((DaggerArchetypeDamage + str) * sharpMult));
         int sw = Mathf.Max(1, Mathf.RoundToInt((SwordArchetypeDamage  + str) * sharpMult));
         int h  = Mathf.Max(1, HeavyArchetypeDamage + str);

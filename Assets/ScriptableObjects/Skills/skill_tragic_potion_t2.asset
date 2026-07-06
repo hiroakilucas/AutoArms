@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_tragic_potion_t2
+  m_EditorClassIdentifier: 
+  skillName: Tragic Potion
+  description: "Quando HP < 60%: 50% por turno de curar entre 25% e 50% do HP m\xE1ximo
+    (1x por luta) (T2)"
+  icon: {fileID: 0}
+  category: 4
+  activationType: 1
+  usesPerFight: 2
+  tier: 2
+  previousTier: {fileID: 11400000, guid: 206ebaf3d638ec44b9e15f826ed09f46, type: 2}
+  bonusValue1: 0.5
+  bonusValue2: 0.6
+  bonusValue3: 0.25
+  bonusValue4: 0.5
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

@@ -43,6 +43,10 @@ public class PlayerState
     public bool weaponsMaster;
     public bool survivalUsed;
     public bool hasShield;
+    // Shield: penalidade no dano causado pelo PRÓPRIO usuário do escudo (trade-off do
+    // blockBonus alto) — substitui o antigo "armor +=" (que reduzia dano recebido). Aplicado
+    // em CalcDamage sobre o atacante, revertido junto de blockBonus quando o escudo cai.
+    public float shieldDamagePenalty;
     public int  thiefUsesRemaining = 2;
     public int  flashFloodUsesRemaining = 1;
     public int  hasteUsesRemaining = 1;
@@ -59,9 +63,16 @@ public class PlayerState
     public int  treatUsesRemaining = 4; // alimenta até 4 pets por luta
     public int  mimicUsesRemaining = 1; // copia a última Super do oponente, 1x por luta
 
-    // Mimic: nome da última Super que ESTE jogador ativou — lido pelo oponente que tem Mimic.
-    // Setado por cada TryActivate*/SimulateFlashFlood/Haste/Piledriver quando dispara.
+    // Mimic: nome da última Super que ESTE jogador ativou — lido pelo oponente que tem Mimic
+    // T1/T2 (sempre copia a mais recente). Setado por cada TryActivate*/SimulateFlashFlood/
+    // Haste/Piledriver quando dispara.
     public string lastSuperUsed = "";
+
+    // Mimic T3 ("copia as 3 primeiras skills ativas"): histórico cronológico de TODAS as
+    // ativações de Super deste jogador nesta luta (com repetição — cada ativação conta,
+    // mesmo repetindo o mesmo Super). Preenchido nos mesmos pontos que setam lastSuperUsed
+    // acima. A Nª ativação de Mimic T3 do oponente lê superActivationHistory[N-1].
+    public List<string> superActivationHistory = new List<string>();
 
     // Fast Metabolism — regeneração passiva de 1%/turno (sem campos próprios, sempre ativa
     // enquanto HasSkill for true) + burst de cura intensa (10x 5%, todas no mesmo turno) ao
@@ -101,6 +112,11 @@ public class PlayerState
     // Skills (by name, for HasSkill checks)
     public List<string> skills = new List<string>();
 
+    // Mesmos SkillData reais equipados (paralelo a `skills`, mesma ordem/conteúdo) — permite
+    // ler bonusValue1..6 (valores de efeito por tier) sem precisar de acesso a PlayerProfile
+    // aqui dentro. Populado por CombatSimulator.BuildState junto de `skills`.
+    public List<SkillData> skillAssets = new List<SkillData>();
+
     // Speed debt accumulation across rounds
     public int speedDebt;
 
@@ -116,5 +132,15 @@ public class PlayerState
         foreach (var s in skills)
             if (s == skillName) return true;
         return false;
+    }
+
+    // Retorna o SkillData equipado com esse nome (pra ler bonusValue1..6) ou null se o
+    // personagem não tiver a skill — mesmo padrão de PlayerCombat.GetSkill(string).
+    public SkillData GetSkillData(string skillName)
+    {
+        if (skillAssets == null) return null;
+        foreach (var sk in skillAssets)
+            if (sk != null && sk.skillName == skillName) return sk;
+        return null;
     }
 }

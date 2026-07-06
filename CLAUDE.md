@@ -885,11 +885,12 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Criar mais armas com sprites e stats — 26 assets criados em `Assets/Data/Weapons/` com stats T1 completos (sprites pendentes)
 - [ ] Sistema de raridade de armas
 - [x] Pets: Rato (Mouse), Macaco (Monkey), Javali (Boar) — substituem o roster original (cachorro/lobo/águia/urso) do "Pets planejados" abaixo, que ficou desatualizado frente aos assets reais (Boar/Monkey/Mouse) já disponíveis em `Assets/Data/UI/Pets/`. Ver seção própria **Pets** em Combat Systems.
+- [x] Sistema de Tiers T1/T2/T3 para Skills (mesmo padrão do `WeaponTierGenerator`) — valores movidos de literais hardcoded pro `SkillData` (`bonusValue1..7`), `SkillTierGenerator.cs` novo; valores exatos de balanceamento de 50 skills já implementados (tabela completa em SKILLS_SYSTEM.md); T2/T3 ainda não aparecem no level-up (wiring de progressão de tier fica pra depois). Ver **Sistema de Tiers (T1/T2/T3)** em SKILLS_SYSTEM.md.
 
 
 ### Fases 4–9 (Monetização → Áudio)
 Ver ROADMAP_FUTURO.md — não carregar nesta sessão.
 
 ### Progresso
-- Total: 121 tarefas | Concluídas: 56
+- Total: 122 tarefas | Concluídas: 58
 - Histórico completo em CHANGELOG.md

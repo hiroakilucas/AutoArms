@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_feline_agility_t2
+  m_EditorClassIdentifier: 
+  skillName: Feline Agility
+  description: +3 AGI permanente, +50% AGI (T2)
+  icon: {fileID: 0}
+  category: 2
+  activationType: 0
+  usesPerFight: 1
+  tier: 2
+  previousTier: {fileID: 11400000, guid: c34a134450fadc84dbc49a2aa9f4800c, type: 2}
+  bonusValue1: 0.6
+  bonusValue2: 5
+  bonusValue3: 0
+  bonusValue4: 0
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

@@ -18,4 +18,13 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 4d6c1cd324960fc43a3f1f41a058cd8d, type: 3}
   category: 4
   activationType: 1
-  usesPerFight: 2
+  usesPerFight: 1
+  tier: 1
+  previousTier: {fileID: 0}
+  bonusValue1: 0.44
+  bonusValue2: 0.5
+  bonusValue3: 0
+  bonusValue4: 0
+  bonusValue5: 0
+  bonusValue6: 0
+  bonusValue7: 0

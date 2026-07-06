@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a89e9be9860a80b4186588ef00270744, type: 3}
+  m_Name: skill_fast_metabolism_t2
+  m_EditorClassIdentifier: 
+  skillName: Fast Metabolism
+  description: "Regenera 1% do HP m\xE1ximo por turno; abaixo de 50% HP, +5% por
+    turno at\xE9 10x sem levar dano. -50% hit speed, -5% cr\xEDtico (T2)"
+  icon: {fileID: 0}
+  category: 1
+  activationType: 0
+  usesPerFight: 1
+  tier: 2
+  previousTier: {fileID: 11400000, guid: 7f6b3b062e7854749b6ee4e5968780f4, type: 2}
+  bonusValue1: 0.5
+  bonusValue2: 0.05
+  bonusValue3: 0.02
+  bonusValue4: 0.05
+  bonusValue5: 0.5
+  bonusValue6: 0
+  bonusValue7: 0
