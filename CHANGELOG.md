@@ -3,7 +3,7 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
-- 2026-07-05: `ThrowFlightDuration` 0.35f não resolveu o "throw a mais" (usuário confirmou ainda presente) — reduzida pra 0.25f a pedido do usuário, testando se encurtar mais o voo do projétil evita o reinício do clipe
+- 2026-07-05: Confirmado pelo usuário — `ThrowFlightDuration = 0.25f` resolveu de vez o "throw a mais" da Shuriken/arremessos repetidos
 
 - 2026-07-05: Corrigida a causa REAL do "throw a mais" (as 2 tentativas anteriores não resolviam porque o bug não era no C#) — o clipe de animação "Throwing" tem 0.4s de duração com loop ativado, e o código segurava a animação por 0.45s (0.05s a mais), fazendo ela reiniciar um 2º loop sozinha antes de conseguir sair pro Idle — o personagem "arremessava de novo" visualmente sem soltar nenhuma arma. Nova constante `ThrowFlightDuration = 0.35f` (era 0.45f) fica dentro do clipe, sem precisar de um 2º loop
 
