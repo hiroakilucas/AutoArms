@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-06: 2 ajustes no movimento do Bow — 1º tiro do turno ficava diferente dos seguintes (ângulo de descanso vinha do `rotationOffset` do personagem, mas o "erguer" partia de um offset relativo à mira, os dois podiam não bater); agora ambos usam a mesma constante `BowRestAngle = -90°` (reto pra baixo) como único ponto de referência. Movimento também ficou bem mais visível (`BowDrawDuration` dobrada pra 0.3s, giro de até 90°+ em vez de só 35°)
+
 - 2026-07-06: Mira do Bow virou movimento gradual em vez de salto instantâneo — o salto (`AimWeaponAt`, removido) parecia "travado, sempre apontando pra frente" porque a distância/ângulo até o defensor mal muda de turno pra turno (o atacante não corre mais). Nova lógica dentro de `PlayProjectileEffect` gira a arma de baixo pra cima (`Mathf.LerpAngle`, ~0.15s) até o ângulo de mira antes de soltar a flecha, deixando o movimento visível a cada tiro
 
 - 2026-07-06: Bow ainda disparava o trigger "Slashing" (giro de espada) mesmo depois de parar de correr até o alvo — visualmente errado pra um arco parado. `IsRangedWeapon` agora também pula `SwingTrigger`/`SetTrigger`/`SetSpeed` nos 6 pontos de swing (Hit/Dodge/Block/Counter-Reversal, pet e principal), mantendo só o tempo de espera — corpo fica em Idle, só a arma (mira dinâmica) e a flecha se movem

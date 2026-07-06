@@ -3195,14 +3195,31 @@ public class CombatPlayer : MonoBehaviour
 
         if (attacking && projectileTarget.HasValue && attacker.weaponHandler.CurrentWeaponData?.projectileSprite != null)
             StartCoroutine(PlayProjectileEffect(attacker, projectileTarget.Value, t));
+
+        // Bow: ao voltar pro idle (attacking=false), força a arma de volta pro ângulo de
+        // "descanso" FIXO (BowRestAngle) em vez de confiar no rotationOffset genérico do
+        // personagem — precisa ser exatamente o mesmo ângulo usado como ponto de partida do
+        // próximo "erguer o arco" (ver PlayProjectileEffect), senão o 1º tiro (que parte do
+        // rotationOffset do equip) e os seguintes (que partiam de onde o tiro anterior deixou)
+        // ficavam com o "antes de mirar" diferentes entre si — bug real reportado pelo usuário:
+        // "a primeira animação do primeiro turno está diferente do segundo turno".
+        if (!attacking && attacker.weaponHandler.CurrentWeaponData?.projectileSprite != null)
+        {
+            var weaponObj = attacker.weaponHandler.CurrentWeapon;
+            if (weaponObj != null) weaponObj.transform.rotation = Quaternion.Euler(0, 0, BowRestAngle);
+        }
     }
 
-    // Duração/ângulo do "erguer o arco" antes de soltar a flecha — pedido do usuário depois de
-    // ver o pulo instantâneo de rotação: "faça um movimento sutil em cada flecha, de baixo para
-    // frente até sair a flecha". BowDrawStartOffset é graus ABAIXO do ângulo de mira final (chute
-    // inicial, calibrar visualmente); BowDrawDuration é quanto tempo esse "levantar" leva.
-    private const float BowDrawStartOffset = -35f;
-    private const float BowDrawDuration    = 0.15f;
+    // Ângulo (mundo) de "descanso" do Bow entre um tiro e outro — reto pra baixo, mesmo
+    // significado nos dois lados (P1/P2), sem depender de flip de personagem. Também o ponto de
+    // PARTIDA do "erguer o arco" em PlayProjectileEffect — os dois usam a mesma constante de
+    // propósito, pra garantir que todo tiro comece exatamente do mesmo lugar (ver comentário em
+    // SetWeaponSwingPose sobre o bug do 1º turno ficar diferente dos seguintes).
+    private const float BowRestAngle    = -90f;
+    // Duração do "erguer o arco" antes de soltar a flecha — pedido do usuário: 1ª tentativa
+    // (0.15s, ~35°) ficou "muito sutil"; aumentada pra ficar bem mais visível (quase 1/4 de
+    // volta, ~0.3s).
+    private const float BowDrawDuration = 0.3f;
 
     // Bow: flecha decorativa que voa da ponta da arma até o alvo, sem a arma em si sair da mão
     // (diferente do FlyingWeapon de arremesso, que desequipa) — pedido do usuário: "levantar o
@@ -3215,31 +3232,27 @@ public class CombatPlayer : MonoBehaviour
         if (data?.projectileSprite == null) yield break;
 
         // Gira o GameObject da arma em mão em espaço MUNDO (não local — independe de flip/
-        // escala do personagem) num movimento gradual "de baixo pra frente" até apontar de
-        // verdade pro alvo — mira dinâmica, já que o atacante não corre mais até um alcance
-        // fixo (ver IsRangedWeapon), então o ângulo até o defensor varia turno a turno. Um
-        // salto instantâneo aqui (1ª tentativa) ficava "estranho"/parecia travado quando o
-        // ângulo mal mudava de turno pra turno (defensor também parado); o movimento gradual
-        // deixa claro que a arma está agindo de novo a cada tiro, mesmo mirando quase no
-        // mesmo lugar.
+        // escala do personagem), sempre a partir do MESMO ângulo fixo de descanso
+        // (BowRestAngle, reto pra baixo — "de baixo pra frente" pedido pelo usuário) até apontar
+        // de verdade pro alvo (mira dinâmica, já que o atacante não corre mais até um alcance
+        // fixo, ver IsRangedWeapon). Começar sempre do mesmo ângulo fixo, em vez de um offset
+        // relativo ao ângulo de mira (1ª tentativa), garante que todo tiro pareça igual, sem
+        // depender de onde a arma "estava" antes (bug do 1º turno vs seguintes, ver
+        // SetWeaponSwingPose).
         var weaponObj = attacker.weaponHandler.CurrentWeapon;
         if (weaponObj != null)
         {
             Vector2 aimDir = (Vector2)(targetPos - weaponObj.transform.position);
-            if (aimDir.sqrMagnitude > 0.0001f)
+            float aimAngle = aimDir.sqrMagnitude > 0.0001f ? Mathf.Atan2(aimDir.y, aimDir.x) * Mathf.Rad2Deg : 0f;
+            float drawDur  = BowDrawDuration * t;
+            float elapsed  = 0f;
+            while (elapsed < drawDur)
             {
-                float aimAngle   = Mathf.Atan2(aimDir.y, aimDir.x) * Mathf.Rad2Deg;
-                float startAngle = aimAngle + BowDrawStartOffset;
-                float drawDur    = BowDrawDuration * t;
-                float elapsed    = 0f;
-                while (elapsed < drawDur)
-                {
-                    weaponObj.transform.rotation = Quaternion.Euler(0, 0, Mathf.LerpAngle(startAngle, aimAngle, elapsed / drawDur));
-                    elapsed += Time.deltaTime;
-                    yield return null;
-                }
-                weaponObj.transform.rotation = Quaternion.Euler(0, 0, aimAngle);
+                weaponObj.transform.rotation = Quaternion.Euler(0, 0, Mathf.LerpAngle(BowRestAngle, aimAngle, elapsed / drawDur));
+                elapsed += Time.deltaTime;
+                yield return null;
             }
+            weaponObj.transform.rotation = Quaternion.Euler(0, 0, aimAngle);
         }
 
         Vector3 launchPos = attacker.weaponHandler.GetAttackTipWorldPosition();

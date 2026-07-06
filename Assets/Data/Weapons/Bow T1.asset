@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ed0c7a0e125c40a42b05fdb965dc5526, type: 3}
   m_Name: Bow T1
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   weaponName: Bow T1
   icon: {fileID: 21300000, guid: dad3534163fc9d244a1f7b37751b1e70, type: 3}
   inHandSprite: {fileID: 21300000, guid: dad3534163fc9d244a1f7b37751b1e70, type: 3}
