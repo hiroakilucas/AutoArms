@@ -27,6 +27,15 @@ public class WeaponHandler : MonoBehaviour
     public GameObject CurrentWeapon => current;
     public WeaponData CurrentWeaponData { get; private set; }
 
+    // Arremessos repetidos no mesmo turno (hitSpeed alto, ex: Shuriken 10.0) desequipam e
+    // reequipam a arma a cada ciclo (ver CombatPlayer, case ThrowWeapon) — CurrentWeaponData
+    // fica null durante o intervalo entre um arremesso e o próximo, e o ícone da WeaponHUD
+    // (que destaca com base em CurrentWeaponData) piscava cinza nesse meio-tempo em vez de
+    // ficar dourado o tempo todo. CombatPlayer seta este campo com a arma sendo arremessada
+    // antes de cada Unequip, pra WeaponHUD continuar destacando mesmo com a mão vazia; limpo
+    // no TurnEnd. Pedido explícito do usuário: "hud deve ficar amarelo em todo momento".
+    public WeaponData PinnedHudWeapon;
+
     private GameObject currentShield;
     public GameObject CurrentShield => currentShield;
     public WeaponData CurrentShieldData { get; private set; }
@@ -163,6 +172,15 @@ public class WeaponHandler : MonoBehaviour
         current = null;
         CurrentWeaponData = null;
         OnWeaponChanged?.Invoke(null);
+    }
+
+    // Limpa o pin de HUD do fim de uma sequência de arremessos (ver PinnedHudWeapon) e força a
+    // WeaponHUD a reavaliar o destaque — sem isso o ícone ficava "preso" dourado (stale) até o
+    // próximo Unequip/EquipSpecific disparar OnWeaponChanged de novo por outro motivo qualquer.
+    public void ClearPinnedHudWeapon()
+    {
+        PinnedHudWeapon = null;
+        OnWeaponChanged?.Invoke(CurrentWeaponData);
     }
 
     // Escudo da skill Shield: item visual permanente no braço oposto, fora do WeaponLoadout —

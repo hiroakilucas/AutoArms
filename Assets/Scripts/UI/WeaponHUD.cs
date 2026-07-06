@@ -125,7 +125,10 @@ public class WeaponHUD : MonoBehaviour
 
     private void UpdateHighlight()
     {
-        var active = _handler.CurrentWeaponData;
+        // PinnedHudWeapon cobre o intervalo entre arremessos repetidos no mesmo turno (hitSpeed
+        // alto), onde CurrentWeaponData fica momentaneamente null — sem isso o ícone piscava
+        // cinza a cada ciclo em vez de ficar dourado o tempo todo (ver WeaponHandler).
+        var active = _handler.CurrentWeaponData ?? _handler.PinnedHudWeapon;
         foreach (var kvp in _iconMap)
         {
             if (kvp.Value == null) continue;

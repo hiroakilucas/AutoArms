@@ -2056,9 +2056,19 @@ public class CombatPlayer : MonoBehaviour
                     // pega de novo num pickup futuro) mesmo sem ter a tag. Sem a skill e sem a
                     // tag Thrown, sai do loadout pra sempre (UnequipPermanent — some do WeaponHUD).
                     if (weaponData != null && !WeaponData.HasType(weaponData, WeaponType.Thrown) && !attacker.HasSkill("Hideaway"))
+                    {
+                        attacker.weaponHandler.PinnedHudWeapon = null;
                         attacker.weaponHandler.UnequipPermanent();
+                    }
                     else
+                    {
+                        // Pin pro WeaponHUD continuar destacando durante o intervalo entre
+                        // ciclos de arremesso repetido (ver WeaponHandler.PinnedHudWeapon) —
+                        // limpo no TurnEnd, não aqui, porque outro ciclo pode reequipar essa
+                        // mesma arma daqui a pouco.
+                        attacker.weaponHandler.PinnedHudWeapon = weaponData;
                         attacker.weaponHandler.Unequip();
+                    }
                     // Idle=false antes do trigger (mesmo padrão de PlayCatchWeapon) — garante que
                     // "Any State → Throwing" dispara mesmo que o frame anterior já tivesse
                     // deixado Idle=true de um throw anterior neste mesmo turno.
@@ -2222,6 +2232,10 @@ public class CombatPlayer : MonoBehaviour
                 // Bug 2 (sorting): desfaz a promoção de TurnStart — mirrors PlayerCombat.
                 // AttackRoutine's RestoreDefaultLayers() at the end of the legacy turn.
                 attacker?.RestoreDefaultLayers();
+                // Fim da sequência de arremessos repetidos deste turno (se houve) — o ícone da
+                // WeaponHUD volta a refletir só CurrentWeaponData (vazio até o próximo pickup),
+                // ver WeaponHandler.PinnedHudWeapon.
+                attacker?.weaponHandler.ClearPinnedHudWeapon();
                 break;
 
             case CombatEventType.CombatEnd:
