@@ -84,6 +84,13 @@ public class PlayerCombat : MonoBehaviour
     public Vector2 spawnPosition;
     private SpriteRenderer faceRenderer;
     private Sprite[]       faceSprites;
+    // "SlashFX" é o GameObject (filho direto da raiz do prefab, nos 3 personagens) gerado pelo
+    // Spriter2UnityDX com o rastro/faísca desenhado durante o swing de Slashing/SlashingDagger —
+    // animado nos próprios clipes (posição/escala), não dá pra remover só pra uma arma editando o
+    // clipe (compartilhado por todas). SetSlashFxEnabled desliga o SpriteRenderer direto, o que
+    // sobrepõe qualquer coisa que a animação faça com a transform (sem desenho = sem desenho,
+    // independente de onde o clipe move/escala o objeto).
+    private SpriteRenderer slashFxRenderer;
     private GameObject stunLabel;
     private Coroutine   stunDazedRoutine;
     private GameObject netVisual;
@@ -486,6 +493,12 @@ public class PlayerCombat : MonoBehaviour
         bodyRenderers = new List<SpriteRenderer>(GetComponentsInChildren<SpriteRenderer>());
         if (bodyRenderers.Count > 0)
             defaultSortingLayer = bodyRenderers[0].sortingLayerName;
+        foreach (var sr in bodyRenderers)
+        {
+            if (sr.gameObject.name != "SlashFX") continue;
+            slashFxRenderer = sr;
+            break;
+        }
 
         // "Face 01" é o nome do GameObject gerado pelo Spriter2UnityDX nos 3 personagens, com um
         // TextureController (Sprites[0..2] = Face 01/02/03) e um SpriteRenderer próprio. Usado
@@ -1421,6 +1434,16 @@ public class PlayerCombat : MonoBehaviour
         SetBodyLayer(bodyRenderers, defaultSortingLayer);
         if (defender != null)
             SetBodyLayer(defender.bodyRenderers, defaultSortingLayer);
+    }
+
+    // Liga/desliga o rastro visual do Slashing (ver comentário do campo slashFxRenderer acima) —
+    // usado pra tirar o efeito só enquanto o Bow está equipado (pedido do usuário: "somente para
+    // o bow, é possível tirar o desenho do slashing"), sem mexer no clipe de animação em si
+    // (compartilhado por toda arma que usa o trigger Slashing/SlashingDagger). No-op se o
+    // personagem não tiver um "SlashFX" na hierarquia.
+    public void SetSlashFxEnabled(bool enabled)
+    {
+        if (slashFxRenderer != null) slashFxRenderer.enabled = enabled;
     }
 
     private static void SetBodyLayer(List<SpriteRenderer> renderers, string layerName)

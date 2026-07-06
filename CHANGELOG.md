@@ -3,6 +3,8 @@
 ### Progresso
 - Total: 121 tarefas | Concluídas: 57
 
+- 2026-07-06: Rastro/faísca do Slashing ("SlashFX") desligado só enquanto o Bow está equipado — novo `PlayerCombat.SetSlashFxEnabled(bool)`, chamado nos 6 pontos de swing junto de `IsRangedWeapon`, sem precisar mexer no clipe de animação (compartilhado por todas as armas)
+
 - 2026-07-06: Revertida a tentativa de animação code-driven do Bow (corpo parado + mira dinâmica girando a arma) a pedido do usuário — corpo volta a fazer Slashing normal como qualquer arma melee (mesmo com o Bow parado no lugar); flecha simplificada de volta pro voo direto, sem giro de mira. Animação dedicada de "erguer o arco" fica pra depois
 
 - 2026-07-06: Bow ainda disparava o trigger "Slashing" (giro de espada) mesmo depois de parar de correr até o alvo — visualmente errado pra um arco parado. `IsRangedWeapon` agora também pula `SwingTrigger`/`SetTrigger`/`SetSpeed` nos 6 pontos de swing (Hit/Dodge/Block/Counter-Reversal, pet e principal), mantendo só o tempo de espera — corpo fica em Idle, só a arma (mira dinâmica) e a flecha se movem

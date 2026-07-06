@@ -1438,6 +1438,8 @@ public class CombatPlayer : MonoBehaviour
 
                             string triggerPet = SwingTrigger(attacker);
                             if (swingMultPet != 1f) attacker?.animationController.SetSpeed(swingMultPet);
+                            // Bow (Ranged): sem o rastro/faísca do Slashing, ver PlayerCombat.SetSlashFxEnabled.
+                            attacker?.SetSlashFxEnabled(!IsRangedWeapon(attacker));
                             attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
                             yield return new WaitForSeconds(slashHalfPet);
                             // Pose de ataque (ex: Whip estalando) só no finalzinho do swing, bem
@@ -1507,6 +1509,8 @@ public class CombatPlayer : MonoBehaviour
 
                         string trigger = SwingTrigger(attacker);
                         if (swingMult != 1f) attacker?.animationController.SetSpeed(swingMult);
+                        // Bow (Ranged): sem o rastro/faísca do Slashing, ver PlayerCombat.SetSlashFxEnabled.
+                        attacker?.SetSlashFxEnabled(!IsRangedWeapon(attacker));
                         attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
                         yield return new WaitForSeconds(slashHalf);
                         // Pose de ataque só no finalzinho do swing (impressão de "chicotada"), ver
@@ -1631,6 +1635,8 @@ public class CombatPlayer : MonoBehaviour
                     float retSlashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / retSwingMult;
                     string retTrigger = SwingTrigger(attacker);
                     if (retSwingMult != 1f) attacker?.animationController.SetSpeed(retSwingMult);
+                    // Bow (Ranged): sem o rastro/faísca do Slashing, ver PlayerCombat.SetSlashFxEnabled.
+                    attacker?.SetSlashFxEnabled(!IsRangedWeapon(attacker));
                     attacker?.GetComponent<Animator>()?.SetTrigger(retTrigger);
                     yield return new WaitForSeconds(retSlashHalf);
                     // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
@@ -1729,6 +1735,8 @@ public class CombatPlayer : MonoBehaviour
 
                         string triggerPet = SwingTrigger(attacker);
                         if (dodgeSwingMultPet != 1f) attacker?.animationController.SetSpeed(dodgeSwingMultPet);
+                        // Bow (Ranged): sem o rastro/faísca do Slashing, ver PlayerCombat.SetSlashFxEnabled.
+                        attacker?.SetSlashFxEnabled(!IsRangedWeapon(attacker));
                         attacker?.GetComponent<Animator>()?.SetTrigger(triggerPet);
                         yield return new WaitForSeconds(slashHalfPet);
                         // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
@@ -1767,6 +1775,8 @@ public class CombatPlayer : MonoBehaviour
                         dodgeSwingMult = SwingSpeedMultiplier(attacker);
                         string trigger = SwingTrigger(attacker);
                         if (dodgeSwingMult != 1f) attacker?.animationController.SetSpeed(dodgeSwingMult);
+                        // Bow (Ranged): sem o rastro/faísca do Slashing, ver PlayerCombat.SetSlashFxEnabled.
+                        attacker?.SetSlashFxEnabled(!IsRangedWeapon(attacker));
                         attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
 
                         slashHalf = (attacker?.settings?.slashingDuration ?? 0.5f) * 0.5f * t / dodgeSwingMult;
@@ -1824,6 +1834,8 @@ public class CombatPlayer : MonoBehaviour
                             yield return StartCoroutine(RepositionIfNeeded(attacker, defender, t));
                         string trigger = SwingTrigger(attacker);
                         if (blockSwingMult != 1f) attacker?.animationController.SetSpeed(blockSwingMult);
+                        // Bow (Ranged): sem o rastro/faísca do Slashing, ver PlayerCombat.SetSlashFxEnabled.
+                        attacker?.SetSlashFxEnabled(!IsRangedWeapon(attacker));
                         attacker?.GetComponent<Animator>()?.SetTrigger(trigger);
                         yield return new WaitForSeconds(slashHalf);
                         // Pose de ataque só no finalzinho do swing, ver mesmo comentário no case Hit acima.
