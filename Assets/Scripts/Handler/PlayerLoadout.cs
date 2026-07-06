@@ -3,7 +3,10 @@ using System.Collections.Generic;
 
 public class PlayerLoadout : MonoBehaviour
 {
-    public WeaponLoadout loadout;
+    // Referência direta à lista da PlayerProfile (profile.weapons) — sem ScriptableObject
+    // satélite no meio (era WeaponLoadout, removido; cada profile já garante sua própria
+    // lista, mesmo padrão de skills/pets).
+    public List<WeaponData> loadout;
     [HideInInspector] public int currentIndex = -1;
 
     // Fires whenever a weapon is permanently removed from the runtime list.
@@ -21,7 +24,7 @@ public class PlayerLoadout : MonoBehaviour
     private void EnsureRuntime()
     {
         if (runtimeWeapons == null)
-            runtimeWeapons = new List<WeaponData>(loadout?.weapons ?? new WeaponData[0]);
+            runtimeWeapons = new List<WeaponData>(loadout ?? new List<WeaponData>());
     }
 
     public WeaponData GetNextWeapon()

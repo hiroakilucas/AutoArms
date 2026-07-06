@@ -256,17 +256,12 @@ public class CombatResultPanel : MonoBehaviour
                 }
                 break;
             case LevelUpOption.Kind.Weapon:
-                if (opt.weapon != null && profile.weaponLoadout != null)
+                if (opt.weapon != null && profile.weapons != null)
                 {
-                    var list = new List<WeaponData>(profile.weaponLoadout.weapons ?? new WeaponData[0]);
                     // Upgrade de tier: remove o tier anterior do loadout antes de adicionar o novo
                     if (opt.weapon.previousTier != null)
-                        list.RemoveAll(lw => lw != null && lw.weaponName == opt.weapon.previousTier.weaponName);
-                    list.Add(opt.weapon);
-                    profile.weaponLoadout.weapons = list.ToArray();
-#if UNITY_EDITOR
-                    UnityEditor.EditorUtility.SetDirty(profile.weaponLoadout);
-#endif
+                        profile.weapons.RemoveAll(lw => lw != null && lw.weaponName == opt.weapon.previousTier.weaponName);
+                    profile.weapons.Add(opt.weapon);
                 }
                 break;
             case LevelUpOption.Kind.Pet:
@@ -325,7 +320,7 @@ public class CombatResultPanel : MonoBehaviour
             }
 
         var availableWeapons = new List<WeaponData>();
-        var loadoutWeapons = profile.weaponLoadout?.weapons;
+        var loadoutWeapons = profile.weapons;
         if (allWeaponsPool != null)
             foreach (var w in allWeaponsPool)
             {
@@ -668,7 +663,7 @@ public class CombatResultPanel : MonoBehaviour
         return s?.icon;
     }
 
-    private static bool IsInLoadout(WeaponData w, WeaponData[] loadout)
+    private static bool IsInLoadout(WeaponData w, List<WeaponData> loadout)
     {
         if (loadout == null || w == null) return false;
         foreach (var lw in loadout)
@@ -677,7 +672,7 @@ public class CombatResultPanel : MonoBehaviour
     }
 
     // Verifica se alguma versão de tier superior desta arma T1 já está no loadout
-    private static bool HasUpgradeInLoadout(WeaponData t1, WeaponData[] loadout, WeaponData[] allWeapons)
+    private static bool HasUpgradeInLoadout(WeaponData t1, List<WeaponData> loadout, WeaponData[] allWeapons)
     {
         if (allWeapons == null) return false;
         foreach (var candidate in allWeapons)

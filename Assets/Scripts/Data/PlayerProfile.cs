@@ -30,7 +30,7 @@ public class PlayerProfile : ScriptableObject
     public AttackSettings attackSettings;
 
     [Tooltip("Armas atribu�das para esse personagem")]
-    public WeaponLoadout weaponLoadout;
+    public List<WeaponData> weapons = new List<WeaponData>();
 
     [Header("Instancia��o")]
     [Tooltip("Escala personalizada do personagem no momento da inst�ncia")]

@@ -660,11 +660,11 @@ public class CharacterPanel : MonoBehaviour
     private void RefreshArmas(PlayerProfile p)
     {
         foreach (Transform c in _armasList) Destroy(c.gameObject);
-        var loadout = p.weaponLoadout;
+        var loadout = p.weapons;
         int count = 0;
-        if (loadout?.weapons != null)
+        if (loadout != null)
         {
-            foreach (var w in loadout.weapons)
+            foreach (var w in loadout)
             {
                 if (w == null) continue;
                 count++;

@@ -28,12 +28,7 @@ public static class CharacterCreationEditor
 
             profile.skills.Clear();
             profile.pets.Clear();
-
-            if (profile.weaponLoadout != null)
-            {
-                profile.weaponLoadout.weapons = new WeaponData[0];
-                EditorUtility.SetDirty(profile.weaponLoadout);
-            }
+            profile.weapons.Clear();
 
             EditorUtility.SetDirty(profile);
             Debug.Log($"[Reset] {profile.profileName} → Level 1 " +

@@ -64,12 +64,9 @@ public class PlayerCombat : MonoBehaviour
         debugProfile.xpRequired       = XpSystem.XpRequired(1);
         debugProfile.skills.Clear();
         debugProfile.pets.Clear();
-        if (debugProfile.weaponLoadout != null)
-            debugProfile.weaponLoadout.weapons = new WeaponData[0];
+        debugProfile.weapons.Clear();
 #if UNITY_EDITOR
         UnityEditor.EditorUtility.SetDirty(debugProfile);
-        if (debugProfile.weaponLoadout != null)
-            UnityEditor.EditorUtility.SetDirty(debugProfile.weaponLoadout);
         UnityEditor.AssetDatabase.SaveAssets();
 #endif
     }

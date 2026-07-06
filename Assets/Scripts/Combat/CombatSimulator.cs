@@ -12,8 +12,8 @@ public class CombatSimulator
 
     // Lido por CombatSceneLoader depois de Simulate() pra pintar de vermelho os ícones
     // sabotados no WeaponHUD da vítima (ver Spy abaixo) — nomes, não referências, porque o
-    // WeaponHUD lê do PlayerLoadout visual (profile.weaponLoadout.weapons original), que nunca
-    // vê os clones sabotados criados só dentro do PlayerState do simulador.
+    // WeaponHUD lê do PlayerLoadout visual (profile.weapons original), que nunca vê os clones
+    // sabotados criados só dentro do PlayerState do simulador.
     public List<string> Player1SabotagedWeapons { get; private set; } = new List<string>();
     public List<string> Player2SabotagedWeapons { get; private set; } = new List<string>();
 
@@ -145,8 +145,8 @@ public class CombatSimulator
         s.comboChanceBonus = 0f;
         s.runSpeedMultiplier = 1f;
 
-        if (profile.weaponLoadout?.weapons != null)
-            foreach (var w in profile.weaponLoadout.weapons)
+        if (profile.weapons != null)
+            foreach (var w in profile.weapons)
                 if (w != null) s.weaponLoadout.Add(w);
 
         if (profile.skills != null)

@@ -150,7 +150,7 @@ public class CombatSceneLoader : MonoBehaviour
         }
 
         var loadout = player1Obj.GetComponent<PlayerLoadout>();
-        if (loadout != null) loadout.loadout = profile.weaponLoadout;
+        if (loadout != null) loadout.loadout = profile.weapons;
 
         var handler = player1Obj.GetComponent<WeaponHandler>();
         if (handler != null) handler.loadout = loadout;
@@ -217,11 +217,11 @@ public class CombatSceneLoader : MonoBehaviour
         var p2Handler = player2Object.GetComponent<WeaponHandler>();
 
         // Mirrors player1's loadout assignment above. Sem isso, Player2 fica com o valor
-        // hardcoded no PlayerLoadout da cena em vez do weaponLoadout do seu próprio
+        // hardcoded no PlayerLoadout da cena em vez da lista de armas do seu próprio
         // PlayerProfile — não tinha efeito enquanto todos os profiles compartilhavam o
-        // mesmo asset, mas passa a divergir agora que cada profile tem seu próprio loadout.
+        // mesmo asset satélite, mas passa a divergir agora que cada profile tem sua própria lista.
         if (p2Loadout != null && player2Profile != null)
-            p2Loadout.loadout = player2Profile.weaponLoadout;
+            p2Loadout.loadout = player2Profile.weapons;
 
         if (p2Loadout != null && p2Handler != null)
         {
