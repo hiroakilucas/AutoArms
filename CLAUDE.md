@@ -5,6 +5,7 @@
 - SKILLS_PASSIVE.md / SKILLS_ACTIVE.md — documentação individual de cada skill
 - PETS.md — antes de alterar sistema de pets
 - ROADMAP_FUTURO.md — fases 4-9, monetização, infra, áudio
+- UI_PALETTE.md — paleta de cores central de UI (`UITheme`/`UIThemeApplier`) — ler antes de hardcodear cor num elemento de interface novo
 - CHANGELOG.md — histórico completo de atualizações
 - VISION.md — conceito do jogo, inspirações, progressão (raramente necessário)
 
@@ -17,6 +18,7 @@ Foco atual: Fase 3 (Pets) + polimento de combate.
 | Skill nova/alterada, tabela de stats, roadmap de skills | SKILLS_SYSTEM.md + SKILLS_PASSIVE.md / SKILLS_ACTIVE.md |
 | Pet: stats, comportamento, PetState/PetCombatController | PETS.md |
 | Tasks Fases 4–9 | ROADMAP_FUTURO.md |
+| Cor de UI nova/alterada, paleta central (`UITheme`) | UI_PALETTE.md |
 | Arquitetura de combate, ScriptableObjects, fórmulas, cenas | CLAUDE.md |
 | Toda tarefa concluída — 1 linha `YYYY-MM-DD: resumo` | CHANGELOG.md |
 
@@ -44,13 +46,14 @@ This is a Unity project. All development happens inside the Unity Editor. There 
 ## Scene Flow
 
 ```
-01_MainMenu → 02_SelectCharacter → 01_MainMenu → 04_CombatScenePVP
+01_MainMenu → 02_SelectCharacter → 01_MainMenu → 05_SelectOpponent → 04_CombatScenePVP
 ```
 
-- `01_MainMenu` — Play button navigates to `04_CombatScenePVP`; a character must be selected first
-- `02_SelectCharacter` — Grid of characters from `CharacterDatabase`; selection persists via `SelectedProfileHolder`
+- `01_MainMenu` — Play button (reposicionado no canto inferior direito, estilo Brawl Stars — verde, maior que os outros) navega pra `05_SelectOpponent`; a character must be selected first
+- `02_SelectCharacter` — Grid of characters from `CharacterDatabase.unlockedCharacters`; selection persists via `SelectedProfileHolder`
 - `03_SelectWeapons` — **Not yet created.** Referenced in `MainMenuController` (`selectWeapons` field) but absent from the build and the file system — needs to be built.
-- `04_CombatScenePVP` — Player1 is spawned at runtime from the selected `PlayerProfile`; Player2 (Medieval Warrior Girl) is pre-placed in the scene
+- `05_SelectOpponent` — **Criada (2026-07-07).** Grid (até 6 cards, construídos 100% via código — mesmo padrão de `CombatResultPanel`/`CharacterPanel`, sem prefab de card) com `CharacterDatabase.opponentCharacters` (exclui o profile em uso pelo jogador). Cada card mostra nome/level/HP efetivo/barras STR-AGI-SPD/ícones de arma/histórico `PlayerPrefs` ("X batalhas · Y vitórias"). Escolher um card grava `SelectedOpponentHolder.currentOpponentProfile` e carrega `04_CombatScenePVP`. Ver `SelectOpponentController.cs`.
+- `04_CombatScenePVP` — Player1 **e** Player2 são ambos instanciados em runtime a partir do `PlayerProfile` selecionado (`SelectedProfileHolder`/`SelectedOpponentHolder`) — não há mais objeto pré-colocado na cena pro Player2 (era a Medieval Warrior Girl, hardcoded; ver histórico no CHANGELOG).
 
 ## ScriptableObject Assets
 
@@ -59,10 +62,12 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 | Asset type | Location | Notes |
 |---|---|---|
 | `PlayerProfile` | `Assets/ScriptableObjects/PlayerProfiles/` | Assassin Guy, Medieval Warrior, Medieval Warrior Girl. Campos de progresso: `level`, `xpCurrent`, `xpRequired` (calculado por `XpSystem.XpRequired`), `battlesRemaining` (max 6), `str`, `agility`, `maxHealth` (padrão 50) |
-| `CharacterDatabase` | `Assets/ScriptableObjects/Databases/` | Only **Assassin Guy** and **Medieval Warrior** are unlocked (selectable); Medieval Warrior Girl is hardcoded as Player2 |
-| `SelectedProfileHolder` | `Assets/Resources/` | Cross-scene singleton — read by `CombatSceneLoader` and `MainMenuCharacterPreview` |
+| `CharacterDatabase` | `Assets/ScriptableObjects/Databases/` | `unlockedCharacters` — only **Assassin Guy** and **Medieval Warrior** (jogáveis). `opponentCharacters` (novo campo, até 6) — pool de oponentes de `05_SelectOpponent`; hoje são 6 entradas repetindo **Medieval Warrior Girl** como placeholder (só existem 3 `PlayerProfile` no projeto) — expandir esse campo à medida que novos personagens forem criados. |
+| `SelectedProfileHolder` | `Assets/Resources/` | Cross-scene singleton (jogador) — read by `CombatSceneLoader` and `MainMenuCharacterPreview` |
+| `SelectedOpponentHolder` | `Assets/Resources/` | Cross-scene singleton (oponente) — campo `currentOpponentProfile`, gravado por `SelectOpponentController` ao escolher um card, lido por `CombatSceneLoader` pra instanciar Player2 dinamicamente (mesmo padrão do `SelectedProfileHolder`) |
+| `UITheme` | `Assets/ScriptableObjects/UITheme.asset` | Paleta de cores central de UI (fundo, botões, ícones/status, texto) — ver **UI_PALETTE.md** pro detalhe de cada campo/hex. Aplicado via `UIThemeApplier` (`Assets/Scripts/UI/`, `MonoBehaviour` com `enum ColorRole`) num `Image`/`TextMeshProUGUI` do mesmo GameObject. Primeiro uso real: botão "Jogar" de `01_MainMenu` (`ColorRole.PrimaryAction`) — resto das telas ainda não migrado (fundação, ver Fase 1 do roadmap). |
 | `AttackSettings` | `Assets/Data/Player1Settings.asset`, `Assets/Data/Player2Settings.asset` | Combat timing — see current values below |
-| `WeaponLoadout` | `Assets/Data/UI/Weapons/` | array of `WeaponData` slots. **Um asset por personagem** — `Loadout_AssasinGuy.asset`, `Loadout_MedievalWarrior.asset`, `Loadout_MedievalWarriorGirl.asset` (todos começam com as mesmas 4 armas: Satyr1, Golem3, Succubus, Zombie). Antes os 3 `PlayerProfile` apontavam para o mesmo `Loadout10Armas.asset` (ainda existe no projeto, sem uso) — qualquer arma ganha em level-up por um personagem vazava pra todos, já que `CombatResultPanel.ApplyBonus` muta `profile.weaponLoadout.weapons` diretamente. Separar os assets corrigiu isso. |
+| `WeaponData` por personagem | `PlayerProfile.weapons` | `List<WeaponData>` direta em cada `PlayerProfile` (sem ScriptableObject satélite `WeaponLoadout` — removido, consolidado aqui). Cada profile tem sua própria lista independente. |
 | `WeaponData` (legados) | `Assets/Data/UI/Weapons/<type>/` | 5 assets originais: Satyr1, Golem3, Succubus, VeryHeavyArmoredFrontierDefender, Zombie. Têm sprites. |
 | `WeaponData` (My Brute) | `Assets/Data/Weapons/` | 26 armas organizadas em **3 tiers** (T1/T2/T3): Knife, Sai, Mug, Fan, Keyboard, Leek, Broadsword, Scimitar, Sword, Axe, Halberd, Baton, Lance, Trident, Whip, Bumps, Flail, Morning Star, Mammoth Bone, Hammer, Trombone, Shuriken, Pio Pio, Noodle Bowl, Frying Pan, Racquet. T1 têm sprites (icon + inHandSprite) e stats base. T2/T3 são gerados por `WeaponTierGenerator` (sem sprite — herdam a do tier anterior via `EquipSpecific`) e têm dano multiplicado (T2 ×1.35, T3 ×1.75). **Precisam ser arrastados para `AttackSequencer.allWeapons` no Inspector da cena `04_CombatScenePVP` para entrar no pool de level-up.** |
 
@@ -128,20 +133,18 @@ PlayerCombat.AttackRoutine()
 | GameObject | Role |
 |---|---|
 | `Main Camera` | Scene camera |
-| `Medieval Warrior Girl` | Player2 — pre-placed, has all combat components configured |
 | `TurnManager` | **Dead object** — has a missing (deleted) script, can be removed from the scene |
 | `Colosseum arena` | Background/visual — sprite trocado aleatoriamente a cada combate, ver **Background Aleatório** abaixo |
-| `CombatInitializer` | Hosts `CombatSceneLoader` — spawns Player1 and wires both combatants at runtime |
-| `AttackSequencer` | Hosts `AttackSequencer` script — Player2 (Medieval Warrior Girl) pre-assigned, `interTurnDelay = 0.2`; Player1 starts as `None` and is filled at runtime by `CombatSceneLoader` |
+| `CombatInitializer` | Hosts `CombatSceneLoader` — spawns **both** Player1 and Player2 and wires the combatants at runtime (nenhum dos dois é pré-colocado na cena — ver **2026-07-07** no CHANGELOG) |
+| `AttackSequencer` | Hosts `AttackSequencer` script, `interTurnDelay = 0.2`; `player1`/`player2` começam `None` — preenchidos em runtime por `CombatSceneLoader` (path do simulador nunca atribui `player1`/`player2`, só `player1Profile`/`player2Profile`, ver abaixo) |
 
 `CombatSceneLoader.Initialize()` wiring sequence (coroutine iniciada em `Start()`):
-1. Reads `SelectedProfileHolder.currentProfile`
-2. Instantiates Player1 prefab, assigns `AttackSettings` and `WeaponLoadout` from the profile
-3. Finds the pre-placed Player2 (`Medieval Warrior Girl`)
-4. Sets mutual `defender` / `defenderAnimationController` references on both `PlayerCombat` instances
-5. `yield return null` — garante que `PlayerCombat.Start()` rodou em ambos (necessário para `spawnPosition`)
-6. Move ambos para `spawnY + 12f`, executa `EntryFall` em paralelo, aguarda via callbacks `bool`
-7. Assigns `attackSequencer.player1` e `attackSequencer.player1Profile` — **só após ambos pousarem**, desbloqueando o loop de combate
+1. Reads `SelectedProfileHolder.currentProfile` (Player1) e `SelectedOpponentHolder.currentOpponentProfile` (Player2, com fallback editor-only pra Medieval Warrior Girl se vazio)
+2. Instantiates ambos os prefabs (Player1 e Player2), assigns `AttackSettings`/`weapons`/stats a partir de cada profile — Player2 é espelhado no eixo X (posição e `localScale.x` negativo) pra ficar do lado direito olhando pro Player1
+3. Sets mutual `defender` / `defenderAnimationController` references on both `PlayerCombat` instances
+4. `yield return null` — garante que `PlayerCombat.Start()` rodou em ambos (necessário para `spawnPosition`)
+5. Move ambos para `spawnY + 12f`, executa `EntryFall` em paralelo, aguarda via callbacks `bool`
+6. Path do simulador: atribui `attackSequencer.player1Profile`/`player2Profile` (nunca `player1`/`player2`) — desbloqueia o `CombatPlayer`, mantendo o `AttackSequencer.CombatLoop` legado idle
 
 ### Background Aleatório (2026-07-05)
 
@@ -195,11 +198,11 @@ var rt = go.AddComponent<RectTransform>(); // null!
 | `EventSystem` | Standalone GO with EventSystem + StandaloneInputModule — the only EventSystem in the scene |
 | `MainMenuController` | fileID 1078761889; `selectedProfileHolder` set in Inspector |
 | `CharacterPreviewManager` | Has `MainMenuCharacterPreview`; `spawnPoint` and `selectedProfileHolder` set |
-| `Btn_SelectCharacter` | The "Personagem" button at anchor(0.5,0.5) pos=(600,−422), size=(495,170); onClick → `OnCharacterButton` |
-| `BtnJogar` | Play button at pos=(0,−422); onClick → `OnPlayButton` |
-| `BtnShop` | Shop button at pos=(−600,−422) |
+| `Btn_SelectCharacter` | The "Personagem" button at anchor(0.5,0.5) pos=(−160,−422), size=(495,170); onClick → `OnCharacterButton` (deslocado de x=600 pra abrir espaço pro Play no canto — ver abaixo) |
+| `BtnJogar` | Play button — **reposicionado (2026-07-07)**, estilo Brawl Stars: anchor(1,0) pivot(1,0) pos=(−60,60), size=(480,220), `Image.color` verde (`#48D15C`), label "JOGAR" 64pt bold. onClick → `OnPlayButton`, que agora carrega `05_SelectOpponent` (não mais direto `04_CombatScenePVP`) |
+| `BtnShop` | Shop button at pos=(−680,−422) (deslocado de x=−600) |
 
-Button math (1920×1080 canvas, anchor center): button center y = 540−422 = **118px** from bottom; tops at **203px**. Any panel `anchorMin.y` must be > 0.188 (use ≥ 0.20) to clear the buttons.
+Button math (1920×1080 canvas, anchor center): Personagem/Shop ainda usam anchor center, y = 540−422 = **118px** from bottom, tops at **203px** — mesma regra de clearance pra painéis (`anchorMin.y` > 0.188). O `BtnJogar` saiu desse sistema (agora ancorado no canto inferior direito, `anchorMin/Max=(1,0)`) — span x:[1380,1860] y:[60,280] em pixels absolutos de um canvas 1920×1080, sem sobrepor o `MainMenuCharacterPreview.BuildSummaryHUD` (x:[576,1344] y:[227,432]).
 
 ## Sorting Layers
 
@@ -237,13 +240,13 @@ Ghost trail da Fierce Brute (`CombatPlayer.SpawnGhostTrail`) usa a layer `Defaul
 
 ## Characters
 
-| Character | Selectable | Role |
+| Character | Selectable (Player1) | Role |
 |---|---|---|
 | Assassin Guy | Yes | Player1 option |
 | Medieval Warrior | Yes | Player1 option |
-| Medieval Warrior Girl | No (not in CharacterDatabase) | Hardcoded as Player2 in 04_CombatScenePVP |
+| Medieval Warrior Girl | No (not in `unlockedCharacters`) | Oponente em `05_SelectOpponent` (`opponentCharacters`, hoje as 6 entradas do pool) |
 
-To add a new selectable character: create a `PlayerProfile` in `Assets/ScriptableObjects/PlayerProfiles/` and add it to the `CharacterDatabase` asset.
+To add a new selectable Player1 character: create a `PlayerProfile` in `Assets/ScriptableObjects/PlayerProfiles/` and add it to `CharacterDatabase.unlockedCharacters`. To add a new opponent: add it to `CharacterDatabase.opponentCharacters` instead (não precisa ser jogável por Player1 pra virar oponente).
 
 ## Animator Controller Architecture
 
@@ -681,10 +684,9 @@ Coroutine-based replay of the event list. On each event, drives existing compone
 - `sequencer.OnCombatEnd(winner)` — triggers XP/result panel
 
 ### Integration in CombatSceneLoader
-Two Inspector fields on `CombatSceneLoader`:
-- `player2Profile` (PlayerProfile) — Medieval Warrior Girl's profile, enables the simulator. Wired directly on the `CombatSceneLoader` component in `04_CombatScenePVP` (`guid: fcb3d4326a2a4f14b9f5de165814a1c6`). If left unassigned, `LoadPlayer2ProfileFallback()` loads it by path (`Assets/ScriptableObjects/PlayerProfiles/Medieval Warrior Girl.asset`) via `AssetDatabase` — **editor-only**, logs `Debug.LogError` and stays null in a build, so the shipped scene must have `player2Profile` assigned in the Inspector.
+- `player2Profile` **não é mais um campo `[SerializeField]`** (2026-07-07) — é uma variável privada resolvida no início de `Initialize()` a partir de `selectedOpponentHolder.currentOpponentProfile` (gravado por `SelectOpponentController`), com fallback editor-only pra Medieval Warrior Girl (`LoadPlayer2ProfileFallback`, via `AssetDatabase`, path fixo) se o holder estiver vazio — útil só pra abrir `04_CombatScenePVP` direto no Editor sem passar por `05_SelectOpponent`. Sempre não-nulo depois do guard inicial (`yield break` se nem o holder nem o fallback resolverem).
 - `useSimulator` (bool, **default true**) — set to false to fall back to the original `AttackSequencer` coroutine loop.
-- `player2MaxHealth` (int) — only used as a fallback when `useSimulator` is false or `player2Profile` is unassigned. When the simulator path is active, `health2` is initialized from `player2Profile.maxHealth` directly (resolved — including the editor fallback — *before* `health2.Initialize(...)` runs), since `CombatSimulator.BuildState` computes Player2's entire HP off that same number. These two values previously could drift apart (e.g. profile at 70, `player2MaxHealth` field at 50), which desynced `HealthSystem.CurrentHealth` from the simulator's internal HP and made `ApplyHealthChanged`'s delta calculation produce wrong damage from the first hit onward.
+- Player2 é **instanciado dinamicamente** a partir de `player2Profile.characterPrefab` (mesmo padrão do Player1, mirrorado no X) — não existe mais `player2Object`/`player2MaxHealth` (removidos; Player2 nunca mais é um objeto pré-colocado na cena). `health2` é inicializado por `ApplySkillStats(player2Combat, player2Profile.maxHealth)` — mesma função que já processava Player1, aplicando bônus de skill (Vitality/Immortal/Deity/etc.) ao HP mostrado, evitando o desync entre `HealthSystem` e o HP interno do `CombatSimulator` que a versão antiga (Player2 sem `ApplySkillStats`) podia sofrer se um oponente tivesse skills afetando HP.
 
 `player1Combat.skills` is now also assigned from `profile.skills` (copied into a new `List<SkillData>`) right alongside the other stat fields (`str`, `agility`, etc.) — it was the one field missing from that block. Without it, `CombatSceneLoader.ApplySkillStats(player1Combat, profile.maxHealth)` (which drives the visual `health1`) silently ignored every one of Player1's skills, since `combat.HasSkill(...)` checks the live component's own (always-empty) `skills` list — while `CombatSimulator.BuildState`/`ApplySkillStats(PlayerState)` correctly reads `profile.skills` for the simulation. A profile with a maxHealth-affecting skill (e.g. Immortal, +100) would simulate with the bonus (combat log shows the inflated max) while `health1` displayed and accumulated damage against the un-bonused number — once cumulative damage passed the smaller real max, the bar clamped to 0 and `HealthSystem.TakeDamage`'s `if (IsDead) return;` froze it there for the rest of the fight, even though the simulator (and the attacker performing the killing blow) never considered that player dead.
 
@@ -861,6 +863,10 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Habilidades inspiradas no My Brute — 54 skills implementadas (ver SKILLS_SYSTEM.md/SKILLS_PASSIVE.md/SKILLS_ACTIVE.md), maioria espelhando o roster original (Vitality, Herculean Strength, Weapon Master, Untouchable, etc.)
 - [x] Criar habilidades originais adicionais — várias sem equivalente no My Brute original ou com mecânica redefinida do zero pelo usuário: Chaining, Determination, Reconnaissance, Deity, Saboteur/Spy (exclusivas do LaBrute), Repulse, Sticky Hands, Resistant, Fast Metabolism, Mimic, entre outras
 - [ ] **Arte chibi + retrato realista do personagem**: ao criar o personagem, ter duas versões visuais — o boneco chibi (estilo atual usado em combate/seleção) na frente, e uma versão mais realista do mesmo personagem ao fundo. Pedir ajuda a alguma IA de geração de imagem pra gerar essas duas versões e definir/separar o estilo de cada uma.
+- [ ] Personagem central na tela inicial: barra de XP/level compacta acima do personagem
+- [ ] Exibir status base na tela inicial e na seleção de personagem (HP, STR, AGI, SPD, armadura, skills equipadas)
+- [ ] Seta lateral no personagem central para troca rápida de personagem
+- [ ] HUD superior: moeda geral, diamante e energia do personagem
 
 ### Fase 2 — Combate Robusto
 - [x] Barra de vida com dano baseado em status + dano da arma
@@ -894,5 +900,5 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 Ver ROADMAP_FUTURO.md — não carregar nesta sessão.
 
 ### Progresso
-- Total: 122 tarefas | Concluídas: 60
+- Total: 126 tarefas | Concluídas: 60
 - Histórico completo em CHANGELOG.md

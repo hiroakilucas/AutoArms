@@ -15,3 +15,10 @@ MonoBehaviour:
   unlockedCharacters:
   - {fileID: 11400000, guid: 7b3985eecc7ce6d4390d451241be06e1, type: 2}
   - {fileID: 11400000, guid: f15e5749888ecff47ae9b3b62141b72c, type: 2}
+  opponentCharacters:
+  - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}

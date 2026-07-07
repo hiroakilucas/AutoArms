@@ -316,6 +316,11 @@ GameObject:
   - component: {fileID: 4986557568422928}
   - component: {fileID: 95291653629502288}
   - component: {fileID: 114337613114443766}
+  - component: {fileID: 5001112223334441}
+  - component: {fileID: 5001112223334442}
+  - component: {fileID: 5001112223334443}
+  - component: {fileID: 5001112223334444}
+  - component: {fileID: 5001112223334445}
   m_Layer: 0
   m_Name: Medieval Warrior Girl
   m_TagString: Untagged
@@ -18313,6 +18318,113 @@ AnimationClip:
   m_PrefabAsset: {fileID: 0}
   m_Name: Jump Loop
   serializedVersion: 7
+--- !u!114 &5001112223334441
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1154517427754006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 12557e85129593a46a022fc8f245f128, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  loadout: []
+  currentIndex: -1
+--- !u!114 &5001112223334442
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1154517427754006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2536b24d944d504428b30d4044de5d3c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  loadout: {fileID: 5001112223334441}
+  swordBasePrefab: {fileID: 1065374235450714}
+  handBone: {fileID: 4808958749903386}
+  positionOffset: {x: 1, y: -1, z: 0}
+  rotationOffset: {x: 0, y: 0, z: 0}
+  zOffset: 0.5
+  sortingLayer: Weapons
+  sortingOrder: 0
+  offHandBone: {fileID: 4544156623117242}
+  shieldPositionOffset: {x: 1, y: -1, z: 0}
+  shieldRotationOffset: {x: 0, y: 0, z: 0}
+  shieldZOffset: 0
+--- !u!114 &5001112223334443
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1154517427754006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79b276cbec1046b4883166d7ad388348, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+--- !u!114 &5001112223334444
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1154517427754006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8cffd1d15845937459436d974c4fc3df, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  weaponHandler: {fileID: 5001112223334442}
+  movement: {fileID: 5001112223334443}
+  animationController: {fileID: 5001112223334445}
+  settings: {fileID: 11400000, guid: eede40793fdb00f41a0a71939dda4524, type: 2}
+  isPlayer1: 0
+  defender: {fileID: 0}
+  defenderAnimationController: {fileID: 0}
+  agility: 3
+  str: 3
+  speed: 3
+  armor: 0
+  evasion: 0
+  accuracy: 0
+  initiative: 0
+  reversal: 0
+  counter: 0
+  blockBonus: 0
+  reversalAfterBlock: 0
+  criticalChance: 0
+  critDamageBonus: 0
+  hitSpeed: 1
+  runSpeedMultiplier: 1
+  comboChanceBonus: 0
+  disarmChanceBonus: 0
+  stickyHands: 0
+  leadSkeleton: 0
+  firstHitAvoided: 0
+  martialArts: 0
+  weaponsMaster: 0
+  hasShield: 0
+  skills: []
+  debugProfile: {fileID: 0}
+  spawnPosition: {x: 0, y: 0}
+--- !u!114 &5001112223334445
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1154517427754006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9bd0d283e663558498473c87028cdef2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
   m_Legacy: 0
   m_Compressed: 0
   m_UseHighQualityCurve: 1

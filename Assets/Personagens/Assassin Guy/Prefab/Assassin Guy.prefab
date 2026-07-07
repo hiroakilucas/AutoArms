@@ -481,7 +481,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 12557e85129593a46a022fc8f245f128, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  loadout: {fileID: 11400000, guid: e0d39eaf2c1be451c00eab99157f73dc, type: 2}
+  loadout:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   currentIndex: -1
 --- !u!114 &4402295922481241886
 MonoBehaviour:
@@ -507,6 +510,7 @@ MonoBehaviour:
   shieldPositionOffset: {x: 1, y: -1, z: 0}
   shieldRotationOffset: {x: 0, y: 0, z: 0}
   shieldZOffset: 0
+  PinnedHudWeapon: {fileID: 0}
 --- !u!114 &5477883545963316090
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -542,11 +546,16 @@ MonoBehaviour:
   hitSpeed: 1
   runSpeedMultiplier: 1
   comboChanceBonus: 0
+  disarmChanceBonus: 0
+  stickyHands: 0
   leadSkeleton: 0
   firstHitAvoided: 0
   martialArts: 0
+  weaponsMaster: 0
+  hasShield: 0
   skills: []
   debugProfile: {fileID: 0}
+  spawnPosition: {x: 0, y: 0}
 --- !u!1 &1505143171391790
 GameObject:
   m_ObjectHideFlags: 0

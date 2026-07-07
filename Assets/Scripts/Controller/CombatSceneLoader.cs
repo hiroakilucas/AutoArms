@@ -7,17 +7,16 @@ public class CombatSceneLoader : MonoBehaviour
 {
     [Header("References")]
     public AttackSequencer attackSequencer;
-    [SerializeField] private GameObject player2Object;
     [SerializeField] private SelectedProfileHolder selectedProfileHolder;
+    [Tooltip("Oponente escolhido em 05_SelectOpponent. Player2 é instanciado dinamicamente a partir do characterPrefab desse profile, mesmo fluxo do Player1.")]
+    [SerializeField] private SelectedOpponentHolder selectedOpponentHolder;
 
-    [Header("Player 2")]
-    [Tooltip("Vida maxima do Player2 (Medieval Warrior Girl). Ajustar conforme o perfil do personagem.")]
-    [SerializeField] private int player2MaxHealth = 50;
-    [Tooltip("Perfil do Player2 para o CombatSimulator. Se nulo, usa o sistema de AttackSequencer original.")]
-    [SerializeField] private PlayerProfile player2Profile;
+    // Resolvido no início de Initialize() (Inspector/holder ou fallback de editor) — sempre
+    // não-nulo depois do guard inicial, usado tanto pra instanciar Player2 quanto pro simulador.
+    private PlayerProfile player2Profile;
 
     [Header("Simulator")]
-    [Tooltip("Quando true e player2Profile estiver atribuído, usa CombatSimulator em vez de AttackSequencer.")]
+    [Tooltip("Quando true, usa CombatSimulator em vez do AttackSequencer legado.")]
     [SerializeField] private bool useSimulator = true;
 
     [Header("Shield")]
@@ -130,11 +129,12 @@ public class CombatSceneLoader : MonoBehaviour
             yield break;
         }
 
-        var player2Combat = player2Object.GetComponent<PlayerCombat>();
-        var player2Anim   = player2Object.GetComponent<AnimationController>();
-        if (player2Combat == null || player2Anim == null)
+        player2Profile = selectedOpponentHolder != null ? selectedOpponentHolder.currentOpponentProfile : null;
+        if (player2Profile == null)
+            player2Profile = LoadPlayer2ProfileFallback();
+        if (player2Profile == null)
         {
-            Debug.LogError("[CombatSceneLoader] Player2 is missing PlayerCombat or AnimationController.");
+            Debug.LogError("[CombatSceneLoader] No opponent PlayerProfile selected.");
             yield break;
         }
 
@@ -150,6 +150,26 @@ public class CombatSceneLoader : MonoBehaviour
         if (player1Combat == null || player1Anim == null)
         {
             Debug.LogError("[CombatSceneLoader] Player1 prefab is missing PlayerCombat or AnimationController.");
+            yield break;
+        }
+
+        // Player2 (oponente) instanciado do mesmo jeito que Player1 — mirrorado no X (mesma
+        // posição/escala que o antigo objeto pré-colocado usava: startPos.x negativo vira
+        // positivo, scale.x negativo flipa o sprite pra olhar pra esquerda, na direção do
+        // Player1). Deity aplicado do mesmo jeito, direto na escala inicial (era um multiplicador
+        // separado em cima da escala pré-configurada na cena — não existe mais "escala pré-
+        // configurada", então precisa entrar aqui igual ao Player1).
+        GameObject player2Object = Instantiate(player2Profile.characterPrefab);
+        player2Object.name = "Player2";
+        player2Object.transform.position = new Vector3(-player2Profile.startPos.x, player2Profile.startPos.y, 0f);
+        float p2ScaleMult = player2Profile.HasSkill("Deity") ? 1.5f : 1f;
+        player2Object.transform.localScale = new Vector3(-0.3f * p2ScaleMult, 0.3f * p2ScaleMult, 0.3f * p2ScaleMult);
+
+        var player2Combat = player2Object.GetComponent<PlayerCombat>();
+        var player2Anim   = player2Object.GetComponent<AnimationController>();
+        if (player2Combat == null || player2Anim == null)
+        {
+            Debug.LogError("[CombatSceneLoader] Opponent prefab is missing PlayerCombat or AnimationController.");
             yield break;
         }
 
@@ -176,6 +196,25 @@ public class CombatSceneLoader : MonoBehaviour
         player1Combat.defender       = player2Combat;
         player1Combat.defenderAnimationController = player2Anim;
 
+        // Espelha o bloco acima — antes só existia hardcoded na cena (Player2 pré-colocado com
+        // stats manualmente sincronizados com o profile). Agora que Player2 é instanciado a
+        // partir de qualquer PlayerProfile do pool de oponentes, precisa da mesma cópia de stats
+        // que o Player1 já recebe, senão qualquer oponente diferente da Girl combateria com os
+        // valores default do componente (str/agility/speed = 10/10/10 etc.) em vez do profile.
+        player2Combat.settings       = player2Profile.attackSettings;
+        player2Combat.isPlayer1      = false;
+        player2Combat.str            = player2Profile.str;
+        player2Combat.agility        = player2Profile.agility;
+        player2Combat.speed          = player2Profile.speed;
+        player2Combat.armor          = player2Profile.armor;
+        player2Combat.evasion        = player2Profile.evasion;
+        player2Combat.accuracy       = player2Profile.accuracy;
+        player2Combat.initiative     = player2Profile.initiative;
+        player2Combat.reversal       = player2Profile.reversal;
+        player2Combat.counter        = player2Profile.counter;
+        player2Combat.criticalChance = player2Profile.criticalChance;
+        player2Combat.hitSpeed       = player2Profile.hitSpeed;
+        player2Combat.skills         = player2Profile.skills != null ? new List<SkillData>(player2Profile.skills) : new List<SkillData>();
         player2Combat.defender  = player1Combat;
         player2Combat.defenderAnimationController = player1Anim;
 
@@ -190,19 +229,12 @@ public class CombatSceneLoader : MonoBehaviour
         if (handler != null && profile.HasSkill("Shield"))
             handler.EquipShield(ResolveShieldVisual(profile.GetSkill("Shield")));
 
-        // useSimulator path computes all of Player2's HP off player2Profile.maxHealth (see
-        // CombatSimulator.BuildState) — health2 must start from the same number, or every
-        // HealthChanged event's delta is computed against the wrong baseline and damage
-        // appears to not apply correctly.
-        if (useSimulator && player2Profile == null)
-            player2Profile = LoadPlayer2ProfileFallback();
-        int p2MaxHealth = (useSimulator && player2Profile != null) ? player2Profile.maxHealth : player2MaxHealth;
-
-        // Deity: +50% de tamanho, mesma lógica do Player1 acima — Player2 já vem pré-colocado
-        // na cena com sua própria escala configurada no editor, então aqui é multiplicador
-        // sobre o valor atual, não um valor fixo.
-        if (useSimulator && player2Profile != null && player2Profile.HasSkill("Deity"))
-            player2Object.transform.localScale *= 1.5f;
+        // Mesma ApplySkillStats do Player1 acima — antes Player2 usava player2Profile.maxHealth
+        // direto (sem bônus de skill), já que ela nunca tinha skills configuradas na cena
+        // hardcoded. Com qualquer oponente do pool agora podendo ter skills que afetam HP
+        // (Vitality, Immortal, Deity...), precisa do mesmo tratamento pra health2 não dessincronizar
+        // do HP interno calculado pelo CombatSimulator (mesmo bug já documentado pro Player1).
+        int p2MaxHealth = ApplySkillStats(player2Combat, player2Profile.maxHealth);
 
         var health2 = player2Object.GetComponent<HealthSystem>() ?? player2Object.AddComponent<HealthSystem>();
         health2.Initialize(p2MaxHealth);
@@ -225,7 +257,7 @@ public class CombatSceneLoader : MonoBehaviour
         // hardcoded no PlayerLoadout da cena em vez da lista de armas do seu próprio
         // PlayerProfile — não tinha efeito enquanto todos os profiles compartilhavam o
         // mesmo asset satélite, mas passa a divergir agora que cada profile tem sua própria lista.
-        if (p2Loadout != null && player2Profile != null)
+        if (p2Loadout != null)
             p2Loadout.loadout = player2Profile.weapons;
 
         if (p2Loadout != null && p2Handler != null)
@@ -235,25 +267,18 @@ public class CombatSceneLoader : MonoBehaviour
         }
 
         // Espelha o equip de Shield do Player1 acima.
-        if (p2Handler != null && player2Profile != null && player2Profile.HasSkill("Shield"))
+        if (p2Handler != null && player2Profile.HasSkill("Shield"))
             p2Handler.EquipShield(ResolveShieldVisual(player2Profile.GetSkill("Shield")));
 
         // Skills HUD: exibe skills ativas (Supers) com contador de usos abaixo do WeaponHUD.
-        SkillsHUD p1SkillsHUD = null, p2SkillsHUD = null;
-        if (profile != null)
-        {
-            p1SkillsHUD = gameObject.AddComponent<SkillsHUD>();
-            p1SkillsHUD.Initialize(profile.skills, true, combatHUD.CanvasTransform);
-        }
-        if (player2Profile != null)
-        {
-            p2SkillsHUD = gameObject.AddComponent<SkillsHUD>();
-            p2SkillsHUD.Initialize(player2Profile.skills, false, combatHUD.CanvasTransform);
-        }
+        var p1SkillsHUD = gameObject.AddComponent<SkillsHUD>();
+        p1SkillsHUD.Initialize(profile.skills, true, combatHUD.CanvasTransform);
+        var p2SkillsHUD = gameObject.AddComponent<SkillsHUD>();
+        p2SkillsHUD.Initialize(player2Profile.skills, false, combatHUD.CanvasTransform);
 
         List<CombatEvent> events = null;
 
-        if (useSimulator && player2Profile != null)
+        if (useSimulator)
         {
             // Pré-calcula a luta inteira ANTES do EntryFall — não depende de nada que só existe
             // depois dele (transform/spawnPosition), só lê os PlayerProfile, e permite pintar os
@@ -261,6 +286,7 @@ public class CombatSceneLoader : MonoBehaviour
             // nascem mais com arma equipada (era 40% de chance — EquipStartingWeaponIfNeeded,
             // removido a pedido do usuário; todo mundo agora começa sempre desarmado).
             attackSequencer.player1Profile = profile;
+            attackSequencer.player2Profile = player2Profile;
 
             var simulator = new CombatSimulator();
             events = simulator.Simulate(profile, player2Profile);
@@ -277,6 +303,7 @@ public class CombatSceneLoader : MonoBehaviour
             // Original coroutine-based system.
             attackSequencer.player1        = player1Combat;
             attackSequencer.player1Profile = profile;
+            attackSequencer.player2Profile = player2Profile;
         }
 
         // Aguarda um frame para PlayerCombat.Start() rodar e definir spawnPosition
@@ -357,19 +384,20 @@ public class CombatSceneLoader : MonoBehaviour
         return shieldWeaponData;
     }
 
-    // Editor-only convenience: if player2Profile wasn't wired in the Inspector, fetch
-    // the Medieval Warrior Girl profile directly by path so the simulator (and its
-    // pre-combat log) still runs during testing. In a build this has no effect — assign
-    // player2Profile in the Inspector for the shipped scene.
+    // Editor-only convenience: se selectedOpponentHolder.currentOpponentProfile estiver vazio
+    // (ex: abrindo 04_CombatScenePVP direto no Editor pra testar, sem passar por
+    // 05_SelectOpponent), busca a Medieval Warrior Girl por path pra ainda rodar o simulador.
+    // Em build isso nunca deveria disparar — o fluxo normal sempre passa por 05_SelectOpponent,
+    // que grava selectedOpponentHolder antes de carregar esta cena.
     private static PlayerProfile LoadPlayer2ProfileFallback()
     {
 #if UNITY_EDITOR
         var fallback = UnityEditor.AssetDatabase.LoadAssetAtPath<PlayerProfile>(Player2ProfileFallbackPath);
         if (fallback == null)
-            Debug.LogError($"[CombatSceneLoader] player2Profile não atribuído e fallback não encontrado em {Player2ProfileFallbackPath}");
+            Debug.LogError($"[CombatSceneLoader] Nenhum oponente selecionado e fallback não encontrado em {Player2ProfileFallbackPath}");
         return fallback;
 #else
-        Debug.LogError("[CombatSceneLoader] player2Profile não atribuído no Inspector.");
+        Debug.LogError("[CombatSceneLoader] Nenhum oponente selecionado (selectedOpponentHolder vazio).");
         return null;
 #endif
     }

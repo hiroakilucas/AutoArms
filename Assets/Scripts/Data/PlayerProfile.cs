@@ -86,6 +86,13 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("Lutas restantes (m�ximo por ciclo)")]
     public int battlesRemaining = 6;
 
+    // Chave estável pro histórico de batalhas por oponente (PlayerPrefs "battles_{id}"/
+    // "wins_{id}", ver SelectOpponentController/AttackSequencer) — usa o nome do próprio asset
+    // (Object.name), já que não existe um campo de ID dedicado. Repetir o mesmo PlayerProfile
+    // várias vezes no pool de oponentes (ex: 6x Medieval Warrior Girl) soma no mesmo histórico
+    // de propósito — é literalmente o mesmo personagem.
+    public string OpponentId() => name;
+
     public bool HasSkill(string skillName)
     {
         if (skills == null) return false;

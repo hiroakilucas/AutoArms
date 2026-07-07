@@ -9,6 +9,9 @@ public class AttackSequencer : MonoBehaviour
 
     [Header("Progresso")]
     public PlayerProfile player1Profile;
+    // Setado por CombatSceneLoader junto de player1Profile — só usado aqui pra alimentar o
+    // histórico de batalhas/vitórias por oponente (PlayerPrefs), ver OnCombatEnd.
+    public PlayerProfile player2Profile;
 
     [Header("Level-Up Options")]
     public SkillDatabase skillDatabase;
@@ -103,6 +106,19 @@ public class AttackSequencer : MonoBehaviour
         int xpBefore    = player1Profile.xpCurrent;
         int levelBefore = player1Profile.level;
         var result      = XpSystem.AddXP(player1Profile, xpGained);
+
+        // Histórico de batalhas/vitórias por oponente (05_SelectOpponent) — ainda sem backend
+        // (Fase 6 pendente), então guardado em PlayerPrefs por opponentId. Repetir o mesmo
+        // PlayerProfile em vários slots do pool (ex: 6x Medieval Warrior Girl) soma no mesmo
+        // contador de propósito, ver PlayerProfile.OpponentId.
+        if (player2Profile != null)
+        {
+            string opponentId = player2Profile.OpponentId();
+            PlayerPrefs.SetInt("battles_" + opponentId, PlayerPrefs.GetInt("battles_" + opponentId, 0) + 1);
+            if (player1Won)
+                PlayerPrefs.SetInt("wins_" + opponentId, PlayerPrefs.GetInt("wins_" + opponentId, 0) + 1);
+            PlayerPrefs.Save();
+        }
 
         gameObject.AddComponent<CombatResultPanel>()
             .Show(player1Won, xpGained, xpBefore, levelBefore, player1Profile, result.didLevelUp,

@@ -23,7 +23,7 @@ public class MainMenuController : MonoBehaviour
     {
         if (selectedProfileHolder.currentProfile == null) return;
 
-        SceneManager.LoadScene("04_CombatScenePVP");
+        SceneManager.LoadScene("05_SelectOpponent");
     }
 
     public void OnSelectCharacterButton()
