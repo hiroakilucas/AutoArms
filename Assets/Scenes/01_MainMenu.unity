@@ -401,7 +401,7 @@ GameObject:
   - component: {fileID: 400763830}
   - component: {fileID: 400763829}
   - component: {fileID: 400763828}
-  - component: {fileID: 400763831}
+  - component: {fileID: 400763900}
   m_Layer: 5
   m_Name: BtnJogar
   m_TagString: Untagged
@@ -523,7 +523,7 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 400763826}
   m_CullTransparentMesh: 1
---- !u!114 &400763831
+--- !u!114 &400763900
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

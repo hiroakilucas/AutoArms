@@ -1,7 +1,9 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 121 tarefas | Concluídas: 57
+- Total: 122 tarefas | Concluídas: 59
+
+- 2026-07-07: Limpeza nos .md — corrigido fileID quebrado do `UIThemeApplier` em `01_MainMenu.unity` (Broken text PPtr, `Local file identifier (400763831) doesn't exist`; regenerado com um fileID novo). Marcadas como concluídas as skills Garimpeiro e Magneto (SKILLS_SYSTEM.md — tinham `SkillDef` registrado mas o roadmap ainda mostrava pendente); adicionada a skill Backup como novo item pendente (chama aliado, mecânica ainda não definida). Removida a ressalva "sprites pendentes" da linha de armas em CLAUDE.md (Fase 3). Referências a "ROADMAP_FUTURO.md — fases 4-9" corrigidas pra "4-13" (lista de arquivos + tabela de regras de documentação). "Sistema de raridade de armas" (Fase 3) permanece pendente — `WeaponData.dropOdds` ainda sem nenhum uso no código
 
 - 2026-07-07: Criado UI_PALETTE.md documentando a paleta do `UITheme` (campo a campo, hex e uso), referenciado no CLAUDE.md (lista de arquivos + tabela de regras de documentação + tabela de ScriptableObject Assets). Botão "Jogar" de `01_MainMenu` migrado pra usar `UITheme.primaryAction` via `UIThemeApplier` em vez da cor hardcoded
 

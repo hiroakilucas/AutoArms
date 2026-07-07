@@ -4,12 +4,12 @@
 - SKILLS_SYSTEM.md — arquitetura de skills, tabela de stats, roadmap de implementação
 - SKILLS_PASSIVE.md / SKILLS_ACTIVE.md — documentação individual de cada skill
 - PETS.md — antes de alterar sistema de pets
-- ROADMAP_FUTURO.md — fases 4-9, monetização, infra, áudio
+- ROADMAP_FUTURO.md — fases 4-13, monetização, infra, áudio, matchmaking, social, configurações
 - UI_PALETTE.md — paleta de cores central de UI (`UITheme`/`UIThemeApplier`) — ler antes de hardcodear cor num elemento de interface novo
 - CHANGELOG.md — histórico completo de atualizações
 - VISION.md — conceito do jogo, inspirações, progressão (raramente necessário)
 
-Foco atual: Fase 3 (Pets) + polimento de combate.
+Foco atual: Fase 1 (Interface & Personagens) — fluxo de menu/seleção de oponente e tema de UI em andamento.
 
 ## Regras de documentação — obrigatórias a cada implementação
 
@@ -17,7 +17,7 @@ Foco atual: Fase 3 (Pets) + polimento de combate.
 |---|---|
 | Skill nova/alterada, tabela de stats, roadmap de skills | SKILLS_SYSTEM.md + SKILLS_PASSIVE.md / SKILLS_ACTIVE.md |
 | Pet: stats, comportamento, PetState/PetCombatController | PETS.md |
-| Tasks Fases 4–9 | ROADMAP_FUTURO.md |
+| Tasks Fases 4–13 | ROADMAP_FUTURO.md |
 | Cor de UI nova/alterada, paleta central (`UITheme`) | UI_PALETTE.md |
 | Arquitetura de combate, ScriptableObjects, fórmulas, cenas | CLAUDE.md |
 | Toda tarefa concluída — 1 linha `YYYY-MM-DD: resumo` | CHANGELOG.md |
@@ -890,7 +890,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Ao subir de nível: escolher atributo, skill ou arma
 
 ### Fase 3 — Armas & Pets
-- [x] Criar mais armas com sprites e stats — 26 assets criados em `Assets/Data/Weapons/` com stats T1 completos (sprites pendentes)
+- [x] Criar mais armas com sprites e stats — 26 assets criados em `Assets/Data/Weapons/` com stats T1 completos e sprites
 - [ ] Sistema de raridade de armas
 - [x] Pets: Rato (Mouse), Macaco (Monkey), Javali (Boar) — substituem o roster original (cachorro/lobo/águia/urso) do "Pets planejados" abaixo, que ficou desatualizado frente aos assets reais (Boar/Monkey/Mouse) já disponíveis em `Assets/Data/UI/Pets/`. Ver seção própria **Pets** em Combat Systems.
 - [x] Sistema de Tiers T1/T2/T3 para Skills (mesmo padrão do `WeaponTierGenerator`) — valores movidos de literais hardcoded pro `SkillData` (`bonusValue1..7`), `SkillTierGenerator.cs` novo; valores exatos de balanceamento de 50 skills já implementados (tabela completa em SKILLS_SYSTEM.md); T2/T3 ainda não aparecem no level-up (wiring de progressão de tier fica pra depois). Ver **Sistema de Tiers (T1/T2/T3)** em SKILLS_SYSTEM.md.

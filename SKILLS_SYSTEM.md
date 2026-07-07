@@ -234,7 +234,7 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 - [x] Martial Arts — +100% dano desarmado (`martialArts = true`, dobra `UnarmedStats.Damage` em `WeaponBaseDamage()`; era "combo de socos desarmado melhorado" no roadmap original, redefinida pelo usuário)
 - [x] Hideaway — 50% chance de arremesso fixa (mesmo gate de throw-ou-melee de todo mundo, sem branch forçado), +25% bloqueio contra arremessos recebidos (reduz hit de 80% pra 55%), arma some da mão mas continua no loadout (não desaparece); ver seção própria **Hideaway** em Combat Systems
 - [x] Spy — metade das armas do oponente (aleatórias) recebem -20% dano permanente antes do combate; os ícones das armas sabotadas ficam vermelhos no `WeaponHUD`. Skill exclusiva do LaBrute/eternaltwin, não existe no Muxxu original; ver seção própria **Spy** em Combat Systems
-- [ ] Garimpeiro — pega uma arma aleatória do chão (das `fallenWeapons`) adicionando-a ao loadout; funciona como pickup normal (início de turno, 40% de chance, animação CatchWeapon), mas a fonte é o chão em vez do loadout original
+- [x] Garimpeiro — pega uma arma aleatória do chão (das `fallenWeapons`) adicionando-a ao loadout; funciona como pickup normal (início de turno, 40% de chance, animação CatchWeapon), mas a fonte é o chão em vez do loadout original
 
 #### Supers (ativas — usadas X vezes por luta)
 - [x] Fierce Brute — 33% por turno (não consome a ação): dobra o dano e +10% crítico no 1º hit melee do mesmo turno, usos escalam com STR (1 + 1 a cada 30); ver seção própria **Fierce Brute** em Combat Systems
@@ -246,7 +246,8 @@ Todas calculam o bônus em runtime a partir do `profile.str`/`agility`/`speed`/`
 - [x] Bomb — 17% por turno: explosão entre 15-25 de dano em TODOS os alvos inimigos (hoje só o defensor, ver GetEnemyTargets), ignora dodge/block/crítico/STR/armor, quebra Net em quem estiver enredado (2x por luta), **consome o turno** (era `false`/nunca consumia, redefinido pelo usuário); ver seção própria **Bomb** em Combat Systems
 - [x] Vampirism — quando HP < 50%, 33% por turno: mordida garantida (nunca esquivada/bloqueada), causa 25% do HP que falta pro atacante como dano ao defensor e cura o atacante na mesma quantidade (mínimo 1 nos dois), **consome o turno** (1x por luta); ver seção própria **Vampirism** em Combat Systems
 - [x] Mimic — 1x por combate: copia e usa a última skill ativa do adversário (a última Super que ele ativou na luta); 25% por turno quando disponível; filtragem inteligente (Treat sem pet, Thief sem arma, etc.)
-- [ ] Magneto — levita TODAS as armas do chão (`fallenWeapons`) para as costas do personagem, aponta cada uma em direção ao inimigo, depois solta tudo de uma vez; cada arma causa seu próprio dano (mesmo valor de arremesso: weaponDamage + STR), sempre acertam (ignora dodge/block); NUNCA consome armas do loadout — só as do chão; 1x por luta
+- [x] Magneto — levita TODAS as armas do chão (`fallenWeapons`) para as costas do personagem, aponta cada uma em direção ao inimigo, depois solta tudo de uma vez; cada arma causa seu próprio dano (mesmo valor de arremesso: weaponDamage + STR), sempre acertam (ignora dodge/block); NUNCA consome armas do loadout — só as do chão; 1x por luta
+- [ ] Backup — chama um personagem aliado pra ajudar na luta (ver nota em `CombatSimulator.GetEnemyTargets` — estrutura já preparada pra somar alvos extras do lado do atacante quando essa skill existir); mecânica ainda não definida/implementada
 
 #### Relacionadas a Pets
 - [x] Hypnosis — 38% por turno: hipnotiza um pet inimigo vivo (90% de chance) — o pet troca permanentemente para o seu time (1x por luta); ver PETS.md
