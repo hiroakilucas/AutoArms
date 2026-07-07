@@ -61,10 +61,20 @@ Objetivo: nenhuma cor de interface deve ser hardcoded num prefab/script novo —
 
 ## Status de adoção
 
-Fundação criada (2026-07-07) — ainda **não aplicada** nas telas existentes, exceto o botão
-"Jogar" de `01_MainMenu` (`primaryAction`). Aplicação em massa acontece quando as tarefas
-"Melhorar interface da página inicial" e "Melhorar interface da tela de escolha de
-personagens" (Fase 1 do roadmap, ver CLAUDE.md) forem executadas — nesse momento, preferir
-migrar cores hardcoded existentes (`CharacterPanel`, `CombatResultPanel`,
-`MainMenuCharacterPreview`, `WeaponHUD` etc.) pra `UITheme` em vez de introduzir novos hex
-soltos.
+Fundação criada (2026-07-07). Botão "Jogar" de `01_MainMenu` (`primaryAction`) foi o primeiro
+uso real. No mesmo dia, `CharacterPanel` (hoje o HUD unificado compacto/expandido do lado
+direito da tela — ver CLAUDE.md, "01_MainMenu" — antes eram dois elementos separados: um HUD
+sobre o personagem central e um painel lateral por clique) migrou todas as cores hardcoded que
+tinha pra `UITheme` — ganhou um campo `[SerializeField] private UITheme theme;` (wireado em
+`01_MainMenu.unity`, mesmo padrão de `UIThemeApplier`) e lê os campos diretamente em vez de
+duplicar hex. `CombatResultPanel`/`WeaponHUD`/`02_SelectCharacter` ainda não migrados.
+
+- `panelBackground`/`panelBackgroundAlt` — fundo dos estados Compact/Expanded do `CharacterPanel`.
+- `currencyGold` — badge de level e barra de XP (nos dois estados).
+- `secondaryButtonAlt`/`secondaryButton` — barras de STR/AGI/SPD/Armadura no estado Expanded
+  (SPD usa uma variante mais clara de `secondaryButtonAlt`, `Color.Lerp` com branco).
+- `hpFull`/`hpCritical` — cor da barra de HP no estado Expanded (crítico abaixo de 30 HP
+  efetivo, valor arbitrário só pra UI).
+- `textOnDark`/`textOnLight` — texto sobre os painéis escuros e sobre o badge de level dourado,
+  respectivamente.
+- `danger` — fundo do botão de fechar (X) do painel lateral.

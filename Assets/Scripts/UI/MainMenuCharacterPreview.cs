@@ -8,6 +8,22 @@ public class MainMenuCharacterPreview : MonoBehaviour
     private GameObject currentCharacter;
     [SerializeField] private SelectedProfileHolder selectedProfileHolder;
 
+    // Reduz o personagem central levemente — o root dos prefabs de personagem fica nos pés
+    // (mesmo pressuposto de CombatSceneLoader/RandomSpawnPosition), então escalar em torno da
+    // própria transform mantém os pés no lugar sem precisar ajustar a posição.
+    private const float PreviewScaleFactor = 0.82f;
+
+    // Centralizado (2026-07-07) no espaço disponível à ESQUERDA do CharacterPanel (não no
+    // centro absoluto da tela) — senão o personagem parece descentralizado com o painel
+    // visível. Derivado da câmera ortográfica da cena (size=5, aspecto 16:9, X=0 — ver
+    // "Main Camera" em 01_MainMenu.unity): meia-largura visível = 5*(1920/1080) = 8.889
+    // unidades. CharacterPanel.PanelWidth=380px ocupa 380/1920=19.79% da largura da tela à
+    // direita; o centro da faixa restante (à esquerda do painel), convertido de volta pra
+    // espaço de mundo, fica em X ≈ -1.76. Recalcular se PanelWidth ou o orthographicSize
+    // abaixo mudarem.
+    private const float CharacterCenterX = -1.76f;
+    private const float CharacterGroundY = -2f;
+
     void Start()
     {
         var profile = selectedProfileHolder.currentProfile;
@@ -15,8 +31,8 @@ public class MainMenuCharacterPreview : MonoBehaviour
         if (profile == null) return;
 
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
-        currentCharacter.transform.localScale = profile.scale;
-        currentCharacter.transform.position = new Vector3(-2f, -2, 0);
+        currentCharacter.transform.localScale = profile.scale * PreviewScaleFactor;
+        currentCharacter.transform.position = new Vector3(CharacterCenterX, CharacterGroundY, 0);
         Camera.main.orthographicSize = 5;
 
         DestroyImmediate(currentCharacter.GetComponent<PlayerCombat>());
@@ -27,131 +43,99 @@ public class MainMenuCharacterPreview : MonoBehaviour
         var anim = currentCharacter.GetComponent<Animator>();
         if (anim != null) anim.SetBool("Idle", true);
 
-        BuildSummaryHUD(profile);
+        BuildLevelXpHud(profile);
     }
 
-    private void BuildSummaryHUD(PlayerProfile p)
+    // Barra de XP fina + "Level X" acima dela, estilo My Brute — única barra de XP do menu
+    // agora (a que existia no painel lateral foi removida, ver CharacterPanel). Fica
+    // centralizada na mesma coordenada X do personagem (ver CharacterCenterX acima),
+    // convertida pra fração de tela com a mesma fórmula de câmera ortográfica.
+    //
+    // Bug (2026-07-07, 2 rodadas): 1ª tentativa deixava um retângulo branco vazio (Canvas não
+    // parentado + exceção no meio do método). Corrigido isso, mas a 2ª tentativa (guard
+    // "if (theme == null) return;") revelou o problema de verdade: o campo
+    // [SerializeField] UITheme theme deste componente resolve nulo em runtime, mesmo com o
+    // asset wireado corretamente em 01_MainMenu.unity (conferido linha a linha) — o elemento
+    // inteiro sumia (early return silencioso, sem exception nenhuma pro Console acusar).
+    // Como o MainMenuController.theme (mesmo asset, mesmo mecanismo de serialização) funciona
+    // de forma comprovada — o CharacterPanel que ele alimenta renderiza sem problema — o campo
+    // próprio deste componente foi removido e o tema passou a ser buscado via
+    // FindObjectOfType<MainMenuController>().Theme (ResolveTheme abaixo), eliminando de vez
+    // essa 2ª fonte de wiring que se mostrou frágil duas vezes seguidas.
+    private void BuildLevelXpHud(PlayerProfile p)
     {
-        var canvasGo = new GameObject("SummaryHUD");
+        var theme = ResolveTheme();
+        if (theme == null) return;
+
+        Color panelBg = theme.panelBackground;
+        Color textColor = theme.textOnDark;
+        Color goldColor = theme.currencyGold;
+
+        const float halfWidth = 8.888889f; // orthographicSize(5) * aspecto 16:9
+        float centerXFraction = (CharacterCenterX + halfWidth) / (halfWidth * 2f);
+
+        var canvasGo = new GameObject("LevelXpHud");
+        canvasGo.transform.SetParent(transform, false);
         var canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 5;
+        canvas.sortingOrder = 4;
         var scaler = canvasGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         canvasGo.AddComponent<GraphicRaycaster>();
 
-        // Container centrado na parte inferior
-        var container = new GameObject("Container");
-        container.transform.SetParent(canvasGo.transform, false);
-        // RT first, then Image — safe order
-        var crt = container.AddComponent<RectTransform>();
-        crt.anchorMin = new Vector2(0.30f, 0.21f);  // 226px > button top 203px
-        crt.anchorMax = new Vector2(0.70f, 0.40f);
-        crt.offsetMin = crt.offsetMax = Vector2.zero;
-        container.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
+        var rootGo = new GameObject("Root");
+        rootGo.transform.SetParent(canvasGo.transform, false);
+        var rrt = rootGo.AddComponent<RectTransform>();
+        // y=0.80 deixava uma folga grande demais entre o indicador e a cabeça (reportado
+        // 2026-07-07); aproximado pra 0.71 — ainda com margem segura acima da cabeça
+        // estimada (~0.57-0.60 de fração de tela), mas visualmente "grudado" no personagem.
+        rrt.anchorMin = rrt.anchorMax = new Vector2(centerXFraction, 0.71f);
+        rrt.pivot = new Vector2(0.5f, 0.5f);
+        rrt.sizeDelta = new Vector2(240f, 56f);
 
-        // Nome + Level
-        var nameGo = new GameObject("NameLevel");
-        nameGo.transform.SetParent(container.transform, false);
-        // RT first so AddComponent<TMP> doesn't stomp it
-        var nrt = nameGo.AddComponent<RectTransform>();
-        nrt.anchorMin = new Vector2(0f, 0.82f); nrt.anchorMax = new Vector2(1f, 1f);
-        nrt.offsetMin = nrt.offsetMax = Vector2.zero;
-        var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
-        nameTxt.text = $"{p.profileName}  <size=13><color=#C8A044>Level {p.level}</color></size>";
-        nameTxt.fontSize = 16;
-        nameTxt.color = new Color(0.90f, 0.78f, 0.35f, 1f);
-        nameTxt.fontStyle = FontStyles.Bold;
-        nameTxt.alignment = TextAlignmentOptions.Center;
+        var bg = rootGo.AddComponent<Image>();
+        bg.sprite = UIShapeUtil.RoundedRect(new Color(panelBg.r, panelBg.g, panelBg.b, 0.55f), 14f);
+        bg.type = Image.Type.Sliced;
 
-        // Stats efetivos (com bônus de skill já aplicados)
-        var (effHp, effStr, effAgi, effSpd, effInit, _, _, _, _, _, _, _, _, _, _, _, _, _, _) = p.GetEffectiveStats();
-        var statsGo = new GameObject("Stats");
-        statsGo.transform.SetParent(container.transform, false);
-        var statsRt = statsGo.AddComponent<RectTransform>();
-        statsRt.anchorMin = new Vector2(0f, 0.68f); statsRt.anchorMax = new Vector2(1f, 0.82f);
-        statsRt.offsetMin = statsRt.offsetMax = Vector2.zero;
-        var statsTxt = statsGo.AddComponent<TextMeshProUGUI>();
-        statsTxt.text = effHp != p.maxHealth || effStr != p.str || effAgi != p.agility || effSpd != p.speed || effInit != p.initiative
-            ? $"HP {p.maxHealth}→<color=#7CD27C>{effHp}</color>  STR {p.str}→<color=#7CD27C>{effStr}</color>  AGI {p.agility}→<color=#7CD27C>{effAgi}</color>  SPD {p.speed}→<color=#7CD27C>{effSpd}</color>  INIT {p.initiative}→<color=#7CD27C>{effInit}</color>"
-            : $"HP {effHp}  STR {effStr}  AGI {effAgi}  SPD {effSpd}  INIT {effInit}";
-        statsTxt.fontSize = 9;
-        statsTxt.color = new Color(0.85f, 0.85f, 0.85f, 1f);
-        statsTxt.alignment = TextAlignmentOptions.Center;
+        var lvlGo = new GameObject("LevelText");
+        lvlGo.transform.SetParent(rootGo.transform, false);
+        var lrt = lvlGo.AddComponent<RectTransform>();
+        lrt.anchorMin = new Vector2(0.05f, 0.55f); lrt.anchorMax = new Vector2(0.95f, 0.98f);
+        lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+        var lvlTxt = lvlGo.AddComponent<TextMeshProUGUI>();
+        lvlTxt.text = $"Level {p.level}";
+        lvlTxt.fontSize = 18; lvlTxt.fontStyle = FontStyles.Bold;
+        lvlTxt.color = textColor;
+        lvlTxt.alignment = TextAlignmentOptions.Center;
 
-        // XP bar background
-        var xpBgGo = new GameObject("XpBg");
-        xpBgGo.transform.SetParent(container.transform, false);
-        var xbrt = xpBgGo.AddComponent<RectTransform>();
-        xbrt.anchorMin = new Vector2(0.04f, 0.52f); xbrt.anchorMax = new Vector2(0.96f, 0.66f);
-        xbrt.offsetMin = xbrt.offsetMax = Vector2.zero;
-        xpBgGo.AddComponent<Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.85f);
+        var barBgGo = new GameObject("BarBg");
+        barBgGo.transform.SetParent(rootGo.transform, false);
+        var bbrt = barBgGo.AddComponent<RectTransform>();
+        bbrt.anchorMin = new Vector2(0.08f, 0.14f); bbrt.anchorMax = new Vector2(0.92f, 0.42f);
+        bbrt.offsetMin = bbrt.offsetMax = Vector2.zero;
+        var barBgImg = barBgGo.AddComponent<Image>();
+        barBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 6f);
+        barBgImg.type = Image.Type.Sliced;
 
-        // XP fill
         int req = XpSystem.XpRequired(p.level);
         float pct = req > 0 ? Mathf.Clamp01((float)p.xpCurrent / req) : 0f;
-        var xpFillGo = new GameObject("XpFill");
-        xpFillGo.transform.SetParent(xpBgGo.transform, false);
-        var xfrt = xpFillGo.AddComponent<RectTransform>();
-        xfrt.anchorMin = Vector2.zero;
-        xfrt.anchorMax = new Vector2(pct, 1f);
-        xfrt.offsetMin = xfrt.offsetMax = Vector2.zero;
-        xpFillGo.AddComponent<Image>().color = new Color(0.20f, 0.55f, 0.90f, 0.90f);
 
-        // XP label
-        var xpLblGo = new GameObject("XpLabel");
-        xpLblGo.transform.SetParent(container.transform, false);
-        var xlrt = xpLblGo.AddComponent<RectTransform>();
-        xlrt.anchorMin = new Vector2(0f, 0.38f); xlrt.anchorMax = new Vector2(1f, 0.52f);
-        xlrt.offsetMin = xlrt.offsetMax = Vector2.zero;
-        var xpTxt = xpLblGo.AddComponent<TextMeshProUGUI>();
-        xpTxt.text = $"XP {p.xpCurrent}/{req}";
-        xpTxt.fontSize = 9; xpTxt.color = new Color(0.6f, 0.6f, 0.6f, 1f);
-        xpTxt.alignment = TextAlignmentOptions.Center;
+        var fillGo = new GameObject("Fill");
+        fillGo.transform.SetParent(barBgGo.transform, false);
+        var frt = fillGo.AddComponent<RectTransform>();
+        frt.anchorMin = new Vector2(0f, 0f); frt.anchorMax = new Vector2(Mathf.Max(pct, 0.001f), 1f);
+        frt.offsetMin = frt.offsetMax = Vector2.zero;
+        var fillImg = fillGo.AddComponent<Image>();
+        fillImg.sprite = UIShapeUtil.RoundedRect(goldColor, 5f);
+        fillImg.type = Image.Type.Sliced;
+    }
 
-        // Skill icons (first 3)
-        var iconRow = new GameObject("SkillIcons");
-        iconRow.transform.SetParent(container.transform, false);
-        var irt = iconRow.AddComponent<RectTransform>();
-        irt.anchorMin = new Vector2(0.20f, 0.02f); irt.anchorMax = new Vector2(0.80f, 0.36f);
-        irt.offsetMin = irt.offsetMax = Vector2.zero;
-        var hlg = iconRow.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 6f; hlg.childAlignment = TextAnchor.MiddleCenter;
-        hlg.childControlWidth = false; hlg.childControlHeight = false;
-        hlg.childForceExpandWidth = false; hlg.childForceExpandHeight = false;
-
-        int shown = 0;
-        if (p.skills != null)
-        {
-            foreach (var skill in p.skills)
-            {
-                if (skill == null || shown >= 3) continue;
-                shown++;
-                var iconGo = new GameObject($"Skill{shown}");
-                iconGo.transform.SetParent(iconRow.transform, false);
-                // RT first, then Image
-                var icrt = iconGo.AddComponent<RectTransform>();
-                icrt.sizeDelta = new Vector2(36f, 36f);
-                iconGo.AddComponent<Image>().color = new Color(0.78f, 0.63f, 0.27f, 0.30f);
-
-                // T2/T3 nunca têm icon próprio (ver SkillTierGenerator) — sobe a cadeia
-                // previousTier até achar um, mesmo padrão de WeaponHandler.EquipSpecific.
-                var iconSource = skill;
-                while (iconSource != null && iconSource.icon == null) iconSource = iconSource.previousTier;
-
-                if (iconSource != null && iconSource.icon != null)
-                {
-                    var spGo = new GameObject("Spr");
-                    spGo.transform.SetParent(iconGo.transform, false);
-                    var sprt = spGo.AddComponent<RectTransform>();
-                    sprt.anchorMin = new Vector2(0.06f, 0.06f);
-                    sprt.anchorMax = new Vector2(0.94f, 0.94f);
-                    sprt.offsetMin = sprt.offsetMax = Vector2.zero;
-                    var spImg = spGo.AddComponent<Image>();
-                    spImg.sprite = iconSource.icon; spImg.preserveAspect = true;
-                }
-            }
-        }
+    // MainMenuController.theme já é comprovadamente confiável (CharacterPanel depende dele e
+    // renderiza normalmente) — usa a mesma fonte em vez de duplicar o campo serializado aqui.
+    private static UITheme ResolveTheme()
+    {
+        var controller = FindObjectOfType<MainMenuController>();
+        return controller != null ? controller.Theme : null;
     }
 }
