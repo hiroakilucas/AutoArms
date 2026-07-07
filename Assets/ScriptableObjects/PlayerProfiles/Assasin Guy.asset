@@ -20,8 +20,8 @@ MonoBehaviour:
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
   maxHealth: 60
-  str: 2
-  agility: 7
+  str: 5
+  agility: 4
   speed: 5
   armor: 0
   evasion: 0

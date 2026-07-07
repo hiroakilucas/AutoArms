@@ -28,6 +28,7 @@ MonoBehaviour:
   attackAnimation: 1
   tier: 1
   previousTier: {fileID: 0}
+  nextTier: {fileID: 11400000, guid: 75db93356fc4a5b459afe77c5fe0c0c6, type: 2}
   dropOdds: 0
   hitSpeed: 1.09
   drawChance: 0.17

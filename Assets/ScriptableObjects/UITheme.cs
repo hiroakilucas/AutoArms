@@ -30,6 +30,11 @@ public class UITheme : ScriptableObject
     public Color textOnLight = HexToColor("#2B2118");
     public Color textOnDark = HexToColor("#F5E9D3");
 
+    [Header("Tiers de Skill/Arma (T1/T2/T3)")]
+    public Color tierBronze = HexToColor("#CD7F32");
+    public Color tierSilver = HexToColor("#C0C0C0");
+    public Color tierGold = HexToColor("#FFD700");
+
     public static Color HexToColor(string hex)
     {
         ColorUtility.TryParseHtmlString(hex, out var color);

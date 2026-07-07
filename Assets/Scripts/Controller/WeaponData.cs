@@ -59,6 +59,14 @@ public class WeaponData : ScriptableObject
     [Header("Tier / Progressão")]
     public int tier = 1;                    // 1, 2 ou 3 — indica o nível de evolução desta arma
     public WeaponData previousTier = null;  // referência para o tier anterior (T2→T1, T3→T2)
+    // Contrário de previousTier (T1→T2, T2→T3) — só pra exibição de UI (popup de detalhe da
+    // arma no CharacterPanel, ver ShowWeaponDetail/ResolveTierFamily), nenhuma lógica de
+    // combate lê este campo. Populado (2026-07-07) diretamente nos .asset das 26 famílias de
+    // armas em Assets/Data/Weapons/ via script — não existia forma de navegar T1→T2→T3 antes
+    // (só o sentido contrário), impossibilitando mostrar "[dano T1/T2/T3]" no popup a partir de
+    // uma arma equipada em qualquer tier. Fica null pra armas sem cadeia de tiers (ex: os 5
+    // WeaponData legados em Assets/Data/UI/Weapons/<tipo>/).
+    public WeaponData nextTier = null;
 
     [Header("My Brute — Propriedades da Arma")]
     public float dropOdds = 0f;              // % de chance de drop no level-up

@@ -67,7 +67,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         var theme = ResolveTheme();
         if (theme == null) return;
 
-        Color panelBg = theme.panelBackground;
+        Color panelBg = theme.panelBackgroundAlt;
         Color textColor = theme.textOnDark;
         Color goldColor = theme.currencyGold;
 
@@ -87,21 +87,25 @@ public class MainMenuCharacterPreview : MonoBehaviour
         var rootGo = new GameObject("Root");
         rootGo.transform.SetParent(canvasGo.transform, false);
         var rrt = rootGo.AddComponent<RectTransform>();
-        // y=0.80 deixava uma folga grande demais entre o indicador e a cabeça (reportado
-        // 2026-07-07); aproximado pra 0.71 — ainda com margem segura acima da cabeça
-        // estimada (~0.57-0.60 de fração de tela), mas visualmente "grudado" no personagem.
-        rrt.anchorMin = rrt.anchorMax = new Vector2(centerXFraction, 0.71f);
+        // Caixa aumentada (2026-07-07): 240x56 → 280x76, pra caber o texto de XP dentro da
+        // barra com folga. Ancorado em y=0.72 (era 0.71) — compensa o crescimento pra baixo
+        // (a caixa cresce a partir do centro, então +20px de altura = +10px pra cada lado;
+        // sem esse ajuste a borda inferior chegaria 10px mais perto da cabeça do personagem
+        // do que estava calibrado na sessão anterior).
+        rrt.anchorMin = rrt.anchorMax = new Vector2(centerXFraction, 0.72f);
         rrt.pivot = new Vector2(0.5f, 0.5f);
-        rrt.sizeDelta = new Vector2(240f, 56f);
+        rrt.sizeDelta = new Vector2(280f, 76f);
 
+        // Fundo sólido (2026-07-07, era translúcido) — panelBackgroundAlt, mesma cor de fundo
+        // do CharacterPanel, opaco.
         var bg = rootGo.AddComponent<Image>();
-        bg.sprite = UIShapeUtil.RoundedRect(new Color(panelBg.r, panelBg.g, panelBg.b, 0.55f), 14f);
+        bg.sprite = UIShapeUtil.RoundedRect(panelBg, 16f);
         bg.type = Image.Type.Sliced;
 
         var lvlGo = new GameObject("LevelText");
         lvlGo.transform.SetParent(rootGo.transform, false);
         var lrt = lvlGo.AddComponent<RectTransform>();
-        lrt.anchorMin = new Vector2(0.05f, 0.55f); lrt.anchorMax = new Vector2(0.95f, 0.98f);
+        lrt.anchorMin = new Vector2(0.05f, 0.66f); lrt.anchorMax = new Vector2(0.95f, 0.96f);
         lrt.offsetMin = lrt.offsetMax = Vector2.zero;
         var lvlTxt = lvlGo.AddComponent<TextMeshProUGUI>();
         lvlTxt.text = $"Level {p.level}";
@@ -109,13 +113,16 @@ public class MainMenuCharacterPreview : MonoBehaviour
         lvlTxt.color = textColor;
         lvlTxt.alignment = TextAlignmentOptions.Center;
 
+        // Barra engordada (2026-07-07): ocupava só 0.14-0.42 (~16px de 56px) — agora
+        // 0.08-0.58 (~38px de 76px), espaço suficiente pra caber o texto "atual/necessário"
+        // centralizado dentro dela, além de mais legível por si só.
         var barBgGo = new GameObject("BarBg");
         barBgGo.transform.SetParent(rootGo.transform, false);
         var bbrt = barBgGo.AddComponent<RectTransform>();
-        bbrt.anchorMin = new Vector2(0.08f, 0.14f); bbrt.anchorMax = new Vector2(0.92f, 0.42f);
+        bbrt.anchorMin = new Vector2(0.06f, 0.08f); bbrt.anchorMax = new Vector2(0.94f, 0.58f);
         bbrt.offsetMin = bbrt.offsetMax = Vector2.zero;
         var barBgImg = barBgGo.AddComponent<Image>();
-        barBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 6f);
+        barBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 8f);
         barBgImg.type = Image.Type.Sliced;
 
         int req = XpSystem.XpRequired(p.level);
@@ -127,8 +134,21 @@ public class MainMenuCharacterPreview : MonoBehaviour
         frt.anchorMin = new Vector2(0f, 0f); frt.anchorMax = new Vector2(Mathf.Max(pct, 0.001f), 1f);
         frt.offsetMin = frt.offsetMax = Vector2.zero;
         var fillImg = fillGo.AddComponent<Image>();
-        fillImg.sprite = UIShapeUtil.RoundedRect(goldColor, 5f);
+        fillImg.sprite = UIShapeUtil.RoundedRect(goldColor, 7f);
         fillImg.type = Image.Type.Sliced;
+
+        // Texto de XP dentro da própria barra (2026-07-07), "atual/necessário" — sobreposto ao
+        // fundo+preenchimento (criado depois do Fill, então desenha por cima).
+        var xpTxtGo = new GameObject("XpText");
+        xpTxtGo.transform.SetParent(barBgGo.transform, false);
+        var xrt = xpTxtGo.AddComponent<RectTransform>();
+        xrt.anchorMin = Vector2.zero; xrt.anchorMax = Vector2.one;
+        xrt.offsetMin = xrt.offsetMax = Vector2.zero;
+        var xpTxt = xpTxtGo.AddComponent<TextMeshProUGUI>();
+        xpTxt.text = $"{p.xpCurrent}/{req}";
+        xpTxt.fontSize = 14; xpTxt.fontStyle = FontStyles.Bold;
+        xpTxt.color = textColor;
+        xpTxt.alignment = TextAlignmentOptions.Center;
     }
 
     // MainMenuController.theme já é comprovadamente confiável (CharacterPanel depende dele e

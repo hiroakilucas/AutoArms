@@ -59,6 +59,14 @@ Objetivo: nenhuma cor de interface deve ser hardcoded num prefab/script novo —
 | `textOnLight` | `#2B2118` | Texto sobre fundo claro (`backgroundTop`/`backgroundBottom`) |
 | `textOnDark` | `#F5E9D3` | Texto sobre fundo escuro (`panelBackground`/`panelBackgroundAlt`) |
 
+### Tiers de Skill/Arma (T1/T2/T3)
+
+| Campo | Hex | Uso |
+|---|---|---|
+| `tierBronze` | `#CD7F32` | Borda do ícone de skill/arma **T1** (`CharacterPanel`, seções HABILIDADES/ARMAS) |
+| `tierSilver` | `#C0C0C0` | Borda do ícone de skill/arma **T2** |
+| `tierGold` | `#FFD700` | Borda do ícone de skill/arma **T3** — tom distinto de `currencyGold` (mais saturado/"medalha"), de propósito, pra não confundir com moeda |
+
 ## Status de adoção
 
 Fundação criada (2026-07-07). Botão "Jogar" de `01_MainMenu` (`primaryAction`) foi o primeiro
@@ -78,3 +86,5 @@ duplicar hex. `CombatResultPanel`/`WeaponHUD`/`02_SelectCharacter` ainda não mi
 - `textOnDark`/`textOnLight` — texto sobre os painéis escuros e sobre o badge de level dourado,
   respectivamente.
 - `danger` — fundo do botão de fechar (X) do painel lateral.
+- `tierBronze`/`tierSilver`/`tierGold` (2026-07-07) — borda ao redor de cada ícone nas seções HABILIDADES/ARMAS do `CharacterPanel`, conforme o tier (T1/T2/T3) da skill/arma equipada; reaproveitados também na estrela de raridade (★) do popup de detalhe de arma.
+- `secondaryButton`/`tierBronze`/`secondaryButtonAlt`/`currencyGold`/`currencyGem`/`success`/`danger` (2026-07-07) — cor própria por `WeaponType` (Blunt/Heavy/Long/Fast/Thrown/Ranged/Sharp) na linha "Types" do popup de detalhe de arma; e `primaryActionAlt`/`success`/`secondaryButtonAlt` pro destaque de tier atual vs. os outros dois nos campos `[T1/T2/T3]` (Damage/Draw Chance laranja, Crit Bonus verde, inativos cinza).

@@ -110,6 +110,10 @@ public static class WeaponTierGenerator
         dest.weaponName       = $"{baseName} T{tier}";
         dest.tier             = tier;
         dest.previousTier     = prevTier;
+        // Recíproco de previousTier — mantém a cadeia navegável nos dois sentidos (usado só
+        // pelo popup de detalhe da arma no CharacterPanel, ver WeaponData.nextTier).
+        prevTier.nextTier     = dest;
+        EditorUtility.SetDirty(prevTier);
         dest.icon             = null;
         dest.inHandSprite     = null;
 
