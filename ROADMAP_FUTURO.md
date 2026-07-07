@@ -1,4 +1,4 @@
-# AutoArms — Roadmap Fases Futuras (4-9)
+# AutoArms — Roadmap Fases Futuras (4-13)
 
 ### Fase 4 — Monetização
 - [ ] Sistema de diamantes (moeda premium)
@@ -15,6 +15,7 @@
 - [ ] **Passe Mensal de Arma (Battle Pass)**: progressão por XP de passe, ganho ao completar batalhas (separado do XP de personagem/level já existente). Ao subir de nível no passe, libera **3-4 skins de arma** ao longo do mês — cada skin dá atributos extras na arma equipada (dano/crítico/etc. acima do `WeaponData` base) — sendo a **última (nível mais alto do passe) a mais rara/forte** das recompensas. Precisa definir: curva de XP do passe (independente da curva de XP de personagem), se o passe expira ao fim dos 30 dias levando recompensas não coletadas, e se dá pra comprar níveis do passe direto com diamante (skip de progresso, padrão comum em battle pass).
 - [ ] **Pacotes de diamantes (loja) e promoções**: tela de loja com vários pacotes de diamante em quantidades/preços crescentes (ex: pequeno/médio/grande/mega), com bônus de diamante extra proporcionalmente maior nos pacotes mais caros (incentiva compra do pacote maior). Promoções temporárias: desconto por tempo limitado, diamante em dobro na primeira compra, pacote sazonal ligado a evento/torneio. Depende do Sistema de diamantes (ainda não implementado, item acima) e da integração de pagamento real (Google Play Billing / Apple StoreKit / Steam, ver checklist de Segurança/Validação server-side em Fase 8). Precisa definir: quantidades e preços de cada pacote, e se as promoções são manuais (painel admin) ou agendadas por código.
 - [ ] **Slot extra de atributo/habilidade/arma pago (caro)**: compra cara (R$100-150) de 1 slot adicional de atributo, habilidade ou arma, liberado quando o personagem sobe de level — oferecer também como benefício de um pacote/passe mensal, como alternativa à compra avulsa única. Precisa definir: preço exato, se é só 1 slot por personagem (limite) ou repetível, e se entra como upgrade do passe mensal já planejado acima ou como pacote separado.
+- [ ] **Moeda geral (soft currency) integrada ao HUD**: moeda ganha por jogar normalmente (batalhas, missões diárias etc.), separada do diamante (premium) — usada pra compras mais baratas/cotidianas. Precisa definir onde entra na economia (o que compra) e a fonte de emissão. Nota: "Battle Pass" já está coberto pelo item **Passe Mensal de Arma (Battle Pass)** acima — não duplicado aqui.
 
 ### Fase 5 — Endgame & Social
 - [ ] Mapa PVE
@@ -130,4 +131,25 @@
 - Música: medieval/fantasia com clima de arena — épico mas não pesado
 - SFX de combate: impactos sólidos, metálicos para armas, cartoon para eventos especiais (crítico, level up)
 - Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
+
+### Fase 10 — Fluxo de Partida & Matchmaking
+- [ ] Tela de seleção de oponente ao clicar em Play (grid com 6 personagens inimigos)
+- [ ] Histórico de confronto entre jogador e oponente selecionado (nº de batalhas e vitórias de cada lado) — diferente da aba "Histórico de batalhas" da Fase 5 (log geral de lutas): aqui é um recorte cabeça-a-cabeça mostrado antes de escolher o oponente
+- [ ] Tela de Replay (últimas partidas normais, ataques recebidos, último torneio) — cobre o sistema de replay já mencionado na Fase 5 (histórico de torneio) e estende pra partidas normais/defesa também
+
+### Fase 11 — Social & Comunidade
+- [ ] Sistema de amigos (adicionar/remover)
+- [ ] Chat entre amigos
+- [ ] Envio de replay via chat — depende da Tela de Replay (Fase 10)
+- [ ] Duelo amistoso 1x1 sem gasto de energia
+
+### Fase 12 — Configurações
+- [ ] Tela de configurações: volume, notificações, idioma
+- [ ] Qualidade gráfica (avaliar viabilidade)
+- [ ] Links para sites oficiais do jogo
+- [ ] Mapa de skills (visualização em árvore)
+- [ ] Mapa de armas (visualização em árvore)
+
+### Fase 13 — Modo Caminho Infinito
+- [ ] Modo PVE infinito: batalhas começam no level 1 e a dificuldade escala a cada vitória — versão detalhada do item "Mapa PVE" já listado na Fase 5
 
