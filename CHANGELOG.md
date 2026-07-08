@@ -1,7 +1,9 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 122 tarefas | Concluídas: 60
+- Total: 122 tarefas | Concluídas: 61
+
+- 2026-07-07: Personagem central de `01_MainMenu` recentralizado no meio absoluto da tela (`MainMenuCharacterPreview.CharacterCenterX = 0f`, era `-1.76f` — decisão anterior de deslocar pra esquerda do `CharacterPanel` revertida a pedido do usuário) e reposicionado mais alto (`CharacterGroundY = -1f`, era `-2f`). A barra de Level/XP acima da cabeça agora acompanha `CharacterGroundY` dinamicamente em vez de usar uma fração de tela fixa (`yFraction` derivado de um par de calibração `CalibratedGroundY`/`CalibratedYFraction`) — qualquer ajuste futuro na altura do personagem move a barra junto, proporcionalmente, sem precisar recalibrar manualmente
 
 - 2026-07-07: Corrigida `NullReferenceException` (dentro de `TMPro.MaterialReference..ctor`) ao clicar em qualquer ícone de skill, causada pela correção anterior de altura dinâmica do popup: `ShowSkillDetail` chamava `TMP_Text.GetPreferredValues` nos textos recém-criados **antes** de `_popupOverlayGo.SetActive(true)` (só executado no fim do método) — um `GameObject` desativado na hierarquia nunca roda `Awake()` dos componentes recém-adicionados, então o `fontAsset`/material interno do TMP_Text ainda não tinha sido inicializado quando a medição forçava o parse do texto. Corrigido movendo `_popupOverlayGo.SetActive(true)` pro início do método, antes de criar/medir qualquer texto novo
 

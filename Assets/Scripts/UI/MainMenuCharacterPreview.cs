@@ -13,16 +13,22 @@ public class MainMenuCharacterPreview : MonoBehaviour
     // própria transform mantém os pés no lugar sem precisar ajustar a posição.
     private const float PreviewScaleFactor = 0.82f;
 
-    // Centralizado (2026-07-07) no espaço disponível à ESQUERDA do CharacterPanel (não no
-    // centro absoluto da tela) — senão o personagem parece descentralizado com o painel
-    // visível. Derivado da câmera ortográfica da cena (size=5, aspecto 16:9, X=0 — ver
-    // "Main Camera" em 01_MainMenu.unity): meia-largura visível = 5*(1920/1080) = 8.889
-    // unidades. CharacterPanel.PanelWidth=380px ocupa 380/1920=19.79% da largura da tela à
-    // direita; o centro da faixa restante (à esquerda do painel), convertido de volta pra
-    // espaço de mundo, fica em X ≈ -1.76. Recalcular se PanelWidth ou o orthographicSize
-    // abaixo mudarem.
-    private const float CharacterCenterX = -1.76f;
-    private const float CharacterGroundY = -2f;
+    // Centralizado no centro ABSOLUTO da tela (2026-07-07, revertida a decisão anterior de
+    // deslocar pra esquerda do CharacterPanel) — câmera ortográfica da cena tem X=0 (ver
+    // "Main Camera" em 01_MainMenu.unity), então X=0 aqui cai exatamente no centro horizontal
+    // da tela, por baixo/à esquerda do CharacterPanel quando ele estiver expandido.
+    private const float CharacterCenterX = 0f;
+    private const float CharacterGroundY = -1f;
+    private const float OrthographicSize = 5f;
+
+    // Calibração visual de referência da barra de XP/Level (ver BuildLevelXpHud): com o
+    // personagem em CalibratedGroundY, a barra fica bem posicionada acima da cabeça dele em
+    // CalibratedYFraction da tela. Se CharacterGroundY mudar de novo no futuro, a barra
+    // acompanha proporcionalmente (mesmo deslocamento em unidades de mundo = mesmo
+    // deslocamento em fração de tela, já que é um reposicionamento rígido do personagem
+    // inteiro) sem precisar recalibrar esse par de valores manualmente.
+    private const float CalibratedGroundY = -2f;
+    private const float CalibratedYFraction = 0.72f;
 
     void Start()
     {
@@ -33,7 +39,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
         currentCharacter.transform.localScale = profile.scale * PreviewScaleFactor;
         currentCharacter.transform.position = new Vector3(CharacterCenterX, CharacterGroundY, 0);
-        Camera.main.orthographicSize = 5;
+        Camera.main.orthographicSize = OrthographicSize;
 
         DestroyImmediate(currentCharacter.GetComponent<PlayerCombat>());
         DestroyImmediate(currentCharacter.GetComponent<WeaponHandler>());
@@ -71,8 +77,12 @@ public class MainMenuCharacterPreview : MonoBehaviour
         Color textColor = theme.textOnDark;
         Color goldColor = theme.currencyGold;
 
-        const float halfWidth = 8.888889f; // orthographicSize(5) * aspecto 16:9
+        const float halfWidth = 8.888889f; // OrthographicSize(5) * aspecto 16:9
         float centerXFraction = (CharacterCenterX + halfWidth) / (halfWidth * 2f);
+        // Acompanha CharacterGroundY: mesmo deslocamento em unidades de mundo vira o mesmo
+        // deslocamento em fração de tela (reposicionamento rígido do personagem, cabeça
+        // inclusa) — ver comentário de CalibratedGroundY/CalibratedYFraction acima.
+        float yFraction = CalibratedYFraction + (CharacterGroundY - CalibratedGroundY) / (2f * OrthographicSize);
 
         var canvasGo = new GameObject("LevelXpHud");
         canvasGo.transform.SetParent(transform, false);
@@ -88,11 +98,9 @@ public class MainMenuCharacterPreview : MonoBehaviour
         rootGo.transform.SetParent(canvasGo.transform, false);
         var rrt = rootGo.AddComponent<RectTransform>();
         // Caixa aumentada (2026-07-07): 240x56 → 280x76, pra caber o texto de XP dentro da
-        // barra com folga. Ancorado em y=0.72 (era 0.71) — compensa o crescimento pra baixo
-        // (a caixa cresce a partir do centro, então +20px de altura = +10px pra cada lado;
-        // sem esse ajuste a borda inferior chegaria 10px mais perto da cabeça do personagem
-        // do que estava calibrado na sessão anterior).
-        rrt.anchorMin = rrt.anchorMax = new Vector2(centerXFraction, 0.72f);
+        // barra com folga. Y calculado a partir de CharacterGroundY (yFraction acima), não
+        // mais um valor fixo — segue o personagem quando ele se move na tela.
+        rrt.anchorMin = rrt.anchorMax = new Vector2(centerXFraction, yFraction);
         rrt.pivot = new Vector2(0.5f, 0.5f);
         rrt.sizeDelta = new Vector2(280f, 76f);
 
