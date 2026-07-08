@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_untouchable_t2
   m_EditorClassIdentifier: 
   skillName: Untouchable
-  description: +30% chance de esquiva (T2)
+  description: "Intoc\xE1vel n\xE3o \xE9 mod\xE9stia, \xE9 curr\xEDculo."
+  effectText: Evasion +[30/40/50]%
   icon: {fileID: 0}
   category: 0
   activationType: 0

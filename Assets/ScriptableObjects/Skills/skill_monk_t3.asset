@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_monk_t3
   m_EditorClassIdentifier: 
   skillName: Monk
-  description: +40% chance de cancelar o hit do oponente antes de conectar, -200
-    iniciativa, nunca ataca (guarda) (T3)
+  description: "Paci\xEAncia de monge: ele \xE9 mais lento pra agir, mas quando contra-ataca,
+    d\xF3i."
+  effectText: "Counter +[40/45/50]%, Iniciativa \u2212200 (fixo)"
   icon: {fileID: 0}
   category: 0
   activationType: 0

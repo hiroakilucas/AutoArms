@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_weapon_master
   m_EditorClassIdentifier: 
   skillName: Weapon Master
-  description: +50% dano com arma afiada (tag Sharp)
+  description: "Qualquer arma afiada na m\xE3o dele parece ter nascido pra estar
+    ali."
+  effectText: +[50/75/100]% de dano com armas Sharp (multiplicador 1.5/1.75/2.0)
   icon: {fileID: 21300000, guid: bb8fa49e32e805a4d903272f77b02930, type: 3}
   category: 3
   activationType: 0

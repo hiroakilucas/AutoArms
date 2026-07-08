@@ -13,7 +13,10 @@ MonoBehaviour:
   m_Name: skill_resistant
   m_EditorClassIdentifier: 
   skillName: Resistant
-  description: "Nenhum hit isolado reduz mais que 25% da vida m\xE1xima"
+  description: "N\xE3o importa o tamanho do golpe, ele nunca \xE9 grande demais pra
+    aguentar de uma vez."
+  effectText: "Nenhum hit isolado pode ultrapassar [25/20/17]% do HP m\xE1ximo dele
+    (cap no dano bruto, antes de armor/Lead Skeleton)"
   icon: {fileID: 21300000, guid: 7d25e346d258eb442974624a9b318dee, type: 3}
   category: 1
   activationType: 0

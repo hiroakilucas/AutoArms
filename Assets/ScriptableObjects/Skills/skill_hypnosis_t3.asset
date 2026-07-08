@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_hypnosis_t3
   m_EditorClassIdentifier: 
   skillName: Hypnosis
-  description: "38% por turno: hipnotiza um pet inimigo vivo (90% de chance) \u2014
-    o pet troca permanentemente para o seu time (1x por luta) (T3)"
+  description: "Um olhar e o pet do advers\xE1rio muda de lado sem nem perceber."
+  effectText: "38%/turno: hipnotiza um pet inimigo vivo (90% de chance), fazendo-o
+    trocar de time, at\xE9 [1/2/3]x por luta"
   icon: {fileID: 0}
   category: 4
   activationType: 1

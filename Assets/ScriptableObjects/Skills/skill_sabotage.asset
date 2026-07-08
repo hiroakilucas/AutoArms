@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_sabotage
   m_EditorClassIdentifier: 
   skillName: Sabotage
-  description: "+50% chance de destruir uma arma do HUD do advers\xE1rio a cada golpe
-    acertado"
+  description: "Ele n\xE3o ataca o advers\xE1rio \u2014 ataca o invent\xE1rio dele."
+  effectText: "[50/75/90]% por golpe acertado: destr\xF3i 1 arma aleat\xF3ria do
+    HUD do advers\xE1rio"
   icon: {fileID: 21300000, guid: 7cbbe17d350448540806fe8d41ef49e3, type: 3}
   category: 0
   activationType: 0

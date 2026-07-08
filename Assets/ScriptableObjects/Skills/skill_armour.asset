@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_armour
   m_EditorClassIdentifier: 
   skillName: Armour
-  description: +25% armor, -15% velocidade
+  description: Vestido pra batalha, ao custo de ficar um pouco mais lento.
+  effectText: "Armor +[25/30/35]%, Speed \u221215% (fixo, penalidade)"
   icon: {fileID: 21300000, guid: 42c10869e85391441bd41ae29e619b99, type: 3}
   category: 1
   activationType: 0

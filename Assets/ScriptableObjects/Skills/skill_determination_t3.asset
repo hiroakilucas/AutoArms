@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_determination_t3
   m_EditorClassIdentifier: 
   skillName: Determination
-  description: "Se o golpe n\xE3o causa dano, 60% de chance de atacar de novo (recursivo)
-    (T3)"
+  description: Falhou uma vez? Ele tenta de novo. E de novo. E de novo.
+  effectText: Golpe que falha (esquiva/bloqueio/counter) tem [60/70/80]% de chance
+    fixa de tentar de novo, recursivamente
   icon: {fileID: 0}
   category: 0
   activationType: 0

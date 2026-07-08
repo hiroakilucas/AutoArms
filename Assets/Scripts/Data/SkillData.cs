@@ -20,7 +20,11 @@ public class SkillData : ScriptableObject
 {
     [Header("Identificação")]
     public string skillName;
+    [TextArea(2, 5)]
     public string description;
+    [Tooltip("Texto do efeito mecânico, formato \"Label +[v1/v2/v3]%\" — os 3 valores entre colchetes são os 3 tiers; o popup de detalhe destaca o valor do tier equipado. Vazio para skills ainda não implementadas (Garimpeiro/Magneto).")]
+    [TextArea(2, 5)]
+    public string effectText;
 
     [Header("Visual")]
     public Sprite icon;

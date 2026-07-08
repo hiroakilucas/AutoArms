@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_relentless_t3
   m_EditorClassIdentifier: 
   skillName: Relentless
-  description: "+30% accuracy (reduz a esquiva do advers\xE1rio) (T3)"
+  description: "Ele bate com tanta certeza que a esquiva do advers\xE1rio simplesmente
+    desiste."
+  effectText: Accuracy (reduz esquiva do defensor) +[30/40/50]%
   icon: {fileID: 0}
   category: 0
   activationType: 0

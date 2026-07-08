@@ -561,15 +561,45 @@ public class CharacterPanel : MonoBehaviour
         _popupOverlayGo.SetActive(false);
     }
 
+    private const float SkillPopupWidth = 420f;
+    private const float SkillPopupMinHeight = 300f;
+    // Frações reais de _popupContentRoot dentro do painel (ver anchors em BuildPopup:
+    // 0.06-0.94 horizontal, 0.04-0.90 vertical) — usadas pra converter altura de CONTEÚDO
+    // (onde o texto é medido/posicionado) em altura de PAINEL (`_popupPanelRt.sizeDelta`).
+    private const float SkillPopupContentWidthFraction  = 0.88f;
+    private const float SkillPopupContentHeightFraction = 0.86f;
+    private const float SkillPopupHeaderHeight        = 144f; // espaço reservado pro ícone+nome no topo
+    private const float SkillPopupDescEffectGap       = 14f;  // espaço entre a descrição e o bloco "Efeito"
+    private const float SkillPopupEffectLabelHeight   = 22f;
+    private const float SkillPopupEffectLabelValueGap = 4f;
+    private const float SkillPopupBottomPadding       = 20f;
+
     // Layout: ícone (com borda de tier, reaproveitando BuildTierIconCell — 2026-07-07,
     // substitui o antigo sufixo de texto "(T{tier})" no título) + nome + descrição corrida
-    // (SkillData.description já existia e já vem preenchido pra toda skill — não precisou
-    // criar/gerar nada novo).
+    // (SkillData.description, texto temático) + linha "Efeito" (SkillData.effectText, formato
+    // de colchetes [T1/T2/T3] com o tier equipado destacado, mesma cor de destaque do popup de
+    // arma) — omitida pra skills sem effectText (Garimpeiro/Magneto, ainda não implementadas).
+    // Altura do painel calculada a partir da altura REAL do texto (`GetPreferredValues`, mesma
+    // largura que o texto vai ocupar de fato) em vez de um valor fixo — skills com descrição
+    // longa (ex: Shield, Lead Skeleton, Deity) vazavam pra fora da caixa com a altura fixa
+    // anterior. Posicionamento 100% manual (sem VerticalLayoutGroup/LayoutElement): o popup de
+    // arma já teve um bug real de espaçamento gigante entre linhas causado por
+    // `childControlHeight=false` numa VerticalLayoutGroup (ver ShowWeaponDetail) — evitado aqui
+    // não usando layout automático nenhum pro texto da skill.
     private void ShowSkillDetail(SkillData skill)
     {
         ClearPopupContent();
-        _popupPanelRt.sizeDelta = new Vector2(420f, 360f);
-        _popupPanelRt.anchoredPosition = Vector2.zero; // centralizado — só o popup de arma sobe (ver ShowWeaponDetail)
+        // Ativa o popup ANTES de criar/medir os textos novos: `_popupOverlayGo` começa/fica
+        // desativado entre uma abertura e outra (ver CloseDetailPopup), e um GameObject
+        // desativado na hierarquia nunca roda Awake() dos componentes recém-adicionados —
+        // TMP_Text.Awake() é o que resolve fontAsset/material internos. Chamar
+        // GetPreferredValues() nesse estado (bug real, 2026-07-07) estourava
+        // NullReferenceException dentro de TMPro.MaterialReference..ctor, porque o fontAsset
+        // do TMP_Text recém-criado ainda não tinha sido inicializado.
+        _popupOverlayGo.SetActive(true);
+
+        bool hasEffect = !string.IsNullOrEmpty(skill.effectText);
+        float contentWidthPx = SkillPopupWidth * SkillPopupContentWidthFraction;
 
         var iconSource = skill;
         while (iconSource != null && iconSource.icon == null) iconSource = iconSource.previousTier;
@@ -588,18 +618,103 @@ public class CharacterPanel : MonoBehaviour
         nameTxt.alignment = TextAlignmentOptions.Center;
         nameTxt.richText = true;
 
+        // Descrição — cria o texto e mede a altura real que ele vai ocupar (com quebra de
+        // linha) na largura disponível, antes de decidir o tamanho do painel.
         string desc = string.IsNullOrEmpty(skill.description) ? "Sem descrição disponível." : skill.description;
         var bodyGo = new GameObject("Body");
         bodyGo.transform.SetParent(_popupContentRoot, false);
-        var brt = bodyGo.AddComponent<RectTransform>();
-        brt.anchorMin = new Vector2(0f, 0f); brt.anchorMax = new Vector2(1f, 1f);
-        brt.offsetMin = Vector2.zero; brt.offsetMax = new Vector2(0f, -144f);
+        bodyGo.AddComponent<RectTransform>();
         var bodyTxt = bodyGo.AddComponent<TextMeshProUGUI>();
-        bodyTxt.text = desc; bodyTxt.fontSize = 20;
+        bodyTxt.enableWordWrapping = true;
+        bodyTxt.fontSize = 20;
         bodyTxt.color = TextColor;
         bodyTxt.alignment = TextAlignmentOptions.TopLeft;
+        bodyTxt.text = desc;
+        float descHeight = bodyTxt.GetPreferredValues(contentWidthPx, 0f).y;
 
-        _popupOverlayGo.SetActive(true);
+        // Efeito — mesma ideia: mede a altura real do valor formatado (pode ter mais de uma
+        // linha em skills com texto de efeito longo, ex: Shield).
+        TextMeshProUGUI effectValueTxt = null;
+        float effectValueHeight = 0f;
+        if (hasEffect)
+        {
+            var valueGo = new GameObject("EffectValue");
+            valueGo.transform.SetParent(_popupContentRoot, false);
+            valueGo.AddComponent<RectTransform>();
+            effectValueTxt = valueGo.AddComponent<TextMeshProUGUI>();
+            effectValueTxt.richText = true;
+            effectValueTxt.enableWordWrapping = true;
+            effectValueTxt.fontSize = 18;
+            effectValueTxt.color = TextColor;
+            effectValueTxt.alignment = TextAlignmentOptions.TopLeft;
+            effectValueTxt.text = HighlightEffectTiers(skill.effectText, skill.tier);
+            effectValueHeight = effectValueTxt.GetPreferredValues(contentWidthPx, 0f).y;
+        }
+
+        float contentHeight = SkillPopupHeaderHeight + descHeight
+            + (hasEffect ? SkillPopupDescEffectGap + SkillPopupEffectLabelHeight + SkillPopupEffectLabelValueGap + effectValueHeight : 0f)
+            + SkillPopupBottomPadding;
+        float panelHeight = Mathf.Max(contentHeight / SkillPopupContentHeightFraction, SkillPopupMinHeight);
+        _popupPanelRt.sizeDelta = new Vector2(SkillPopupWidth, panelHeight);
+        _popupPanelRt.anchoredPosition = Vector2.zero; // centralizado — só o popup de arma sobe (ver ShowWeaponDetail)
+
+        // Só agora (com a altura final do texto conhecida) posiciona a descrição e o efeito,
+        // um embaixo do outro a partir do topo do conteúdo.
+        var brt = bodyGo.GetComponent<RectTransform>();
+        brt.anchorMin = new Vector2(0f, 1f); brt.anchorMax = new Vector2(1f, 1f);
+        brt.pivot = new Vector2(0.5f, 1f);
+        brt.anchoredPosition = new Vector2(0f, -SkillPopupHeaderHeight);
+        brt.sizeDelta = new Vector2(0f, descHeight);
+
+        if (hasEffect)
+        {
+            float labelY = SkillPopupHeaderHeight + descHeight + SkillPopupDescEffectGap;
+            var labelGo = new GameObject("EffectLabel");
+            labelGo.transform.SetParent(_popupContentRoot, false);
+            var lrt = labelGo.AddComponent<RectTransform>();
+            lrt.anchorMin = new Vector2(0f, 1f); lrt.anchorMax = new Vector2(1f, 1f);
+            lrt.pivot = new Vector2(0.5f, 1f);
+            lrt.anchoredPosition = new Vector2(0f, -labelY);
+            lrt.sizeDelta = new Vector2(0f, SkillPopupEffectLabelHeight);
+            var labelTxt = labelGo.AddComponent<TextMeshProUGUI>();
+            labelTxt.text = "Efeito"; labelTxt.fontSize = 18; labelTxt.fontStyle = FontStyles.Bold;
+            labelTxt.color = _theme.currencyGold;
+            labelTxt.alignment = TextAlignmentOptions.TopLeft;
+
+            float valueY = labelY + SkillPopupEffectLabelHeight + SkillPopupEffectLabelValueGap;
+            var vrt = effectValueTxt.GetComponent<RectTransform>();
+            vrt.anchorMin = new Vector2(0f, 1f); vrt.anchorMax = new Vector2(1f, 1f);
+            vrt.pivot = new Vector2(0.5f, 1f);
+            vrt.anchoredPosition = new Vector2(0f, -valueY);
+            vrt.sizeDelta = new Vector2(0f, effectValueHeight);
+        }
+    }
+
+    // Colore cada valor dentro de "[v1/v2/v3]" no effectText — o segmento do tier atualmente
+    // equipado usa a mesma cor de destaque do popup de arma (primaryActionAlt), os outros dois
+    // ficam num tom neutro (secondaryButtonAlt, igual a FormatTierTriplet). effectText é o
+    // MESMO texto pros 3 tiers de uma skill (SkillTierGenerator copia verbatim T1→T2/T3) — só a
+    // formatação muda por tier equipado, não o texto em si.
+    private static readonly System.Text.RegularExpressions.Regex TierTripletRegex =
+        new System.Text.RegularExpressions.Regex(@"\[([^/\[\]]+)/([^/\[\]]+)/([^/\[\]]+)\]");
+
+    private string HighlightEffectTiers(string text, int currentTier)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        Color active = _theme.primaryActionAlt;
+        Color muted = _theme.secondaryButtonAlt;
+        return TierTripletRegex.Replace(text, m =>
+        {
+            var sb = new System.Text.StringBuilder("[");
+            for (int i = 0; i < 3; i++)
+            {
+                if (i > 0) sb.Append('/');
+                Color c = (i + 1 == currentTier) ? active : muted;
+                sb.Append($"<color=#{ColorUtility.ToHtmlStringRGB(c)}>{m.Groups[i + 1].Value}</color>");
+            }
+            sb.Append(']');
+            return sb.ToString();
+        });
     }
 
     // Altura fixa reservada pro bloco ícone+nome no topo do popup de arma (mesmo valor usado

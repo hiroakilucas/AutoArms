@@ -13,7 +13,10 @@ MonoBehaviour:
   m_Name: skill_iron_head_t2
   m_EditorClassIdentifier: 
   skillName: Iron Head
-  description: +40% chance de derrubar a arma do atacante ao sofrer um hit (T2)
+  description: "Um cabe\xE7ada t\xE3o dura que a arma do advers\xE1rio simplesmente
+    sai voando da m\xE3o dele."
+  effectText: +[40/50/60]% de chance de derrubar a arma do atacante ao sofrer um
+    hit (interrompe o combo dele)
   icon: {fileID: 0}
   category: 0
   activationType: 0

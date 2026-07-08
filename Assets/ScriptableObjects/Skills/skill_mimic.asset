@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: skill_mimic
   m_EditorClassIdentifier: 
   skillName: Mimic
-  description: "Copia e usa a \xFAltima skill ativa (Super) que o oponente usou nesta
-    luta; n\xE3o consome o turno (1x por luta)"
+  description: "Copia o golpe mais recente do advers\xE1rio e devolve com juros."
+  effectText: "Copia a \xFAltima Super ativa usada pelo oponente \u2014 [1x/2x/3x]/luta"
   icon: {fileID: 21300000, guid: a7d0f630022f9364f9c0ce809adb2aab, type: 3}
   category: 4
   activationType: 1

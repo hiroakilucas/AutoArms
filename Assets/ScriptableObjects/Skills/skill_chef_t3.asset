@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: skill_chef_t3
   m_EditorClassIdentifier: 
   skillName: Chef
-  description: "Lan\xE7a uma pizza envenenada na 1\xAA a\xE7\xE3o \u2014 oponente
-    sofre 1% do HP m\xE1ximo dele no fim de cada turno at\xE9 curar (Tragic Potion)
-    (T3)"
+  description: "Ele n\xE3o cozinha pra se alimentar \u2014 cozinha pra sabotar o
+    jantar do advers\xE1rio."
+  effectText: "1x/luta, na 1\xAA a\xE7\xE3o: envenena o oponente com uma \"pizza
+    envenenada\", causando [1.5/3/5]% do HP m\xE1ximo dele por turno at\xE9 ele se
+    curar"
   icon: {fileID: 0}
   category: 0
   activationType: 0

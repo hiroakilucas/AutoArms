@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_vitality_t2
   m_EditorClassIdentifier: 
   skillName: Vitality
-  description: +18 HP permanente, +50% HP (T2)
+  description: "Corpo cheio de vida \u2014 d\xE1 at\xE9 inveja no meio da arena."
+  effectText: +[18/30/42] HP permanente + HP% +[50/60/70]%
   icon: {fileID: 0}
   category: 2
   activationType: 0

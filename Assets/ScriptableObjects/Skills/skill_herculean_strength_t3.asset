@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_herculean_strength_t3
   m_EditorClassIdentifier: 
   skillName: Herculean Strength
-  description: +3 STR permanente, +50% STR (T3)
+  description: "Forte o bastante pra mover montanhas, mas primeiro \xE9 bom derrotar
+    o advers\xE1rio."
+  effectText: +[3/5/7] Strength permanente (acumulativo) + Strength% +[50/60/70]%
   icon: {fileID: 0}
   category: 2
   activationType: 0

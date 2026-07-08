@@ -13,7 +13,11 @@ MonoBehaviour:
   m_Name: skill_shield_t2
   m_EditorClassIdentifier: 
   skillName: Shield
-  description: +45% block rate, -25% dano causado (penalidade do escudo) (T2)
+  description: "Escudo na medida certa: aguenta o golpe, mas cobra seu pre\xE7o no
+    dano que ele mesmo causa."
+  effectText: "Bloqueio +[45/50/55]%, penalidade de Dano \u221225% enquanto o escudo
+    est\xE1 ativo (fixo), 10% de chance fixa do escudo cair sozinho (separada do
+    desarme normal) \u2014 desarme tem prioridade sobre o escudo"
   icon: {fileID: 0}
   category: 1
   activationType: 0

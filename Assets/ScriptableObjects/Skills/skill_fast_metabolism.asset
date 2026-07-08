@@ -13,8 +13,11 @@ MonoBehaviour:
   m_Name: skill_fast_metabolism
   m_EditorClassIdentifier: 
   skillName: Fast Metabolism
-  description: "Regenera 1% do HP m\xE1ximo por turno; abaixo de 50% HP, +5% por
-    turno at\xE9 10x sem levar dano. -50% hit speed, -5% cr\xEDtico"
+  description: "Ele se recupera r\xE1pido \u2014 s\xF3 que fica um pouco mais lento
+    e menos certeiro por causa disso."
+  effectText: "Regenera [1/2/3]% de HP por turno; abaixo de 50% HP, dispara um burst
+    \xFAnico de 10\xD75% HP (se n\xE3o tomar dano); Velocidade de Ataque \u221250%
+    e Cr\xEDtico \u22125% (fixos, penalidade)"
   icon: {fileID: 21300000, guid: 90d7abba8f5b01a41ab2edf5fe8042e0, type: 3}
   category: 1
   activationType: 0

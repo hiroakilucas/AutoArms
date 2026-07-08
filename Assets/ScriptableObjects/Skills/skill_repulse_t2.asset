@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_repulse_t2
   m_EditorClassIdentifier: 
   skillName: Repulse
-  description: "30% de chance de deflectir o throw do oponente de volta para ele;
-    o deflect tem +5% cr\xEDtico adicional (T2)"
+  description: "Devolve o que jogaram nele \u2014 com juros."
+  effectText: "[30/35/40]% de chance de deflectir um arremesso recebido de volta,
+    com +[5/10/15]% de cr\xEDtico no deflect"
   icon: {fileID: 0}
   category: 1
   activationType: 0

@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_hostility
   m_EditorClassIdentifier: 
   skillName: Hostility
-  description: +30% reversal
+  description: "Ele n\xE3o gosta de voc\xEA. Isso, tecnicamente, \xE9 uma vantagem
+    em combate."
+  effectText: Reversal +[30/35/40]%
   icon: {fileID: 21300000, guid: da7ea935f571f7d4484fa1e52fe4867c, type: 3}
   category: 0
   activationType: 0

@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: skill_tragic_potion
   m_EditorClassIdentifier: 
   skillName: Tragic Potion
-  description: "Quando HP < 60%: 50% por turno de curar entre 25% e 50% do HP m\xE1ximo
-    (1x por luta)"
+  description: "A hist\xF3ria por tr\xE1s dessa po\xE7\xE3o \xE9 triste. O efeito,
+    nem tanto."
+  effectText: "Com HP < 60%: 50%/turno cura 25-50% do HP m\xE1ximo, at\xE9 [1/2/3]x
+    por luta"
   icon: {fileID: 21300000, guid: 71bf454985f6b6e46b2a4ebc690a6936, type: 3}
   category: 4
   activationType: 1

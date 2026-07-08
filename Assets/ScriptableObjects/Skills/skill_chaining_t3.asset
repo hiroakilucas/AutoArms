@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: skill_chaining_t3
   m_EditorClassIdentifier: 
   skillName: Chaining
-  description: "3 golpes consecutivos sem tomar dano estunam o advers\xE1rio por
-    1 a\xE7\xE3o (T3)"
+  description: "Tr\xEAs acertos limpos seguidos e o advers\xE1rio nem viu o desarme
+    chegando."
+  effectText: "3 hits melee consecutivos sem tomar dano = atordoa o defensor por
+    1 a\xE7\xE3o + desarme garantido. Combo +[0/10/20]%"
   icon: {fileID: 0}
   category: 0
   activationType: 0

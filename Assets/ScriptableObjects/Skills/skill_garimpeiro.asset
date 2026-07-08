@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_garimpeiro
   m_EditorClassIdentifier: 
   skillName: Garimpeiro
-  description: "40% de chance no in\xEDcio do turno (desarmado) de pegar uma arma
-    aleat\xF3ria do ch\xE3o em vez do loadout"
+  description: "Sai da arena de m\xE3os vazias, mas nunca deixa uma arma boa largada
+    no ch\xE3o."
+  effectText: 
   icon: {fileID: 0}
   category: 3
   activationType: 0

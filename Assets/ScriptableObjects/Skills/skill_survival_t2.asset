@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: skill_survival_t2
   m_EditorClassIdentifier: 
   skillName: Survival
-  description: Sobrevive com 1 HP uma vez por luta; com 1 HP, +20% block e +20% evasion
-    (T2)
+  description: "Instinto de sobreviv\xEAncia puro: mesmo por um fio, ele luta melhor
+    do que nunca."
+  effectText: 1x/luta sobrevive com 1 HP; enquanto estiver com 1 HP, ganha Evasion
+    e Bloqueio +[20/30/40]%
   icon: {fileID: 0}
   category: 1
   activationType: 0

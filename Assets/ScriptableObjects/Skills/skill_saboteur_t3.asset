@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_saboteur_t3
   m_EditorClassIdentifier: 
   skillName: Saboteur
-  description: "A 1\xAA arma que o oponente puxar na luta quebra com 100% de certeza
-    (T3)"
+  description: "A primeira arma que o advers\xE1rio puxar j\xE1 nasce quebrada."
+  effectText: "1\xAA arma puxada pelo oponente quebra 100% das vezes; Iniciativa
+    do oponente \u2212[100/150/200]"
   icon: {fileID: 0}
   category: 0
   activationType: 0

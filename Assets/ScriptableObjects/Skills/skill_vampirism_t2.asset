@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_vampirism_t2
   m_EditorClassIdentifier: 
   skillName: Vampirism
-  description: '33% por turno: mordida garantida (nunca esquivada/bloqueada), causa
-    25% do HP que falta como dano e cura a mesma quantidade (1x por luta) (T2)'
+  description: "Cada mordida \xE9 tamb\xE9m um gole de energia roubada."
+  effectText: "Com HP < 50%: 33%/turno, mordida garantida que causa 25% do HP faltante
+    como dano e cura o mesmo valor, at\xE9 [1/2/3]x por luta, consome o turno"
   icon: {fileID: 0}
   category: 4
   activationType: 1

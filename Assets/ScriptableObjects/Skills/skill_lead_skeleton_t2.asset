@@ -13,7 +13,10 @@ MonoBehaviour:
   m_Name: skill_lead_skeleton_t2
   m_EditorClassIdentifier: 
   skillName: Lead Skeleton
-  description: -15% dano de armas Heavy (T2)
+  description: "Ossos de chumbo: pesado de carregar, quase imposs\xEDvel de perfurar
+    com machado."
+  effectText: "\u2212[15/20/25]% de dano recebido de armas Heavy (ap\xF3s cr\xEDtico,
+    antes de armor); Armor +[15/25/35]%; Evasion \u221215% (fixo, penalidade)"
   icon: {fileID: 0}
   category: 1
   activationType: 0

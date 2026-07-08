@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_counter_attack_t2
   m_EditorClassIdentifier: 
   skillName: Counter Attack
-  description: "+10% block, +90% reversal ap\xF3s bloquear (T2)"
+  description: "Bloqueia com uma m\xE3o e j\xE1 devolve com a outra."
+  effectText: "Bloqueio +[10/15/20]%, chance de revers\xE3o ap\xF3s bloqueio +[90/95/99]%"
   icon: {fileID: 0}
   category: 0
   activationType: 0

@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: skill_treat
   m_EditorClassIdentifier: 
   skillName: Treat
-  description: "33% por turno: alimenta o pet aliado mais fraco (prioriza enredados),
-    curando 50% do HP m\xE1ximo, aplicando escudo de 1 golpe e for\xE7ando ataque
-    imediato (4x por luta)"
+  description: Um agrado na hora certa, e o pet vira uma fera na arena.
+  effectText: "33%/turno: cura o pet aliado mais fraco em 50% do HP + d\xE1 um escudo
+    de 1 golpe + for\xE7a um ataque, at\xE9 [4/5/6]x por luta"
   icon: {fileID: 21300000, guid: d50c3d64cdaf78142b33e9599316b70b, type: 3}
   category: 4
   activationType: 1

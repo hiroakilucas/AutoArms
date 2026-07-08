@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_cry_of_the_damned
   m_EditorClassIdentifier: 
   skillName: Cry of the Damned
-  description: "44% por turno: grito sobrenatural expulsa cada pet inimigo vivo com
-    50% de chance \u2014 o pet abandona a partida para sempre (1x por luta)"
+  description: Um grito que gela a espinha de qualquer pet.
+  effectText: "44%/turno: expulsa cada pet inimigo vivo (50% de chance cada, permanente),
+    at\xE9 [1/2/3]x por luta"
   icon: {fileID: 21300000, guid: 4d6c1cd324960fc43a3f1f41a058cd8d, type: 3}
   category: 4
   activationType: 1

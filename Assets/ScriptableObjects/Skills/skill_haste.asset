@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: skill_haste
   m_EditorClassIdentifier: 
   skillName: Haste
-  description: "23% por turno: dash que atravessa o oponente, dano baseado em Speed,
-    +5% cr\xEDtico (1x por luta)"
+  description: "Ele atravessa o advers\xE1rio antes que ele perceba que a luta j\xE1
+    continuou."
+  effectText: "23%/turno: dash atravessando o oponente, dano baseado em Speed, +[5/10/15]%
+    de cr\xEDtico, at\xE9 [1/2/3]x por luta"
   icon: {fileID: 21300000, guid: 17bb60c2c8d97294c865e06f472cbb8a, type: 3}
   category: 4
   activationType: 1

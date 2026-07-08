@@ -13,7 +13,10 @@ MonoBehaviour:
   m_Name: skill_bodybuilder_t2
   m_EditorClassIdentifier: 
   skillName: Bodybuilder
-  description: "+10% evasion e +40% hit speed, s\xF3 com arma Heavy (T2)"
+  description: "Treino \xE9 treino, resultado \xE9 resultado \u2014 principalmente
+    com uma arma pesada na m\xE3o."
+  effectText: "(s\xF3 com arma Heavy equipada) Dexterity com Heavy +[10/15/20]%,
+    Velocidade de Ataque com Heavy +[40/50/60]%"
   icon: {fileID: 0}
   category: 3
   activationType: 0

@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_lightning_bolt_t3
   m_EditorClassIdentifier: 
   skillName: Lightning Bolt
-  description: +3 SPD permanente, +50% SPD (T3)
+  description: Um raio de verdade seria mais lento que ele nesse dia.
+  effectText: +[3/5/7] Speed permanente (acumulativo) + Speed% +[50/60/70]%
   icon: {fileID: 0}
   category: 2
   activationType: 0

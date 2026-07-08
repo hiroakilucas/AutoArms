@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_ballet_shoes_t3
   m_EditorClassIdentifier: 
   skillName: Ballet Shoes
-  description: +10% evasion, primeiro golpe automaticamente esquivado (T3)
+  description: "Leve nos p\xE9s \u2014 o primeiro golpe da luta nem chega a encostar
+    nele."
+  effectText: "Evasion +[10/15/20]% + primeiro golpe da luta \xE9 sempre esquivado"
   icon: {fileID: 0}
   category: 1
   activationType: 0

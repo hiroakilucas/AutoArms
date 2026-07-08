@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_thief_t2
   m_EditorClassIdentifier: 
   skillName: Thief
-  description: "44% por turno (desarmado, oponente armado) de roubar a arma dele
-    \u2014 at\xE9 2x por luta (T2)"
+  description: "\"Isso \xE9 meu agora\" \u2014 mas s\xF3 quando ele est\xE1 desarmado
+    e o outro n\xE3o."
+  effectText: "44%/turno de chance de roubar arma, at\xE9 [2/3/4]x por luta"
   icon: {fileID: 0}
   category: 0
   activationType: 0

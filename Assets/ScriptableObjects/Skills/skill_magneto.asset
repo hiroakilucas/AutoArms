@@ -13,9 +13,8 @@ MonoBehaviour:
   m_Name: skill_magneto
   m_EditorClassIdentifier: 
   skillName: Magneto
-  description: "Levita todas as armas do ch\xE3o para as costas apontadas ao inimigo,
-    depois solta tudo de uma vez \u2014 cada arma causa seu dano (weaponDmg + STR),
-    sempre acerta (1x por luta)"
+  description: "As armas simplesmente preferem flutuar at\xE9 a m\xE3o dele."
+  effectText: 
   icon: {fileID: 0}
   category: 4
   activationType: 1

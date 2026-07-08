@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_flash_flood_t2
   m_EditorClassIdentifier: 
   skillName: Flash Flood
-  description: "17% por a\xE7\xE3o: com 3+ armas no invent\xE1rio, arremessa 3 aleat\xF3rias
-    que sempre acertam (1x por luta) (T2)"
+  description: "Uma saraivada de armas que ningu\xE9m viu vindo \u2014 e todas acertam."
+  effectText: "17%/a\xE7\xE3o, com 3+ armas no invent\xE1rio: arremessa 3 armas aleat\xF3rias
+    que sempre acertam, at\xE9 [1/2/3]x por luta"
   icon: {fileID: 0}
   category: 4
   activationType: 1

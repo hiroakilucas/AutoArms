@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_net_t2
   m_EditorClassIdentifier: 
   skillName: Net
-  description: "50% por turno: imobiliza o oponente sem dano, sempre acerta \u2014
-    ele s\xF3 se solta ao sofrer um hit (1x por luta) (T2)"
+  description: "Rede na m\xE3o, liberdade do advers\xE1rio no ch\xE3o."
+  effectText: "50%/turno, sempre acerta, sem dano: imobiliza o oponente at\xE9 ele
+    sofrer 1 hit, at\xE9 [1/2/3]x por luta"
   icon: {fileID: 0}
   category: 4
   activationType: 1

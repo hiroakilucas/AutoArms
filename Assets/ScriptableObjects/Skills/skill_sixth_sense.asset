@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_sixth_sense
   m_EditorClassIdentifier: 
   skillName: Sixth Sense
-  description: +10% chance de cancelar o hit do oponente antes de conectar
+  description: "Ele sente o golpe chegando um segundo antes de acontecer \u2014 e
+    j\xE1 contra-ataca."
+  effectText: Counter +[10/15/20]%
   icon: {fileID: 21300000, guid: eb67823416b3b6a4097fab2aeef9637f, type: 3}
   category: 0
   activationType: 0

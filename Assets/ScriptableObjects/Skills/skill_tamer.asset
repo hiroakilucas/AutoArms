@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_tamer
   m_EditorClassIdentifier: 
   skillName: Tamer
-  description: Pets mais fortes e com mais HP
+  description: "Seu pet luta mais forte s\xF3 de ouvir a voz dele."
+  effectText: "Deixa os pets do jogador mais fortes e com mais HP (valores detalhados
+    em PETS.md), at\xE9 [3/4/5]x por luta"
   icon: {fileID: 21300000, guid: 80e830d01c63e1047b6ee97c116571af, type: 3}
   category: 4
   activationType: 1

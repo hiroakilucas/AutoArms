@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_feline_agility
   m_EditorClassIdentifier: 
   skillName: Feline Agility
-  description: +3 AGI permanente, +50% AGI
+  description: "Cai de p\xE9 sempre \u2014 literalmente, at\xE9 quando n\xE3o devia."
+  effectText: +[3/5/7] Agility permanente (acumulativo) + Agility% +[50/60/70]%
   icon: {fileID: 21300000, guid: 77a994cc1aaf4404a98a72eb675c72fb, type: 3}
   category: 2
   activationType: 0

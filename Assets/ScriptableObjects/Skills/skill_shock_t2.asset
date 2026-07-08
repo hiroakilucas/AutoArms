@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_shock_t2
   m_EditorClassIdentifier: 
   skillName: Shock
-  description: "+50% chance de desarmar o advers\xE1rio a cada ataque (T2)"
+  description: "Um choque na hora certa e a arma do advers\xE1rio j\xE1 n\xE3o tem
+    mais tanta vontade de ficar na m\xE3o dele."
+  effectText: Chance de Desarme +[50/60/70]%
   icon: {fileID: 0}
   category: 0
   activationType: 0

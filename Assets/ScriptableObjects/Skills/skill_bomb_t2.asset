@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: skill_bomb_t2
   m_EditorClassIdentifier: 
   skillName: Bomb
-  description: "17% por turno: explos\xE3o em \xE1rea, 15-25 de dano em todos os
-    alvos inimigos, ignora dodge/block/armor (2x por luta) (T2)"
+  description: "Ele n\xE3o luta sozinho \u2014 traz companhia explosiva, e ningu\xE9m
+    escapa dela."
+  effectText: "17%/turno: 15-25 de dano em \xE1rea, ignora esquiva/bloqueio/cr\xEDtico/armor,
+    quebra o efeito de Net, at\xE9 [2/3/4]x por luta, consome o turno"
   icon: {fileID: 0}
   category: 4
   activationType: 1

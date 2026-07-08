@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_sticky_hands_t2
   m_EditorClassIdentifier: 
   skillName: Sticky Hands
-  description: "-50% chance de ser desarmado, -50% chance de arremesso (pr\xF3prio)
-    (T2)"
+  description: "A arma gruda na m\xE3o dele como se fossem amigos de inf\xE2ncia."
+  effectText: "Reduz em [50/60/70]% tanto a chance de ser desarmado quanto a pr\xF3pria
+    chance de arremessar a arma"
   icon: {fileID: 0}
   category: 1
   activationType: 0

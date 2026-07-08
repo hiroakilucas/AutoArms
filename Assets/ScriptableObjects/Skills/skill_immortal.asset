@@ -13,7 +13,10 @@ MonoBehaviour:
   m_Name: skill_immortal
   m_EditorClassIdentifier: 
   skillName: Immortal
-  description: "+250% vida, -25% for\xE7a/agilidade/velocidade"
+  description: "\"S\xF3 mais uma vidinha\" \u2014 ele quase nunca fica sem elas,
+    mas paga o pre\xE7o na agilidade."
+  effectText: "HP% +[250/300/350]%; Strength%/Agility%/Speed% \u221225% cada (fixo,
+    penalidade)"
   icon: {fileID: 21300000, guid: b523a96724a297d4da8f600cb223fb15, type: 3}
   category: 2
   activationType: 0

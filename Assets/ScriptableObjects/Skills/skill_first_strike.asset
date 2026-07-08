@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_first_strike
   m_EditorClassIdentifier: 
   skillName: First Strike
-  description: Ataca primeiro independente da velocidade
+  description: "Enquanto o advers\xE1rio ainda est\xE1 se ajeitando, ele j\xE1 terminou
+    o primeiro round."
+  effectText: "Iniciativa +[200/300/500] \u2014 Speed +[0/2/4]"
   icon: {fileID: 21300000, guid: bd1caa0e1e8bbbf40a73c6daf10fd2b1, type: 3}
   category: 0
   activationType: 0

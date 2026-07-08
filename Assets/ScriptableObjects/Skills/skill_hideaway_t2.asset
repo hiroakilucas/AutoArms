@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: skill_hideaway_t2
   m_EditorClassIdentifier: 
   skillName: Hideaway
-  description: "50% chance de arremesso (fixa), +25% bloqueio contra arremessos recebidos,
-    arma volta pro loadout (n\xE3o desaparece) (T2)"
+  description: "No primeiro round, ele simplesmente... n\xE3o est\xE1 l\xE1 pra ser
+    atingido de longe."
+  effectText: "Chance de arremesso fixa em 50% (substitui a soma normal por tag de
+    arma); Bloqueio contra arremesso do oponente \u2212[25/30/35]%"
   icon: {fileID: 0}
   category: 3
   activationType: 0

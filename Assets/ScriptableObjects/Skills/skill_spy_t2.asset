@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: skill_spy_t2
   m_EditorClassIdentifier: 
   skillName: Spy
-  description: "Antes da luta, metade das armas (aleat\xF3rias) do oponente recebem
-    -20% dano permanente (T2)"
+  description: "Ele j\xE1 sabia toda a estrat\xE9gia do advers\xE1rio antes do juiz
+    apitar \u2014 e sabotou a metade do arsenal dele."
+  effectText: "Antes da luta, metade das armas do oponente (aleat\xF3rias) recebem
+    \u2212[20/25/30]% de dano permanente"
   icon: {fileID: 0}
   category: 3
   activationType: 0

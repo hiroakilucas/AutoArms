@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_toughened_skin
   m_EditorClassIdentifier: 
   skillName: Toughened Skin
-  description: +10% armor
+  description: "A pele dele parece ter sido curtida em couro de drag\xE3o."
+  effectText: Armor +[10/15/20]%
   icon: {fileID: 21300000, guid: d0d295193fe249d418bb86bec7ff46f4, type: 3}
   category: 1
   activationType: 0

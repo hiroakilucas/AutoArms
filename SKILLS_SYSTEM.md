@@ -6,12 +6,16 @@
 
 | Arquivo | Tipo | Propósito |
 |---|---|---|
-| `Assets/Scripts/Data/SkillData.cs` | ScriptableObject | Dados de uma skill (nome, ícone, categoria, ativação, `tier`/`previousTier`, `bonusValue1..7`) |
+| `Assets/Scripts/Data/SkillData.cs` | ScriptableObject | Dados de uma skill (nome, ícone, categoria, ativação, `tier`/`previousTier`, `bonusValue1..7`, `description`/`effectText` — ver **2026-07-07** abaixo) |
 | `Assets/Scripts/Data/SkillDatabase.cs` | ScriptableObject | Lista mestre de todas as skills (53 T1 no `SkillAssetGenerator.Defs[]` + T2/T3 gerados, 153 assets no total) |
 | `Assets/ScriptableObjects/Skills/` | Assets | Um `SkillData.asset` T1 por skill + `SkillDatabase.asset` + assets T2/T3 gerados |
 | `Assets/Data/UI/Skills/` | Sprites | `skill_<nome>.png` — ícone de cada skill (só T1 tem ícone; T2/T3 herdam visual nenhum, ficam fora do level-up) |
 | `Assets/Editor/SkillAssetGenerator.cs` | Editor tool | Gera os 53 assets T1 via **Tools → AutoArms → Generate Skill Assets** |
 | `Assets/Editor/SkillTierGenerator.cs` | Editor tool | **Populate Skill T1 Bonus Values** (grava `bonusValue1..7` dos T1 com os valores literais da tabela abaixo) / **Generate Skill Tiers (T2 & T3)** (cria/atualiza T2/T3 com os valores literais de cada tier, sem nenhuma escala por multiplicador) / **Delete Extra Thick Skin Asset** / **Rebuild Skill Database From Folder** (reconstrói `SkillDatabase.asset` escaneando a pasta inteira — necessário porque `SkillAssetGenerator` só conhece os T1) |
+
+### Descrição/Efeito — 2026-07-07
+
+`description` guarda o texto **temático/engraçado** de cada skill (fonte: `skills_descricoes_v2.md` do usuário); `effectText` guarda o "Efeito:" no formato `"Label +[v1/v2/v3]%"` (idêntico nos 3 assets de tier — `SkillTierGenerator.CopyLiteral` copia verbatim). Nenhum dos dois menciona "tier"/"T1"/"T2"/"T3" em texto — a evolução de nível é comunicada só pela borda colorida do ícone. Garimpeiro/Magneto (não implementadas) têm `effectText` vazio de propósito. Consumido pelo popup de detalhe de skill em `CharacterPanel.ShowSkillDetail` (ver CLAUDE.md).
 
 ### Sistema de Tiers (T1/T2/T3) — 2026-07-06
 

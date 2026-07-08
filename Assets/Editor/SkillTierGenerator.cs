@@ -311,7 +311,11 @@ public static class SkillTierGenerator
     private static void CopyLiteral(SkillData t1, SkillData dest, int tier, SkillData prevTier, float[] values, int uses)
     {
         dest.skillName      = t1.skillName;
-        dest.description     = $"{t1.description} (T{tier})";
+        // Mesmo texto do T1, sem sufixo de tier (o popup de detalhe já indica o tier só pela
+        // borda colorida do ícone — ver CharacterPanel.ShowSkillDetail). Antes concatenava
+        // " (T{tier})" na description, violando essa regra pros assets T2/T3.
+        dest.description      = t1.description;
+        dest.effectText       = t1.effectText;
         dest.category        = t1.category;
         dest.activationType  = t1.activationType;
         dest.tier            = tier;

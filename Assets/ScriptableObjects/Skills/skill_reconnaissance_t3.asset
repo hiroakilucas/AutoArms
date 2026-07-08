@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: skill_reconnaissance_t3
   m_EditorClassIdentifier: 
   skillName: Reconnaissance
-  description: "-200 iniciativa, +5 SPD permanente, +150% SPD, +50% dano cr\xEDtico
-    (T3)"
+  description: "Ele j\xE1 sabia o ponto fraco do advers\xE1rio antes da luta come\xE7ar."
+  effectText: "+[5/10/15] Speed permanente + Speed% +[150/200/250]%, Iniciativa \u2212200
+    (fixo), Dano Cr\xEDtico +[50/60/70]%"
   icon: {fileID: 0}
   category: 2
   activationType: 0

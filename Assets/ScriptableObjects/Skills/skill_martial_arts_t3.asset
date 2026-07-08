@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: skill_martial_arts_t3
   m_EditorClassIdentifier: 
   skillName: Martial Arts
-  description: +100% dano desarmado (T3)
+  description: Anos de dojo resumidos em socos e chutes que doem mais que qualquer
+    espada.
+  effectText: "Dano Desarmado \xD7[2/2.5/3]"
   icon: {fileID: 0}
   category: 3
   activationType: 0

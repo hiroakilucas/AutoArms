@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: skill_fists_of_fury_t2
   m_EditorClassIdentifier: 
   skillName: Fists of Fury
-  description: +20% chance de combo (T2)
+  description: Um soco puxa o outro, que puxa o outro, sem parar pra respirar.
+  effectText: Chance de Combo +[20/30/40]%
   icon: {fileID: 0}
   category: 0
   activationType: 0
