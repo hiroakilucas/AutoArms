@@ -226,7 +226,7 @@ var rt = go.AddComponent<RectTransform>(); // null!
 | `BtnJogar` | Play button — **reposicionado (2026-07-07)**, estilo Brawl Stars: anchor(1,0) pivot(1,0) pos=(−60,60), size=(480,220), `Image.color` verde (`#48D15C`), label "JOGAR" 64pt bold. onClick → `OnPlayButton`, que agora carrega `05_SelectOpponent` (não mais direto `04_CombatScenePVP`) |
 | `BtnShop` | Shop button at pos=(−680,−422) (deslocado de x=−600) |
 
-Button math (1920×1080 canvas, anchor center): Personagem/Shop ainda usam anchor center, y = 540−422 = **118px** from bottom, tops at **203px** — mesma regra de clearance pra painéis (`anchorMin.y` > 0.188). O `BtnJogar` saiu desse sistema (agora ancorado no canto inferior direito, `anchorMin/Max=(1,0)`) — span x:[1380,1860] y:[60,280] em pixels absolutos de um canvas 1920×1080, sem sobrepor o `MainMenuCharacterPreview.BuildSummaryHUD` (x:[576,1344] y:[227,432]).
+Button math (1920×1080 canvas, anchor center): Personagem/Shop ainda usam anchor center, y = 540−422 = **118px** from bottom, tops at **203px** — mesma regra de clearance pra painéis (`anchorMin.y` > 0.188). O `BtnJogar` saiu desse sistema (agora ancorado no canto inferior direito, `anchorMin/Max=(1,0)`) — span x:[1415,1895] y:[33,253] em pixels absolutos de um canvas 1920×1080 (`m_AnchoredPosition={x: -25, y: 33}`, `m_SizeDelta={x: 480, y: 220}` — puxado pra mais perto do canto em 2026-07-07, era x:[1380,1860] y:[60,280]), sem sobrepor o `MainMenuCharacterPreview.BuildSummaryHUD` (x:[576,1344] y:[227,432]).
 
 ## Sorting Layers
 

@@ -1,7 +1,9 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 122 tarefas | Concluídas: 61
+- Total: 122 tarefas | Concluídas: 62
+
+- 2026-07-07: `BtnJogar` de `01_MainMenu` puxado pra mais perto do canto inferior direito (`m_AnchoredPosition` de `{x: -60, y: 60}` pra `{x: -25, y: 33}`, mesmo `sizeDelta`/âncora) e `CharacterPanel.EdgeMargin` alinhado ao novo inset horizontal do botão (`11f` → `25f`) — antes a margem direita do painel de status era um valor arbitrário sem relação com o botão; agora a borda direita do painel fica exatamente alinhada com a borda direita do "Jogar"
 
 - 2026-07-07: Personagem central de `01_MainMenu` recentralizado no meio absoluto da tela (`MainMenuCharacterPreview.CharacterCenterX = 0f`, era `-1.76f` — decisão anterior de deslocar pra esquerda do `CharacterPanel` revertida a pedido do usuário) e reposicionado mais alto (`CharacterGroundY = -1f`, era `-2f`). A barra de Level/XP acima da cabeça agora acompanha `CharacterGroundY` dinamicamente em vez de usar uma fração de tela fixa (`yFraction` derivado de um par de calibração `CalibratedGroundY`/`CalibratedYFraction`) — qualquer ajuste futuro na altura do personagem move a barra junto, proporcionalmente, sem precisar recalibrar manualmente
 

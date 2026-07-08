@@ -62,19 +62,21 @@ public class CharacterPanel : MonoBehaviour
 
     // Janela vertical do Root, fração de um canvas 1920x1080 (ScaleWithScreenSize): topo em
     // 0.99 (margem de ~11px do topo da tela) e base em 0.28 (302px). O BtnJogar (canto
-    // inferior direito, âncora (1,0), topo em 280px/0.259 — ver CLAUDE.md) fica ~22px abaixo
-    // da base do Root — recalculado (2026-07-07) considerando as fontes maiores do bloco de
-    // info (26pt nome, 20pt HP etc.) + as novas seções de Skills/Armas: o Root sobra ~537px
-    // de área rolável abaixo do bloco de info (766px de altura total - 230px do bloco), então
-    // a margem de segurança acima do Jogar continua de sobra mesmo com o conteúdo novo.
+    // inferior direito, âncora (1,0), topo em 253px/0.234 — puxado pra baixo em 2026-07-07,
+    // era 280px/0.259, ver CLAUDE.md) fica ~49px abaixo da base do Root — recalculado
+    // (2026-07-07) considerando as fontes maiores do bloco de info (26pt nome, 20pt HP etc.) +
+    // as novas seções de Skills/Armas: o Root sobra ~537px de área rolável abaixo do bloco de
+    // info (766px de altura total - 230px do bloco), então a margem de segurança acima do
+    // Jogar continua de sobra mesmo com o conteúdo novo.
     const float RootAnchorTop    = 0.99f;
     const float RootAnchorBottom = 0.28f;
 
-    // Margem direita (2026-07-07) — o painel ficava encostado na borda direita da tela
-    // (offsetMax.x = 0); usa o mesmo valor em pixels da margem que já existia no topo
-    // ((1 - RootAnchorTop) * 1080 ≈ 10.8px) pros dois lados livres do Root ficarem visualmente
-    // consistentes.
-    const float EdgeMargin = 11f;
+    // Margem direita (2026-07-07, alinhada com o BtnJogar) — igual ao inset horizontal do
+    // `BtnJogar` na cena (`m_AnchoredPosition.x = -25`, âncora/pivot em x=1 — ver
+    // `01_MainMenu.unity`), então a borda direita do painel fica exatamente alinhada com a
+    // borda direita do botão "Jogar" (era 11px, valor arbitrário que só copiava a margem do
+    // topo do Root, sem relação nenhuma com o botão).
+    const float EdgeMargin = 25f;
 
     // ── Public API ──────────────────────────────────────────────────────────
 
