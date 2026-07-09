@@ -25,6 +25,9 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("�cone utilizado na UI de sele��o de personagens")]
     public Sprite previewIcon;
 
+    [Tooltip("Arte de fundo em tela cheia (splash art) mostrada no Frame ao selecionar este personagem em 02_SelectCharacter. Vazio = mant�m o placeholder dourado.")]
+    public Sprite splashArt;
+
     [Header("Par�metros de Combate")]
     [Tooltip("Configura��es de ataque e anima��o (velocidade, idle, delay etc.)")]
     public AttackSettings attackSettings;

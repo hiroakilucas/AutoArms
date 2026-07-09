@@ -53,4 +53,29 @@ public static class UIShapeUtil
         _cache[key] = sprite;
         return sprite;
     }
+
+    // Textura 1px de largura com gradiente vertical top→bottom, esticada pra qualquer tamanho de
+    // Image (Image.type = Simple) — usa UITheme.backgroundTop/backgroundBottom como pano de
+    // fundo de tela cheia (primeiro uso real desses dois campos no projeto).
+    private static readonly Dictionary<(Color, Color), Sprite> _gradientCache = new Dictionary<(Color, Color), Sprite>();
+
+    public static Sprite VerticalGradient(Color top, Color bottom, int resolution = 64)
+    {
+        var key = (top, bottom);
+        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+
+        var texture = new Texture2D(1, resolution, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        var pixels = new Color[resolution];
+        for (int y = 0; y < resolution; y++)
+            pixels[y] = Color.Lerp(bottom, top, y / (float)(resolution - 1));
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        var sprite = Sprite.Create(texture, new Rect(0, 0, 1, resolution), new Vector2(0.5f, 0.5f), 100f);
+        _gradientCache[key] = sprite;
+        return sprite;
+    }
 }

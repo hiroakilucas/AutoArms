@@ -25,10 +25,7 @@ public class MainMenuController : MonoBehaviour
 
     public void OnCharacterButton()
     {
-        // Pendente de nova definição — antes abria um painel lateral com abas Stats/Skills/
-        // Armas; esse painel expandido foi removido (2026-07-07, ver CharacterPanel.cs) e o
-        // que restou (CharacterPanel) já fica sempre visível sozinho, sem depender de clique.
-        // Este botão não tem ação própria até uma nova função ser decidida.
+        SceneManager.LoadScene("02_SelectCharacter");
     }
 
     public void OnPlayButton()

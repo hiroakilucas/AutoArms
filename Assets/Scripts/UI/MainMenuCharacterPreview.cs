@@ -44,12 +44,40 @@ public class MainMenuCharacterPreview : MonoBehaviour
         DestroyImmediate(currentCharacter.GetComponent<PlayerCombat>());
         DestroyImmediate(currentCharacter.GetComponent<WeaponHandler>());
         DestroyImmediate(currentCharacter.GetComponent<MovementController>());
-        DestroyImmediate(currentCharacter.GetComponent<AnimationController>());
 
-        var anim = currentCharacter.GetComponent<Animator>();
-        if (anim != null) anim.SetBool("Idle", true);
+        // AnimationController continua vivo (2026-07-08, diferente de antes) — precisa dele pra
+        // reagir a clique com Hurt/Slashing, ver `CharacterPreviewReaction`/BuildClickReaction.
+        var animController = currentCharacter.GetComponent<AnimationController>();
+        if (animController != null) animController.SetIdle(true);
 
+        BuildClickReaction(currentCharacter, animController);
         BuildLevelXpHud(profile);
+    }
+
+    // Clique no personagem central reage com Hurt/Slashing (2026-07-08, pedido do usuário) —
+    // mesma reação do portrait de `02_SelectCharacter`, via o componente compartilhado
+    // `CharacterPreviewReaction`. Diferente do portrait (renderizado numa RenderTexture, clique
+    // via `Button` de UI), aqui o personagem é world-space de verdade — clique detectado por
+    // `Collider2D`/`OnMouseDown` (mensagem nativa da Unity, não depende de EventSystem nenhum).
+    // `BoxCollider2D` dimensionado a partir dos bounds REAIS dos `Renderer`s do personagem (soma
+    // de todas as partes do sprite, Spriter2UnityDX) em vez de um tamanho fixo chutado — cada
+    // personagem tem proporções diferentes.
+    private void BuildClickReaction(GameObject character, AnimationController animController)
+    {
+        if (animController == null) return;
+
+        var renderers = character.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0) return;
+
+        Bounds combined = renderers[0].bounds;
+        foreach (var r in renderers) combined.Encapsulate(r.bounds);
+
+        var collider = character.AddComponent<BoxCollider2D>();
+        collider.offset = character.transform.InverseTransformPoint(combined.center);
+        Vector3 scale = character.transform.lossyScale;
+        collider.size = new Vector2(combined.size.x / scale.x, combined.size.y / scale.y);
+
+        character.AddComponent<CharacterPreviewReaction>().Init(animController);
     }
 
     // Barra de XP fina + "Level X" acima dela, estilo My Brute — única barra de XP do menu

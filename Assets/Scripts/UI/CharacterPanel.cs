@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-// HUD do personagem no lado direito do 01_MainMenu, com dois estados:
+// HUD do personagem, com dois estados:
 //   Compact  — nome, Win Rate, HP em texto, STR/AGI/SPD em pips (clique expande)
 //   Expanded — mesmo bloco de informação do Compact (sem duplicar o desenho, só reconstruído
 //              num container do mesmo tamanho) + seções de Habilidades e Armas equipadas
@@ -12,17 +12,54 @@ using TMPro;
 //              botão "Detalhes" que revela a seção PASSIVAS (label:valor simples, sem
 //              ícone/barra) — tudo rolável. Clique fora dos elementos interativos recolhe.
 // Root é uma janela de altura FIXA (não anima tamanho) ancorada entre RootAnchorBottom (acima
-// do BtnJogar, com margem) e RootAnchorTop — só o conteúdo interno (Compact vs Expanded)
-// alterna via CanvasGroup (fade), nunca o footprint do Root em si.
+// do BtnJogar, com margem) e RootAnchorTop por padrão — só o conteúdo interno (Compact vs
+// Expanded) alterna via CanvasGroup (fade), nunca o footprint do Root em si. Essa janela pode ser
+// sobrescrita por instância via `Setup(..., anchorBottomOverride, anchorTopOverride)` — usado por
+// 02_SelectCharacter pra encolher o Root e casar com a moldura ao redor dele, sem afetar a janela
+// calibrada do 01_MainMenu (que nunca passa esses parâmetros).
+// Originalmente só do 01_MainMenu (sempre visível, sem Level/XP — mostrado acima da cabeça do
+// personagem por MainMenuCharacterPreview) — reaproveitado por 02_SelectCharacter desde
+// 2026-07-08 via `Setup(holder, theme, showLevelXp: true, startHidden: true)` +
+// `ShowSlideIn()`/`HideSlideOut()` + `SetProfile(profile)` a cada clique num card (sem isso o
+// painel sempre mostraria `_holder.currentProfile`, o personagem EQUIPADO, não o clicado no
+// grid) — sem duplicar nenhuma lógica de Compact/Expanded/Skills/Armas. Largura sempre a mesma
+// (`PanelWidth` fixo, ancorado à direita) nas duas telas — não existe mais um modo "preenche o
+// espaço restante" (removido, ver histórico no CHANGELOG).
 public class CharacterPanel : MonoBehaviour
 {
     private SelectedProfileHolder _holder;
     private UITheme _theme;
 
+    // Override explícito (2026-07-08) — quando não-nulo, RefreshAll mostra ESTE profile em vez
+    // de `_holder.currentProfile`. 01_MainMenu nunca chama SetProfile (mostra sempre o
+    // equipado, via _holder); 02_SelectCharacter chama a cada clique num card do grid, senão o
+    // painel sempre mostraria as stats do personagem atualmente equipado, não o card clicado.
+    private PlayerProfile _overrideProfile;
+
+    private GameObject _canvasGo;
     private RectTransform _rootRt;
     private GameObject _compactGo, _expandedGo;
     private CanvasGroup _compactCg, _expandedCg;
     private bool _isExpanded;
+
+    // Janela vertical efetiva do Root (2026-07-08) — default = RootAnchorBottom/Top (comportamento
+    // de sempre do 01_MainMenu), mas 02_SelectCharacter pode sobrescrever via Setup pra encolher o
+    // Root e casar exatamente com a altura da própria moldura dourada ao redor dele (pedido do
+    // usuário: painel vazava por cima da moldura; ao usar a MESMA janela vertical da moldura, o
+    // Root passa a caber perfeitamente dentro dela, sem precisar centralizar nada à parte).
+    private float _anchorBottom = RootAnchorBottom;
+    private float _anchorTop = RootAnchorTop;
+
+    // Level+XP dentro do painel (2026-07-08, opt-in via Setup) — usado quando o painel é
+    // reaproveitado fora do 01_MainMenu (ali o XP já fica acima da cabeça do personagem via
+    // MainMenuCharacterPreview.BuildLevelXpHud, não duplicado aqui).
+    private bool _showLevelXp;
+
+    // Slide-in/out (2026-07-08) — usado quando o painel é instanciado já escondido fora da tela
+    // (startHidden em Setup) e precisa aparecer/sumir sob demanda (ex: 02_SelectCharacter, ao
+    // clicar num card / clicar Voltar). Não usado pelo 01_MainMenu (painel sempre visível).
+    private Vector2 _restAnchoredPos;
+    private Coroutine _slideRoutine;
 
     // Bloco de nome/winrate/HP/pips — construído duas vezes (Compact e topo do Expanded) com
     // exatamente o mesmo layout relativo, por isso os dois conjuntos de referências.
@@ -30,6 +67,8 @@ public class CharacterPanel : MonoBehaviour
     {
         public TMP_Text name, winRate, hp;
         public AttributePipBar str, agi, spd;
+        public TMP_Text level, xpValue; // só preenchidos quando _showLevelXp
+        public Image xpFill;
     }
     private InfoBlockRefs _compactInfo, _expandedInfo;
 
@@ -56,9 +95,21 @@ public class CharacterPanel : MonoBehaviour
     private Color PanelBgColor => _theme.panelBackgroundAlt;
     private Color TextColor    => _theme.textOnDark;
 
-    const float PanelWidth    = 450f;
+    // Públicas (2026-07-08) — 02_SelectCharacter precisa alinhar seus próprios botões/áreas de
+    // layout exatamente com o Root deste painel (mesma largura fixa/margem/janela vertical do
+    // 01_MainMenu, ver CharacterSelectController), em vez de duplicar esses valores como magic
+    // numbers soltos em outro arquivo.
+    public const float PanelWidth    = 450f;
     const float CompactHeight = 230f;  // altura do bloco de info (Compact inteiro / topo do Expanded)
     const float FadeDuration  = 0.18f; // transição compact<->expanded
+
+    // Bloco opcional de Level+XP (2026-07-08) — mesmo estilo compacto do card
+    // (CharacterCardUI.BuildLevelXpBar), inserido logo abaixo do bloco de info de sempre quando
+    // showLevelXp=true (ver BuildLevelXpBox). Extra some por completo (0) quando false — zero
+    // impacto no layout calibrado do 01_MainMenu.
+    const float LevelXpBoxHeight = 54f;
+    const float LevelXpGap = 10f;
+    private float LevelXpExtra => _showLevelXp ? LevelXpGap + LevelXpBoxHeight : 0f;
 
     // Janela vertical do Root, fração de um canvas 1920x1080 (ScaleWithScreenSize): topo em
     // 0.99 (margem de ~11px do topo da tela) e base em 0.28 (302px). O BtnJogar (canto
@@ -68,24 +119,89 @@ public class CharacterPanel : MonoBehaviour
     // as novas seções de Skills/Armas: o Root sobra ~537px de área rolável abaixo do bloco de
     // info (766px de altura total - 230px do bloco), então a margem de segurança acima do
     // Jogar continua de sobra mesmo com o conteúdo novo.
-    const float RootAnchorTop    = 0.99f;
-    const float RootAnchorBottom = 0.28f;
+    public const float RootAnchorTop    = 0.99f;
+    public const float RootAnchorBottom = 0.28f;
 
     // Margem direita (2026-07-07, alinhada com o BtnJogar) — igual ao inset horizontal do
     // `BtnJogar` na cena (`m_AnchoredPosition.x = -25`, âncora/pivot em x=1 — ver
     // `01_MainMenu.unity`), então a borda direita do painel fica exatamente alinhada com a
     // borda direita do botão "Jogar" (era 11px, valor arbitrário que só copiava a margem do
     // topo do Root, sem relação nenhuma com o botão).
-    const float EdgeMargin = 25f;
+    public const float EdgeMargin = 25f;
 
     // ── Public API ──────────────────────────────────────────────────────────
 
-    public void Setup(SelectedProfileHolder holder, UITheme theme)
+    // `anchorBottomOverride`/`anchorTopOverride` (2026-07-08, opcionais): substituem
+    // RootAnchorBottom/RootAnchorTop só pra ESTA instância — usado por 02_SelectCharacter pra
+    // encolher o Root e casar com a altura da moldura dourada ao redor dele. `null` (default,
+    // usado pelo 01_MainMenu) preserva a janela vertical calibrada de sempre.
+    public void Setup(SelectedProfileHolder holder, UITheme theme, bool showLevelXp = false,
+        bool startHidden = false, float? anchorBottomOverride = null, float? anchorTopOverride = null)
     {
         _holder = holder;
         _theme = theme;
+        _showLevelXp = showLevelXp;
+        _anchorBottom = anchorBottomOverride ?? RootAnchorBottom;
+        _anchorTop = anchorTopOverride ?? RootAnchorTop;
         BuildUI();
         RefreshAll();
+
+        _restAnchoredPos = _rootRt.anchoredPosition;
+        if (startHidden)
+        {
+            _rootRt.anchoredPosition = _restAnchoredPos + new Vector2(HideOffsetX, 0f);
+            // Cinto e suspensório (2026-07-09): além de posicionar fora da tela, desativa o
+            // Canvas inteiro — garante invisibilidade total independente de qualquer nuance de
+            // RectTransform/CanvasScaler, em vez de depender só da posição.
+            _canvasGo.SetActive(false);
+        }
+    }
+
+    // Distância suficiente pra garantir que o Root (largura fixa `PanelWidth`) fique inteiramente
+    // fora da tela à direita.
+    private float HideOffsetX => PanelWidth + 60f;
+
+    // ── Slide in/out (2026-07-08) ────────────────────────────────────────────
+    // Desliza o Root inteiro a partir de fora da tela (direita) até a posição ancorada de
+    // sempre, ou de volta pra fora — usado por telas que instanciam o painel já escondido
+    // (startHidden em Setup) e querem revelá-lo sob demanda (ex: 02_SelectCharacter ao clicar
+    // num card), em vez de sempre visível como no 01_MainMenu.
+    // Troca qual PlayerProfile este painel exibe e atualiza tudo na hora (nome/HP/pips/skills/
+    // armas/passivas) — usado por telas com grid (02_SelectCharacter) onde o painel precisa
+    // mostrar o personagem CLICADO, não o `_holder.currentProfile` (o equipado agora).
+    public void SetProfile(PlayerProfile profile)
+    {
+        _overrideProfile = profile;
+        RefreshAll();
+    }
+
+    public void ShowSlideIn(float duration = 0.3f)
+    {
+        _canvasGo.SetActive(true);
+        if (_slideRoutine != null) StopCoroutine(_slideRoutine);
+        _rootRt.anchoredPosition = _restAnchoredPos + new Vector2(HideOffsetX, 0f);
+        _slideRoutine = StartCoroutine(SlideTo(_restAnchoredPos, duration, hideCanvasAtEnd: false));
+    }
+
+    public void HideSlideOut(float duration = 0.3f)
+    {
+        if (_slideRoutine != null) StopCoroutine(_slideRoutine);
+        Vector2 hiddenPos = _restAnchoredPos + new Vector2(HideOffsetX, 0f);
+        _slideRoutine = StartCoroutine(SlideTo(hiddenPos, duration, hideCanvasAtEnd: true));
+    }
+
+    private IEnumerator SlideTo(Vector2 target, float duration, bool hideCanvasAtEnd)
+    {
+        Vector2 start = _rootRt.anchoredPosition;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            _rootRt.anchoredPosition = Vector2.Lerp(start, target, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        _rootRt.anchoredPosition = target;
+        if (hideCanvasAtEnd) _canvasGo.SetActive(false);
     }
 
     // Chamado pelo clique em qualquer ponto do estado Compact.
@@ -137,23 +253,31 @@ public class CharacterPanel : MonoBehaviour
 
     // ── UI Construction ─────────────────────────────────────────────────────
 
+    // IMPORTANTE: o GameObject deste componente (`this.transform`, o pai de `_canvasGo` logo
+    // abaixo) NUNCA pode ser parented sob outro Canvas (bug real, 2026-07-08) — `_canvasGo` só
+    // funciona como um Canvas de verdade (ScreenSpaceOverlay, CanvasScaler 1920×1080 aplicado)
+    // se for RAIZ. Um Canvas aninhado sob outro Canvas ignora seu próprio `renderMode` e
+    // `CanvasScaler` (limitação documentada do Unity — herda tudo isso do ancestral), fazendo o
+    // `Root` usar o RectTransform padrão (100×100) em vez de tela cheia: painel minúsculo e fora
+    // do lugar. `CharacterSelectController`/`MainMenuController` sempre criam o GameObject do
+    // CharacterPanel SEM chamar `SetParent` (fica raiz da cena) por causa disso.
     private void BuildUI()
     {
-        var canvasGo = new GameObject("Canvas");
-        canvasGo.transform.SetParent(transform, false);
-        var canvas = canvasGo.AddComponent<Canvas>();
+        _canvasGo = new GameObject("Canvas");
+        _canvasGo.transform.SetParent(transform, false);
+        var canvas = _canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 20;
-        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        var scaler = _canvasGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
-        canvasGo.AddComponent<GraphicRaycaster>();
+        _canvasGo.AddComponent<GraphicRaycaster>();
 
         var rootGo = new GameObject("Root");
-        rootGo.transform.SetParent(canvasGo.transform, false);
+        rootGo.transform.SetParent(_canvasGo.transform, false);
         _rootRt = rootGo.AddComponent<RectTransform>();
-        _rootRt.anchorMin = new Vector2(1f, RootAnchorBottom);
-        _rootRt.anchorMax = new Vector2(1f, RootAnchorTop);
+        _rootRt.anchorMax = new Vector2(1f, _anchorTop);
+        _rootRt.anchorMin = new Vector2(1f, _anchorBottom);
         _rootRt.offsetMin = new Vector2(-(PanelWidth + EdgeMargin), 0f);
         _rootRt.offsetMax = new Vector2(-EdgeMargin, 0f);
 
@@ -169,7 +293,7 @@ public class CharacterPanel : MonoBehaviour
 
         // Criado por último — sibling mais recente do canvasGo, desenha por cima do Root
         // inteiro (Compact/Expanded), independente de qual dos dois estiver ativo.
-        BuildPopup(canvasGo);
+        BuildPopup(_canvasGo);
     }
 
     private void BuildCompact(GameObject root)
@@ -179,7 +303,7 @@ public class CharacterPanel : MonoBehaviour
         var rt = _compactGo.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(0f, 1f); rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot     = new Vector2(0.5f, 1f);
-        rt.offsetMin = new Vector2(0f, -CompactHeight); rt.offsetMax = Vector2.zero;
+        rt.offsetMin = new Vector2(0f, -(CompactHeight + LevelXpExtra)); rt.offsetMax = Vector2.zero;
         _compactCg = _compactGo.AddComponent<CanvasGroup>();
 
         var bg = _compactGo.AddComponent<Image>();
@@ -190,7 +314,19 @@ public class CharacterPanel : MonoBehaviour
         btn.targetGraphic = bg;
         btn.onClick.AddListener(Expand);
 
-        _compactInfo = BuildInfoBlock(_compactGo);
+        // Sub-container do tamanho FIXO de sempre (CompactHeight) — BuildInfoBlock usa frações
+        // relativas ao próprio container, então precisa continuar recebendo exatamente essa
+        // altura pra renderizar idêntico ao 01_MainMenu; quem cresce é só o _compactGo por fora,
+        // pra sobrar espaço pro LevelXp abaixo (ver BuildLevelXpBox).
+        var infoInnerGo = new GameObject("InfoInner");
+        infoInnerGo.transform.SetParent(_compactGo.transform, false);
+        var iirt = infoInnerGo.AddComponent<RectTransform>();
+        iirt.anchorMin = new Vector2(0f, 1f); iirt.anchorMax = new Vector2(1f, 1f);
+        iirt.pivot     = new Vector2(0.5f, 1f);
+        iirt.offsetMin = new Vector2(0f, -CompactHeight); iirt.offsetMax = Vector2.zero;
+        _compactInfo = BuildInfoBlock(infoInnerGo);
+
+        if (_showLevelXp) BuildLevelXpBox(_compactGo, CompactHeight, _compactInfo);
     }
 
     // Estado expandido: bloco de info (mesmo layout do Compact) no topo + Skills/Armas
@@ -222,21 +358,83 @@ public class CharacterPanel : MonoBehaviour
         irt.offsetMin = new Vector2(0f, -CompactHeight); irt.offsetMax = Vector2.zero;
         _expandedInfo = BuildInfoBlock(infoGo);
 
+        if (_showLevelXp) BuildLevelXpBox(_expandedGo, CompactHeight, _expandedInfo);
+
+        // Divider/ScrollArea deslocados pra baixo pelo espaço extra do LevelXp (0 quando
+        // showLevelXp=false — comportamento idêntico ao de sempre no 01_MainMenu).
+        float belowInfo = CompactHeight + LevelXpExtra;
+
         var lineGo = new GameObject("Divider");
         lineGo.transform.SetParent(_expandedGo.transform, false);
         var lrt = lineGo.AddComponent<RectTransform>();
         lrt.anchorMin = new Vector2(0f, 1f); lrt.anchorMax = new Vector2(1f, 1f);
         lrt.pivot     = new Vector2(0.5f, 1f);
-        lrt.offsetMin = new Vector2(20f, -(CompactHeight + 3f));
-        lrt.offsetMax = new Vector2(-20f, -CompactHeight);
+        lrt.offsetMin = new Vector2(20f, -(belowInfo + 3f));
+        lrt.offsetMax = new Vector2(-20f, -belowInfo);
         lineGo.AddComponent<Image>().color = _theme.currencyGold;
 
         var scrollAreaGo = new GameObject("ScrollArea");
         scrollAreaGo.transform.SetParent(_expandedGo.transform, false);
         var srt = scrollAreaGo.AddComponent<RectTransform>();
         srt.anchorMin = Vector2.zero; srt.anchorMax = Vector2.one;
-        srt.offsetMin = Vector2.zero; srt.offsetMax = new Vector2(0f, -(CompactHeight + 6f));
+        srt.offsetMin = Vector2.zero; srt.offsetMax = new Vector2(0f, -(belowInfo + 6f));
         BuildSkillsAndWeapons(scrollAreaGo);
+    }
+
+    // Mesmo estilo visual de CharacterCardUI.BuildLevelXpBar / MainMenuCharacterPreview.
+    // BuildLevelXpHud (fundo sólido, "Level X" acima, barra grossa com "atual/necessário"
+    // centralizada dentro dela) — só chamado quando _showLevelXp=true, logo abaixo do bloco de
+    // info de sempre (nome/winrate/HP/pips), sem alterar esse bloco.
+    private void BuildLevelXpBox(GameObject parent, float topOffset, InfoBlockRefs refs)
+    {
+        var boxGo = new GameObject("LevelXp");
+        boxGo.transform.SetParent(parent.transform, false);
+        var boxRt = boxGo.AddComponent<RectTransform>();
+        boxRt.anchorMin = new Vector2(0f, 1f); boxRt.anchorMax = new Vector2(1f, 1f);
+        boxRt.pivot = new Vector2(0.5f, 1f);
+        boxRt.offsetMin = new Vector2(20f, -(topOffset + LevelXpGap + LevelXpBoxHeight));
+        boxRt.offsetMax = new Vector2(-20f, -(topOffset + LevelXpGap));
+        var boxImg = boxGo.AddComponent<Image>();
+        boxImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.35f), 10f);
+        boxImg.type = Image.Type.Sliced;
+
+        var lvlGo = new GameObject("LevelText");
+        lvlGo.transform.SetParent(boxGo.transform, false);
+        var lvlRt = lvlGo.AddComponent<RectTransform>();
+        lvlRt.anchorMin = new Vector2(0.05f, 0.58f); lvlRt.anchorMax = new Vector2(0.95f, 0.98f);
+        lvlRt.offsetMin = lvlRt.offsetMax = Vector2.zero;
+        refs.level = lvlGo.AddComponent<TextMeshProUGUI>();
+        refs.level.fontSize = 14; refs.level.fontStyle = FontStyles.Bold;
+        refs.level.color = TextColor;
+        refs.level.alignment = TextAlignmentOptions.Center;
+
+        var barBgGo = new GameObject("BarBg");
+        barBgGo.transform.SetParent(boxGo.transform, false);
+        var barBgRt = barBgGo.AddComponent<RectTransform>();
+        barBgRt.anchorMin = new Vector2(0.06f, 0.06f); barBgRt.anchorMax = new Vector2(0.94f, 0.52f);
+        barBgRt.offsetMin = barBgRt.offsetMax = Vector2.zero;
+        var barBgImg = barBgGo.AddComponent<Image>();
+        barBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 6f);
+        barBgImg.type = Image.Type.Sliced;
+
+        var fillGo = new GameObject("Fill");
+        fillGo.transform.SetParent(barBgGo.transform, false);
+        var fillRt = fillGo.AddComponent<RectTransform>();
+        fillRt.anchorMin = new Vector2(0f, 0f); fillRt.anchorMax = new Vector2(0f, 1f);
+        fillRt.offsetMin = fillRt.offsetMax = Vector2.zero;
+        refs.xpFill = fillGo.AddComponent<Image>();
+        refs.xpFill.sprite = UIShapeUtil.RoundedRect(_theme.currencyGold, 5f);
+        refs.xpFill.type = Image.Type.Sliced;
+
+        var xpTxtGo = new GameObject("XpText");
+        xpTxtGo.transform.SetParent(barBgGo.transform, false);
+        var xpRt = xpTxtGo.AddComponent<RectTransform>();
+        xpRt.anchorMin = Vector2.zero; xpRt.anchorMax = Vector2.one;
+        xpRt.offsetMin = xpRt.offsetMax = Vector2.zero;
+        refs.xpValue = xpTxtGo.AddComponent<TextMeshProUGUI>();
+        refs.xpValue.fontSize = 12; refs.xpValue.fontStyle = FontStyles.Bold;
+        refs.xpValue.color = TextColor;
+        refs.xpValue.alignment = TextAlignmentOptions.Center;
     }
 
     // Nome + Win Rate + HP + STR/AGI/SPD — mesmo bloco visual usado no Compact e no topo do
@@ -978,7 +1176,7 @@ public class CharacterPanel : MonoBehaviour
 
     private void RefreshAll()
     {
-        var p = _holder?.currentProfile;
+        var p = _overrideProfile != null ? _overrideProfile : _holder?.currentProfile;
         if (p == null) { _compactInfo.name.text = "—"; _expandedInfo.name.text = "—"; return; }
 
         // Placeholder simbólico (2026-07-07): profile.winRate nunca é escrito em lugar nenhum
@@ -991,6 +1189,9 @@ public class CharacterPanel : MonoBehaviour
              effReversal, effCounter, effCombo, effArmor, effAccuracy, effBlock,
              effReversalAfterBlock, effDisarm, _, _, _) = p.GetEffectiveStats();
 
+        int xpReq = XpSystem.XpRequired(p.level);
+        float xpPct = xpReq > 0 ? Mathf.Clamp01((float)p.xpCurrent / xpReq) : 0f;
+
         foreach (var refs in new[] { _compactInfo, _expandedInfo })
         {
             refs.name.text = p.profileName;
@@ -999,6 +1200,13 @@ public class CharacterPanel : MonoBehaviour
             refs.str.SetValue(effStr);
             refs.agi.SetValue(effAgi);
             refs.spd.SetValue(effSpd);
+
+            if (_showLevelXp && refs.level != null)
+            {
+                refs.level.text = $"Level {p.level}";
+                refs.xpValue.text = $"{p.xpCurrent}/{xpReq}";
+                refs.xpFill.rectTransform.anchorMax = new Vector2(Mathf.Max(xpPct, 0.001f), 1f);
+            }
         }
 
         RefreshSkills(p);

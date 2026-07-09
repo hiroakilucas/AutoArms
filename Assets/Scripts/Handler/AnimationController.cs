@@ -49,6 +49,20 @@ public class AnimationController : MonoBehaviour
         yield return new WaitForSeconds(duration);
     }
 
+    // Fora de combate (ex: preview de personagem em 02_SelectCharacter reagindo a clique) não
+    // existe um TurnEnd depois pra sair do estado Slashing — a única transição de saída dele é o
+    // toggle do bool JumpStart (ver "Bug de animação travada" no CLAUDE.md), então replicamos só
+    // esse toggle aqui em vez de PlayJumpStart (que tocaria o hop de verdade, deslocando o
+    // personagem visualmente sem nenhum PlayerCombat pra reposicionar depois).
+    public IEnumerator PlaySlash(float duration)
+    {
+        anim.SetTrigger("Slashing");
+        yield return new WaitForSeconds(duration);
+        anim.SetBool("JumpStart", true);
+        yield return null;
+        anim.SetBool("JumpStart", false);
+    }
+
     // Corte direto pro estado Idle, sem transição/blend nenhuma — usado quando o personagem
     // precisa "sair" do Slashing pra receber um trigger que só tem transição de entrada a partir
     // do Idle (ex: Hurt, ver CombatPlayer case Reversal) mas não pode mostrar NENHUMA animação
