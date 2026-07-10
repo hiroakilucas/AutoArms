@@ -66,16 +66,16 @@ public class CharacterSelectController : MonoBehaviour
     private GameObject previewCharacterGo;
     private CharacterPreviewReaction previewReaction;
 
-    // Grid ancorado na lateral esquerda — largura fixa (só o suficiente pra ~3 colunas de
-    // CharacterCardUI visíveis, o resto scrolla horizontalmente), deixando o centro livre pro
-    // preview grande e a lateral direita livre pro painel de detalhe (largura fixa própria do
-    // CharacterPanel, ver abaixo).
+    // Grid ancorado na lateral esquerda (2026-07-10: painel bem maior, "quase tela cheia") —
+    // largura/altura pra caber exatamente 3 colunas × 3 linhas de CharacterCardUI visíveis de
+    // uma vez (3 × CardWidth(600) + 2 × spacing(17) = 1834; 3 × CardHeight(310) + 2 × spacing(17)
+    // = 964); o resto (4ª coluna em diante) scrolla horizontalmente. Valores calibrados
+    // manualmente pelo usuário no Inspector (Width/Height/PosX/PosY do Scroll View) e replicados
+    // aqui.
     private const float GridLeftMargin = 40f;
-    private const float GridScrollWidth = 560f; // 3 × CharacterCardUI.CardWidth(170) + 2 × spacing(16) = 542, +folga
-
-    // Exatamente 3 linhas de CharacterCardUI.CardHeight (246) + 2 espaçamentos (16) = 770 —
-    // "caber exatamente 3 personagens visíveis verticalmente", scroll horizontal revela o resto.
-    private const float ScrollHeight = 770f;
+    private const float GridPosY = -21f;
+    private const float GridScrollWidth = 1834f;
+    private const float ScrollHeight = 964f;
 
     // Janela vertical compartilhada por `CharacterPanel` (Root) e pelo anchor Y do `Portrait`
     // (ver `PortraitTop/Bottom` abaixo) — já não define mais uma moldura própria em volta de
@@ -294,7 +294,7 @@ public class CharacterSelectController : MonoBehaviour
         var grid = gridContent.GetComponent<GridLayoutGroup>();
         if (grid == null) grid = gridContent.gameObject.AddComponent<GridLayoutGroup>();
         grid.cellSize = new Vector2(CharacterCardUI.CardWidth, CharacterCardUI.CardHeight);
-        grid.spacing = new Vector2(16f, 16f);
+        grid.spacing = new Vector2(17f, 17f);
         grid.startAxis = GridLayoutGroup.Axis.Vertical;
         grid.constraint = GridLayoutGroup.Constraint.FixedRowCount;
         grid.constraintCount = 3;
@@ -304,7 +304,7 @@ public class CharacterSelectController : MonoBehaviour
         // pivot=(0,1), sizeDelta.y=300) — trocar só anchorMin/Max/pivot sem zerar sizeDelta/
         // anchoredPosition deixava esse sizeDelta.y=300 residual sendo somado à altura esticada
         // (anchorMin.y=0/anchorMax.y=1 já casa exatamente com o Viewport; +300 sobrando empurrava
-        // o conteúdo mais alto que os 770px de 3 linhas, cortando o primeiro card no topo e
+        // o conteúdo mais alto que os ScrollHeight px de 3 linhas, cortando o primeiro card no topo e
         // descentralizando tudo). Zerado explicitamente — só a LARGURA (sizeDelta.x) continua
         // controlada pelo ContentSizeFitter horizontal, a altura sempre casa exata com o Viewport.
         var contentRt = gridContent.GetComponent<RectTransform>();
@@ -338,7 +338,7 @@ public class CharacterSelectController : MonoBehaviour
         scrollRt.anchorMin = scrollRt.anchorMax = new Vector2(0f, 0.5f);
         scrollRt.pivot = new Vector2(0f, 0.5f);
         scrollRt.sizeDelta = new Vector2(GridScrollWidth, ScrollHeight);
-        scrollRt.anchoredPosition = new Vector2(GridLeftMargin, 0f);
+        scrollRt.anchoredPosition = new Vector2(GridLeftMargin, GridPosY);
     }
 
     // Container/overlay que envolve o painel de detalhe (2026-07-08, correção — 2ª rodada: a 1ª
