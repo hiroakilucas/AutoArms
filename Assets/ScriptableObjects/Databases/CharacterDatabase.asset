@@ -16,6 +16,19 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 7b3985eecc7ce6d4390d451241be06e1, type: 2}
   - {fileID: 11400000, guid: f15e5749888ecff47ae9b3b62141b72c, type: 2}
   - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  - {fileID: 11400000, guid: ad12969c5b53c69448673e810508f807, type: 2}
+  - {fileID: 11400000, guid: 5c25dd5ccebe9024baeadcf5e7f21463, type: 2}
+  - {fileID: 11400000, guid: 2114ae07743e1c348981739830bd2d2b, type: 2}
+  - {fileID: 11400000, guid: b641cd56029be614786da3950fd088dd, type: 2}
+  - {fileID: 11400000, guid: b5a5cceb12b2e1648a1edaa6408bac5a, type: 2}
+  - {fileID: 11400000, guid: f822892f1d2973549908469c2b493705, type: 2}
+  - {fileID: 11400000, guid: e6380108d2388f640a69440744768f92, type: 2}
+  - {fileID: 11400000, guid: e0d525e6a4208f249b53ae55444ee2c6, type: 2}
+  - {fileID: 11400000, guid: 7ba75c5a3fb413846abaf14a62242e22, type: 2}
+  - {fileID: 11400000, guid: 0083a95c02785614e8bf3c1d00bebc80, type: 2}
+  - {fileID: 11400000, guid: 3a64a90f18c13454a97df2f5fc944771, type: 2}
+  - {fileID: 11400000, guid: df12d249f8a6da048a812b17c57dd603, type: 2}
+  - {fileID: 11400000, guid: fb5c65ee28912ff41993c5fc1c4a0ad4, type: 2}
   opponentCharacters:
   - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
   - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}

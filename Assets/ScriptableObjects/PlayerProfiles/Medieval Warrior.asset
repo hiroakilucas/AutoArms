@@ -14,16 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Medieval Warrior
   characterPrefab: {fileID: 1545498302350534, guid: 927828765a1dfce40ad37a9e0b167b7b, type: 3}
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: acde409e0b6e5794e80031314f35d193, type: 3}
   splashArt: {fileID: 21300000, guid: 05fd461862a471941a9d35c9de6fe39a, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 62
-  str: 5
-  agility: 4
-  speed: 5
+  maxHealth: 70
+  str: 4
+  agility: 5
+  speed: 3
   armor: 0
   evasion: 0
   accuracy: 0
@@ -34,11 +36,10 @@ MonoBehaviour:
   reversalAfterBlock: 0
   criticalChance: 0
   hitSpeed: 1
-  skills:
-  - {fileID: 11400000, guid: 64c7d62ad6b4c894ea6a00ff18c91db8, type: 2}
+  skills: []
   pets: 
-  level: 2
+  level: 1
   winRate: 0
-  xpCurrent: 1
-  xpRequired: 6
-  battlesRemaining: 3
+  xpCurrent: 0
+  xpRequired: 5
+  battlesRemaining: 6

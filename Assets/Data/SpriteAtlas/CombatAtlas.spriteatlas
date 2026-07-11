@@ -105,7 +105,6 @@ SpriteAtlas:
     - 118e5c0682e2ebd4fb98709b496095ca: 21300000
     - f418a326c3cc3024bb131dc7d7e4e5bc: 21300000
     - 14d7747688a86fa40b4b19d42f47ca41: 21300000
-    - 766b2496787e37547823af8b6ff78ac9: 21300000
     - 87272896884630e489bdba06eda629f4: 21300000
     - 0003dc96f264fad4dbde307d2e633606: 21300000
     - 1536c1f6754ba444a896651c47e98273: 21300000
@@ -233,7 +232,6 @@ SpriteAtlas:
   - {fileID: 21300000, guid: 118e5c0682e2ebd4fb98709b496095ca, type: 3}
   - {fileID: 21300000, guid: f418a326c3cc3024bb131dc7d7e4e5bc, type: 3}
   - {fileID: 21300000, guid: 14d7747688a86fa40b4b19d42f47ca41, type: 3}
-  - {fileID: 21300000, guid: 766b2496787e37547823af8b6ff78ac9, type: 3}
   - {fileID: 21300000, guid: 87272896884630e489bdba06eda629f4, type: 3}
   - {fileID: 21300000, guid: 0003dc96f264fad4dbde307d2e633606, type: 3}
   - {fileID: 21300000, guid: 1536c1f6754ba444a896651c47e98273, type: 3}
@@ -360,7 +358,6 @@ SpriteAtlas:
   - Left Hand
   - Right Leg
   - Boomerang3
-  - Weapon
   - Shuriken3
   - Anchor3
   - Boomerang2

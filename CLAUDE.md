@@ -6,6 +6,7 @@
 - PETS.md — antes de alterar sistema de pets
 - ROADMAP_FUTURO.md — fases 4-13, monetização, infra, áudio, matchmaking, social, configurações
 - UI_PALETTE.md — paleta de cores central de UI (`UITheme`/`UIThemeApplier`) — ler antes de hardcodear cor num elemento de interface novo
+- CHARACTER_IMPORT_CHECKLIST.md — ler antes de importar/processar qualquer personagem novo (pacote CraftPix) — problemas reais já encontrados (bone não portável entre pacotes, GUID duplicado em variantes numeradas, etc.) e as ferramentas de `Tools > AutoArms`
 - CHANGELOG.md — histórico completo de atualizações
 - VISION.md — conceito do jogo, inspirações, progressão (raramente necessário)
 
@@ -20,6 +21,7 @@ Foco atual: Fase 1 (Interface & Personagens) — fluxo de menu/seleção de opon
 | Tasks Fases 4–13 | ROADMAP_FUTURO.md |
 | Cor de UI nova/alterada, paleta central (`UITheme`) | UI_PALETTE.md |
 | Arquitetura de combate, ScriptableObjects, fórmulas, cenas | CLAUDE.md |
+| Problema/solução ao importar personagem novo (bone, retargeting, GUID) | CHARACTER_IMPORT_CHECKLIST.md |
 | Toda tarefa concluída — 1 linha `YYYY-MM-DD: resumo` | CHANGELOG.md |
 
 **Nunca no CLAUDE.md:** bugs resolvidos, versões revertidas, detalhe de skill/pet individual, Fases 4–9.
@@ -900,7 +902,7 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Melhorar interface da tela de escolha de personagens — grid no estilo "grid de heróis" do Brawl Stars (`CharacterCardUI`: portrait com fundo colorido por personagem, tokens do `UITheme`; nome sobreposto numa faixa escura na base; Level+barra de XP compacta abaixo), fundo com gradiente `backgroundTop`/`backgroundBottom`. **Reescrita completa (2026-07-08)**: `CharacterSelectController` reescrito do zero — o antigo painel de preview lateral (`LeftPanel`: personagem duplicado instanciado via `SpawnPoint` + labels soltos de Level/Winrate/Xp/Jogos, nunca estilizados) e o antigo `DetailPanel` (abas Habilidades/Armas mortas, botões com `onClick` quebrado) foram **desativados por completo** (`m_IsActive: 0` — árvore de filhos aninhados não totalmente mapeada, mais seguro que deletar à mão via YAML); o grid (`RightPanel`) agora ocupa a tela inteira (redimensionado via código em `ResizeGridPanelFullScreen`, sem a faixa vazia reservada à esquerda que sobrava antes). `CanvasScaler` da cena corrigido de `Constant Pixel Size`/800×600 (inconsistente, provável causa raiz de parte da bagunça de layout) pra `Scale With Screen Size`/1920×1080, igual ao resto do projeto. Grid: `GridLayoutGroup` com `Constraint.FixedRowCount=3` (exatamente 3 personagens visíveis verticalmente) + `ScrollRect.horizontal=true/vertical=false` — revela novas colunas à direita conforme `CharacterDatabase.unlockedCharacters` cresce, sem ajuste manual. Cards ordenados: habilitado (`== SelectedProfileHolder.currentProfile`) primeiro, bloqueados depois. **Painel de detalhe agora é o MESMO `CharacterPanel` do `01_MainMenu`** (não mais um painel ad-hoc) — `CharacterPanel` ganhou `showLevelXp`/`startHidden` (opcionais, default `false`, sem afetar o uso existente no menu) + `ShowSlideIn()`/`HideSlideOut()` (anima `Root.anchoredPosition` de/pra fora da tela) — instanciado já escondido, desliza a partir da direita ao clicar num card habilitado, headers/tabs/pips 100% reaproveitados. `Medieval Warrior Girl` segue em `CharacterDatabase.unlockedCharacters` (adicionada 2026-07-08, ver Characters acima) só pra aparecer bloqueada no grid — sem afetar o hardcode dela como Player2 em `04_CombatScenePVP`.
 - [ ] Criação do primeiro personagem masculino e feminino
 - [ ] **Tutorial das primeiras batalhas**: fluxo guiado pro jogador novo logo após criar o primeiro personagem — explica o loop básico (combate automático, XP, level up, escolha de bônus) durante as primeiras lutas, antes de soltar o jogador sem contexto na tela principal.
-- [ ] Adicionar novos prefabs de personagens guardados
+- [x] Adicionar novos prefabs de personagens guardados — pipeline de importação incremental (`Assets/Editor/FemaleCharacterImportGenerator.cs`, `Tools > AutoArms`) + 13 personagens novos processados (ver CHARACTER_IMPORT_CHECKLIST.md), ocultos/travados até liberação manual via `isUnlockedForSelection`/`isPlayable`
 - [ ] Atributos aleatórios ao criar personagem level 1 (vida, força, agilidade, velocidade)
 - [x] Habilidades inspiradas no My Brute — 54 skills implementadas (ver SKILLS_SYSTEM.md/SKILLS_PASSIVE.md/SKILLS_ACTIVE.md), maioria espelhando o roster original (Vitality, Herculean Strength, Weapon Master, Untouchable, etc.)
 - [x] Criar habilidades originais adicionais — várias sem equivalente no My Brute original ou com mecânica redefinida do zero pelo usuário: Chaining, Determination, Reconnaissance, Deity, Saboteur/Spy (exclusivas do LaBrute), Repulse, Sticky Hands, Resistant, Fast Metabolism, Mimic, entre outras

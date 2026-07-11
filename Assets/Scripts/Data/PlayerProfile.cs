@@ -22,6 +22,12 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("Prefab do personagem (deve conter todos os componentes necess�rios para o combate)")]
     public GameObject characterPrefab;
 
+    [Tooltip("Controla se este personagem aparece no grid de 02_SelectCharacter. Perfis j� existentes na hora em que este campo foi criado permanecem true automaticamente (Unity usa o valor do inicializador quando a chave n�o existe ainda no .asset serializado).")]
+    public bool isUnlockedForSelection = true;
+
+    [Tooltip("Controla se este personagem fica clic�vel/escolh�vel pra batalhar dentro do grid (diferente de isUnlockedForSelection, que s� controla se ele aparece). false = aparece no grid mas travado/cinza, sem Button. Default false por seguran�a � precisa ser ligado manualmente por personagem, inclusive nos j� existentes.")]
+    public bool isPlayable = false;
+
     [Tooltip("�cone utilizado na UI de sele��o de personagens")]
     public Sprite previewIcon;
 

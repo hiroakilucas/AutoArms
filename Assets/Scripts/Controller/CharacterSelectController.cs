@@ -266,13 +266,18 @@ public class CharacterSelectController : MonoBehaviour
 
         EnsureGridLayout();
 
-        var currentProfile = selectedProfileHolder != null ? selectedProfileHolder.currentProfile : null;
-
+        // isUnlockedForSelection (2026-07-10) filtra quem aparece no grid; isPlayable
+        // (2026-07-10) decide, dentre esses, quem fica clicável/escolhível pra batalhar —
+        // os dois são independentes de `SelectedProfileHolder.currentProfile` agora (antes só o
+        // currentProfile ficava clicável, um beco sem saída pra escolher qualquer outro
+        // personagem pela UI). Não-jogável ainda aparece no grid, só travado/cinza sem Button.
+        // p == null: referência órfã (asset deletado por fora sem tirar da lista) — ignora em vez
+        // de derrubar a cena inteira com NullReferenceException.
         var ordered = new List<PlayerProfile>();
         foreach (var p in characterDatabase.unlockedCharacters)
-            if (p == currentProfile) ordered.Add(p);
+            if (p != null && p.isUnlockedForSelection && p.isPlayable) ordered.Add(p);
         foreach (var p in characterDatabase.unlockedCharacters)
-            if (p != currentProfile) ordered.Add(p);
+            if (p != null && p.isUnlockedForSelection && !p.isPlayable) ordered.Add(p);
 
         foreach (var profile in ordered)
         {
@@ -280,7 +285,7 @@ public class CharacterSelectController : MonoBehaviour
             cardGo.transform.SetParent(gridContent, false);
             cardGo.AddComponent<RectTransform>();
             var card = cardGo.AddComponent<CharacterCardUI>();
-            card.Setup(profile, this, theme, profile == currentProfile);
+            card.Setup(profile, this, theme, profile.isPlayable);
         }
     }
 
