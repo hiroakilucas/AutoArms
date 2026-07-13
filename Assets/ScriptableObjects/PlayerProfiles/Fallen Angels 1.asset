@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Fallen Angels 1
   characterPrefab: {fileID: 1797753984441286, guid: e0bd3015af80d894da39ba968ceb587e, type: 3}
-  isUnlockedForSelection: 1
-  isPlayable: 1
+  isUnlockedForSelection: 0
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 4ec5ce64544aa904c9724350062e1805, type: 3}
   splashArt: {fileID: 0}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

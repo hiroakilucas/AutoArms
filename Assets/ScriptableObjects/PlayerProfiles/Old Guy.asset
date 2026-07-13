@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8842f4dfd7eaca8429084a06f44ec3c6, type: 3}
+  m_Name: Old Guy
+  m_EditorClassIdentifier: 
+  profileName: Old Guy
+  characterPrefab: {fileID: 1077442858634602, guid: 30bdaf3c3f2eb1a4eae2372b0c86b8a4, type: 3}
+  isUnlockedForSelection: 0
+  isPlayable: 0
+  previewIcon: {fileID: 21300000, guid: f7e2925f83f7711458a76d27f1681eaf, type: 3}
+  splashArt: {fileID: 0}
+  attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
+  weapons: []
+  scale: {x: 1, y: 1, z: 1}
+  startPos: {x: -6.3, y: -2.407897}
+  maxHealth: 70
+  str: 5
+  agility: 3
+  speed: 4
+  armor: 0
+  evasion: 0
+  accuracy: 0
+  initiative: 0
+  reversal: 0
+  counter: 0
+  blockBonus: 0
+  reversalAfterBlock: 0
+  criticalChance: 0
+  hitSpeed: 1
+  skills: []
+  pets: 
+  level: 1
+  winRate: 0
+  xpCurrent: 0
+  xpRequired: 5
+  battlesRemaining: 6

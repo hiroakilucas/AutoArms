@@ -14,8 +14,13 @@ Ler antes de importar/processar qualquer personagem novo (pacote CraftPix). Ferr
    transições, replicadas campo a campo do controller da Assassin Guy) e o `PlayerProfile`
    (`isUnlockedForSelection = false`, `isPlayable = false` por padrão — ligar manualmente no
    Inspector quando for liberar).
-4. `Tools > AutoArms > Retarget Slashing Dagger For All Characters` — roda depois do passo 3 pra
-   TODOS os personagens de uma vez (pula Assassin Guy/Medieval Warrior/Medieval Warrior Girl).
+4. **Não precisa mais rodar separado (2026-07-11)** — o passo 3 (`Import Female Character`) já
+   retargeta o "Slashing Dagger" automaticamente pra cada personagem assim que o Animator
+   Controller é montado (`RetargetSlashingDaggerNow`, chamado de dentro de `ProcessCharacter`).
+   `Tools > AutoArms > Retarget Slashing Dagger For All Characters` continua existindo só pra
+   **reprocessar personagens importados ANTES deste ajuste** (idempotente, não quebra quem já
+   está retargetado) — inclui `Magician_Girl_1/2`, `Medusa_2`, `Winter_Witch_1/2` (importados no
+   dia anterior a este ajuste, ficaram com o clipe cru/sem retarget até rodar esse menu uma vez).
    Confere no Console: `X/Y bones resolvidos (Z%)` por personagem — abaixo de 70% = revisar
    manualmente (provável estrutura de rig diferente demais pra reaproveitar).
 
@@ -75,7 +80,84 @@ que ser apagados por completo depois de ficarem corrompidos assim. Prevenção: 
 `.unitypackage` direto pelo Unity (`Assets > Import Package`), nunca copiar pastas já importadas
 por fora pra criar a próxima variante.
 
-### 7. `CharacterDatabase.unlockedCharacters` pode acumular referência órfã
+**Confirmado de novo (2026-07-11, Magician_Girl_2)**: o GUID duplicado não é um acidente de quem
+importa — os 3 `.unitypackage` (`Magician_Girl_1/2/3`) vêm com os **mesmos GUIDs internos
+craftados pela CraftPix** (mesmo template clonado, só a arte muda), confirmado extraindo o
+`.unitypackage` (é só um `tar.gz` — cada pasta é um GUID, contém `asset`/`asset.meta`/`pathname`) e
+comparando: o `Body.png` do pacote da variante 2 tem o **mesmo** guid que o `Magician_Girl_3` já
+processado no projeto. Ou seja, mesmo importando cada `.unitypackage` direto pelo Unity (não por
+fora), a colisão acontece se duas variantes forem importadas na mesma sessão/projeto — o problema
+não é só "não copiar por fora", é o pacote em si.
+**Fix aplicado**: extrair o `.unitypackage`, copiar só os arquivos de `Assets/Vector Parts/*` que
+o projeto de fato usa (as PNGs de corpo + `Animations.scml` — **sem** `Sword.png`/`.prefab`/
+`.controller` do pacote, que são descartados e regerados do zero pelo
+`Tools > AutoArms > Import Female Character`, mesmo padrão já usado pelas outras pastas
+`Vector Parts/` do projeto), gerar um **GUID novo aleatório por arquivo** (regravando só a linha
+`guid:` do `.meta`, sem tocar no resto) antes de colocar em
+`Assets/Personagens/<Nome>/Vector Parts/`. Como o `.prefab`/`.controller` do pacote (os únicos
+arquivos que referenciavam as PNGs por GUID) são descartados, não sobra nenhuma referência cruzada
+pra reescrever — só regravar o GUID próprio de cada `.meta` já resolve, sem precisar editar YAML
+de prefab/controller. `Assets/Spriter2UnityDX/*` e `Assets/Scenes` do pacote são ignorados (já
+existem no projeto, mesmos GUIDs, não precisam ser reimportados). **A pasta `Vector Parts` em si
+também tem GUID próprio** (o `.meta` da pasta) — regenerar junto, senão duas variantes da mesma
+coleção (ex. `Samurai_2`/`_3` abaixo) colidem no GUID da PASTA mesmo com os arquivos de dentro já
+corrigidos.
+
+**Confirmado de novo (2026-07-13, `Samurai_2`/`Samurai_3`/`Vampire_Hunter_1`)**: mesmo diagnóstico
+de sempre, mas com um detalhe novo — **nem toda variante numerada colide**. Comparando os GUIDs
+extraídos de cada `.unitypackage` contra tudo que já existe no projeto (não só contra a variante
+irmã, contra `Assets/` inteiro):
+- `Samurai_1`/`Samurai_2`/`Samurai_3`: os 3 pacotes compartilham os mesmos 13 GUIDs internos entre
+  si (mesmo template CraftPix). Nenhum dos 3 tinha sido importado ainda, então não colidiam com o
+  projeto — mas colidiriam **entre si** assim que 2 ou mais fossem importados. `Samurai_1` foi
+  deixado para import normal (só ele "ganha" os GUIDs originais); `Samurai_2`/`Samurai_3` tiveram
+  GUID novo gerado por arquivo antes de entrar no projeto.
+- `Fallen_Angels_3`: comparado contra o projeto inteiro (incluindo `Fallen_Angels_1`, já
+  processado) — **zero colisão**. Nem toda variante numerada da mesma coleção reusa GUID; não dá
+  pra assumir automaticamente, tem que comparar caso a caso antes de importar.
+- `Vampire_Hunter_1`: colisão confirmada e grave — os 17 GUIDs do pacote são **idênticos** aos de
+  `Vampire_Hunter_3`, já totalmente processado no projeto (com `PlayerProfile` próprio apontando
+  pro prefab dele). Importar como veio do pacote faria o Unity tratar os arquivos como o mesmo
+  asset de `Vampire_Hunter_3`, sobrescrevendo/corrompendo o personagem já pronto — mesmo fix
+  aplicado (GUID novo por arquivo + pasta).
+
+Fluxo usado pra achar as colisões antes de tocar em qualquer arquivo: extrair o `.unitypackage`
+(é `tar.gz`), montar um mapa `guid → pathname` a partir dos arquivos `pathname` de cada subpasta, e
+comparar cada guid contra `grep -r "guid: <guid>" Assets/` do projeto inteiro (não só a pasta do
+personagem correspondente) — só assim `Fallen_Angels_3` pôde ser confirmado como seguro em vez de
+assumido como mais um caso de colisão só por ser variante numerada.
+
+### 7. `Sword.png` do pacote CraftPix não deve ser importado (decisão do usuário)
+O corpo do personagem (`Vector Parts`/`Graphics`) não deve carregar nenhum sprite de espada
+próprio — só as armas do sistema `WeaponData`/`WeaponHandler` (equipadas em runtime, ver
+CLAUDE.md → **Combat Systems**) devem aparecer na mão. Todo pacote CraftPix já vem com um
+`Sword.png` solto (bone "Sword" da rig, sprite estático "embainhada"/parada) que não tem relação
+nenhuma com o sistema de armas do jogo — se deixado, fica um sprite de espada permanente e sem uso
+por baixo de qualquer arma equipada de verdade.
+
+**Confirmado seguro remover antes do import** (`Assets/Spriter2UnityDX/Editor/PrefabBuilder.cs`,
+`GetSpriteAtPath`, linha ~184): quando o arquivo não existe, o método só faz
+`Debug.LogErrorFormat("Error: No Sprite was found at {0}", path)` e retorna `null` — **não** seta a
+flag `success` (isso só acontece no branch de textura com tipo/pivot errado, arquivo **presente**
+mas mal configurado). Ou seja, a ausência de `Sword.png` não aborta `PrefabBuilder.Build` nem
+impede o `.prefab`/`.controller` de serem gerados — o bone "Sword" só fica sem sprite (invisível),
+mesmo padrão já em produção em `Vampire_Hunter_3` (também sem `Sword.png`, personagem já jogável).
+
+**Como aplicar**: apagar `Sword.png` + `Sword.png.meta` de dentro de `Vector Parts/` **antes** de
+rodar `Tools > AutoArms > Import Female Character` (ou antes do 1º import pelo Unity, se o pacote
+ainda nem gerou prefab). Se o `.prefab`/`.controller` **já foram gerados** com `Sword.png` presente
+(ex.: pacote importado normalmente antes dessa decisão, caso de `Samurai_1`), apagar também esse
+`.prefab`/`.controller` + o `.meta` do próprio `Animations.scml` — sem o `.meta`, o Unity trata o
+`.scml` como asset novo no próximo refresh e o Spriter2UnityDX regenera os dois do zero, já sem o
+bone morto (evita ficar com uma referência de sprite quebrada presa num prefab já publicado).
+
+**Aplicado em 2026-07-13**: `Citizen_1`, `Desert_Nomad_3`, `Persian_and_Arab_Warriors_3`, `Pirate`,
+`Priest_3`, `Spiritual_Monk_1`, `Technomage_2`, `Thief` (todos ainda crus, só arquivo+`.meta`
+removidos) e `Samurai_1` (prefab/controller já gerados — apagados junto do `.meta` do
+`Animations.scml` pra forçar reimport limpo). Não mexido em personagens que já têm `PlayerProfile`
+publicado (fora de escopo — exigiria editar `.prefab` já em uso, não só um import pendente).
+
+### 8. `CharacterDatabase.unlockedCharacters` pode acumular referência órfã
 Se um `PlayerProfile` for apagado por fora sem tirar da lista, o slot vira `null` no
 `List<PlayerProfile>` e quebra `CharacterSelectController.PopulateCharacterGrid()` com
 `NullReferenceException` ao abrir `02_SelectCharacter`. O código já ignora entradas `null` (não

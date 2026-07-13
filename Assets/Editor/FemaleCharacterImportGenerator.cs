@@ -353,17 +353,49 @@ public static class FemaleCharacterImportGenerator
         if (sPath != tPath) RemapCurvePath(copy, sPath, tPath);
     }
 
-    [MenuItem("Tools/AutoArms/Retarget Slashing Dagger For All Characters")]
-    public static void RetargetSlashingDaggerForAll()
+    // Carrega o clipe/prefab de origem (Assassin Guy) uma vez — usado tanto pelo retarget em lote
+    // (menu abaixo, pra reprocessar personagens já importados antes deste ajuste existir) quanto
+    // pelo retarget automático dentro do pipeline principal (RetargetSlashingDaggerNow).
+    private static bool TryLoadSlashDaggerSource(out AnimationClip sourceClip, out GameObject sourceRoot,
+        out string sourceLeftLegParent, out string sourceRightLegParent)
     {
         const string assassinGuyPrefabPath = "Assets/Personagens/Assassin Guy/Prefab/Assassin Guy.prefab";
         var sourcePath = AssetDatabase.GUIDToAssetPath(SlashingDaggerClipGuid);
-        var sourceClip = AssetDatabase.LoadAssetAtPath<AnimationClip>(sourcePath);
-        var sourceRoot = AssetDatabase.LoadAssetAtPath<GameObject>(assassinGuyPrefabPath);
-        if (sourceClip == null || sourceRoot == null) { Debug.LogError("[Retarget] Clipe/prefab de origem (Assassin Guy) não encontrado."); return; }
+        sourceClip = AssetDatabase.LoadAssetAtPath<AnimationClip>(sourcePath);
+        sourceRoot = AssetDatabase.LoadAssetAtPath<GameObject>(assassinGuyPrefabPath);
+        sourceLeftLegParent = sourceRightLegParent = null;
+        if (sourceClip == null || sourceRoot == null) return false;
+        sourceLeftLegParent = FindImmediateParentName(sourceRoot, "Left Leg");
+        sourceRightLegParent = FindImmediateParentName(sourceRoot, "Right Leg");
+        return true;
+    }
 
-        string sourceLeftLegParent = FindImmediateParentName(sourceRoot, "Left Leg");
-        string sourceRightLegParent = FindImmediateParentName(sourceRoot, "Right Leg");
+    // Chamado dentro de ProcessCharacter logo após o Animator Controller ser montado — retargeta
+    // o estado "Slashing Dagger" recém-criado (ainda com o clipe cru compartilhado) pro corpo do
+    // personagem que está sendo importado agora, sem precisar de uma 2ª passada manual depois.
+    private static void RetargetSlashingDaggerNow(string prefabPath, string controllerPath)
+    {
+        if (!TryLoadSlashDaggerSource(out var sourceClip, out var sourceRoot, out var sourceLeftLegParent, out var sourceRightLegParent))
+        {
+            Debug.LogError("[FemaleCharacterImportGenerator] Retarget Slashing Dagger: clipe/prefab de origem (Assassin Guy) não encontrado — estado ficou com o clipe compartilhado sem retarget.");
+            return;
+        }
+        var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(controllerPath);
+        var state = controller.layers[0].stateMachine.states.Select(s => s.state).FirstOrDefault(s => s.name == "Slashing Dagger");
+        if (state == null) return;
+
+        string report = RetargetSlashingDaggerFor(prefabPath, controllerPath, state, sourceClip, sourceRoot, sourceLeftLegParent, sourceRightLegParent);
+        Debug.Log($"[FemaleCharacterImportGenerator] Slashing Dagger retargetado automaticamente: {report}");
+    }
+
+    [MenuItem("Tools/AutoArms/Retarget Slashing Dagger For All Characters")]
+    public static void RetargetSlashingDaggerForAll()
+    {
+        if (!TryLoadSlashDaggerSource(out var sourceClip, out var sourceRoot, out var sourceLeftLegParent, out var sourceRightLegParent))
+        {
+            Debug.LogError("[Retarget] Clipe/prefab de origem (Assassin Guy) não encontrado.");
+            return;
+        }
 
         int processed = 0;
         foreach (var folderPath in Directory.GetDirectories(PersonagensRoot))
@@ -579,6 +611,16 @@ public static class FemaleCharacterImportGenerator
         var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(controllerPath);
         var prefabForCheck = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
         BuildAnimatorController(controller, prefabForCheck);
+
+        // 3b) Slashing Dagger sai de BuildAnimatorController apontando pro clipe CRU compartilhado
+        // da Assassin Guy (AddCustomState/SlashingDaggerClipGuid) — os valores de posição desse
+        // clipe são absolutos, calibrados pro corpo dela; aplicados sem ajuste num corpo com
+        // proporção diferente, a cabeça (ou outra parte) "descola" nos keyframes de quase-repouso
+        // (ver item 2 do CHARACTER_IMPORT_CHECKLIST.md). Antes isso só era corrigido rodando
+        // `Tools > AutoArms > Retarget Slashing Dagger For All Characters` manualmente DEPOIS do
+        // import — passo fácil de esquecer (foi o caso real que gerou este ajuste). Agora roda
+        // automaticamente aqui, então todo personagem novo já nasce com o clipe retargetado.
+        RetargetSlashingDaggerNow(prefabPath, controllerPath);
 
         // 4) Prefab: componentes de combate + wiring de bones + checagem de compatibilidade
         // dos 3 clipes reaproveitados (Block/Catch Weapon/Slashing Dagger).

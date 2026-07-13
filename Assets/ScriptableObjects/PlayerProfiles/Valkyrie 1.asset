@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Valkyrie 1
   characterPrefab: {fileID: 599491471127544411, guid: 7465cebbb34b8b646a5ce7867d271f75, type: 3}
-  isUnlockedForSelection: 1
-  isPlayable: 1
+  isUnlockedForSelection: 0
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 143b1ec50211a1c4998ad25e0a4c9703, type: 3}
   splashArt: {fileID: 0}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Vampire Hunter 3
   characterPrefab: {fileID: 6022249708945238398, guid: 390fa225446b5d44d9b46db677ce9cc9, type: 3}
-  isUnlockedForSelection: 1
-  isPlayable: 1
+  isUnlockedForSelection: 0
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 692cc40ff9985e544bcb198581fe8d08, type: 3}
   splashArt: {fileID: 0}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

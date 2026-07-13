@@ -3,6 +3,77 @@
 ### Progresso
 - Total: 122 tarefas | Concluídas: 63
 
+- 2026-07-13: `Tools > AutoArms > Import Female Character` rodado com sucesso sobre todo o backlog
+  acumulado — **56 personagens novos** ganharam `PlayerProfile` + prefab jogável completo nesta
+  passada (todos ocultos/travados por padrão, `isUnlockedForSelection=false`/`isPlayable=false`):
+  Anubis, Black Ninja, Black Reaper 1, Blacksmith Guy, Blood Demon 2, Citizen 1, Dark Oracle 3,
+  Death Knight, Demons of Darkness 1, Desert Nomad 3, Devil, Devil Masked Guy, Egyptian Mummy,
+  Egyptian Sentry, Elemental Spirits 1, Elementals 2, Evil Bald Guy, Fallen Angels 3, Forest
+  Guardian 1, Ghost Knight 3, Ghoul, Goblin, Golem 1, Hell Knight, Lich, Magician 3, Magician Girl 1,
+  Magician Girl 2, Medieval King, Medieval Thug, Medusa 2, Mimic 1, Minotaur 1, Old Guy, Persian and
+  Arab Warriors 3, Pirate, Priest 3, Pumpkin Head Guy, Reaper Man 1, Romanian Settler, Samurai 1,
+  Samurai 2, Samurai 3, Seer 2, Shamans 3, Skeleton, Skeleton Samurai 2, Skull Knight, Spiritual
+  Monk 1, Technomage 2, Thief, Vampire, Vampire Hunter 1, White Ninja, Winter Witch 1, Winter Witch 2.
+  Nenhum erro de GUID (checagem prévia deste mesmo dia já tinha confirmado zero colisão em todo
+  `Assets/Personagens`) nem de retargeting reportado. Efeito colateral esperado do pipeline em
+  personagens já existentes: idle frame movido pra dentro de `Prefab/` (`Vampire_2`,
+  `Vampire_Hunter_3` — arquivo solto na raiz antes) e retarget do "Slashing Dagger" reaplicado nos
+  12 personagens processados numa rodada anterior (`Amazon_Warrior_3`, `Citizen-Women_2`,
+  `Dark_Elves_1`, `Fallen_Angels_1`, `Magician_Girl_3`, `Medieval Hooded Girl`, `Medusa_3`,
+  `Necromancer_of_the_Shadow_1`, `Succubus`, `Vampire_2`, `Vampire_Hunter_3`, `Winter_Witch_3` —
+  prefab reaberto e resalvo pelo `PrefabUtility.SaveAsPrefabAsset`, sem mudança funcional). Ver
+  itens 6 e 7 do `CHARACTER_IMPORT_CHECKLIST.md` pro histórico de GUID/Sword.png que antecedeu esta
+  rodada.
+
+- 2026-07-13: Novo lote grande de personagens importado pelo usuário (`Anubis`, `Black_Reaper_1`,
+  `Blood_Demon_2`, `Dark_Oracle_3`, `Death_Knight`, `Demons_of_Darkness_1`, `Devil`,
+  `Elemental_Spirits_1`, `Elementals_2`, `Forest_Guardian_1`, `Ghost_Knight_3`, `Ghoul`, `Goblin`,
+  `Golem_1`, `Hell_Knight`, `Lich`, `Magician_3`, `Mimic_1`, `Minotaur_1`, `Reaper_Man_1`, `Seer_2`,
+  `Shamans_3`, `Skeleton`, `Skeleton_Samurai_2`, `Vampire`), ainda sem rodar
+  `Tools > AutoArms > Import Female Character`. Checagem de GUID em todo o `Assets/Personagens`
+  (1314 `.meta`, `Vampire` vs `Vampire_2` incluído) — **zero colisão** no lote inteiro, nenhum fix
+  de GUID necessário desta vez. `Sword.png` removido (mesma política do item 7 do
+  `CHARACTER_IMPORT_CHECKLIST.md`) de 22 dos 24 personagens novos crus (`Black_Reaper_1` até
+  `Skeleton_Samurai_2` — todos sem `Prefab/` ainda, remoção limpa, sem referência quebrada);
+  `Anubis` já não tinha `Sword.png`. **`Vampire` foi deixado com o `Sword.png`** — veio no formato
+  "pronto" (`Graphics/`+`Prefab/` já montados pelo Spriter2UnityDX, sem `Animations.scml` na pasta)
+  e o `.prefab`/`.controller` já foram gerados COM o sprite presente; sem o `.scml` de origem não
+  tem como forçar um reimport limpo (truque usado no `Samurai_1` não se aplica aqui) — apagar o
+  arquivo agora só deixaria uma referência quebrada pendurada no prefab já construído, pra nenhum
+  ganho visual real sobre deixar como está. Fica pendente de limpeza manual no Editor (arrastar o
+  campo `Sprite` do componente do bone "Sword" pra `None` dentro do prefab) se o usuário quiser.
+
+- 2026-07-13: `Sword.png` removido de `Vector Parts/` de todo personagem ainda não processado pelo
+  `Import Female Character` — decisão do usuário: o corpo do personagem não deve carregar sprite de
+  espada nenhum, só as armas do sistema `WeaponData`/`WeaponHandler` (equipadas em runtime) devem
+  aparecer na mão. Afeta `Samurai_1` (já tinha `Samurai.prefab`/`.controller` gerados pelo
+  Spriter2UnityDX com `Sword` referenciando o arquivo agora removido — apagados junto com o `.meta`
+  do `Animations.scml` pra forçar reimport limpo, sem o bone morto, na próxima vez que o Unity
+  abrir o projeto) e mais 8 personagens ainda 100% crus (sem `Prefab/`, sem `PlayerProfile`):
+  `Citizen_1`, `Desert_Nomad_3`, `Persian_and_Arab_Warriors_3`, `Pirate`, `Priest_3`,
+  `Spiritual_Monk_1`, `Technomage_2`, `Thief` — só o arquivo+`.meta` removidos, nada mais a fazer
+  neles (o `Import Female Character` ainda não tinha rodado, não sobrou prefab pra limpar). Não
+  mexido em nenhum personagem já com `PlayerProfile` existente (fora de escopo, exigiria editar
+  `.prefab` já publicado). Confirmado lendo `Spriter2UnityDX/Editor/PrefabBuilder.cs` (`GetSpriteAtPath`,
+  linha ~184) que um `Sword.png` ausente é só um `Debug.LogError` cosmético — não seta `success =
+  false`, então não aborta a geração do prefab; o bone fica sem sprite (invisível), mesmo padrão já
+  em produção em `Vampire_Hunter_3`. Detalhe em `CHARACTER_IMPORT_CHECKLIST.md` (item 7, novo).
+
+- 2026-07-13: `Samurai_2`, `Samurai_3` e `Vampire_Hunter_1` (`Assets/Personagens/<nome>/Vector Parts/`) tiveram os `.unitypackage` extraídos manualmente e GUIDs regenerados antes de entrar no projeto — mesmo problema do item 6 do `CHARACTER_IMPORT_CHECKLIST.md` (variantes numeradas da CraftPix reusam os GUIDs internos do template). Confirmado por diff de GUID: `Samurai_1/2/3` compartilham os mesmos 13 GUIDs entre si (nenhum ainda importado no projeto, mas colidiriam entre si); `Vampire_Hunter_1` tinha os 17 GUIDs **idênticos** aos de `Vampire_Hunter_3`, já totalmente processado no projeto (`PlayerProfile` próprio referenciando o prefab dele) — importar `Vampire_Hunter_1` como veio do pacote sobrescreveria `Vampire_Hunter_3` por baixo dos panos. `Samurai_1` não precisou de fix (único dos 3 que herda os GUIDs originais do template; segue pendente de import normal pelo usuário). Fix aplicado nos 3 casos: extraídos os PNGs de corpo (`Body`/`Face 01-03`/`Head`/`Left-Right Arm-Hand-Leg`/`SlashFX`) + `Animations.scml` do `.unitypackage` (descartados `Sword.png`/`.prefab`/`.controller` do pacote — sem referência cruzada sobrando pra reescrever, já que só a linha `guid:` de cada `.meta` precisou de valor novo), GUID novo por arquivo (13 arquivos + pasta `Vector Parts` em si, 14 GUIDs por personagem) via `openssl rand -hex 16`, confirmado sem colisão contra o projeto inteiro antes de colocar em `Assets/Personagens/<nome>/Vector Parts/`. Faltam pra cada um: rodar `Tools > AutoArms > Import Female Character` (regenera `.prefab`/`.controller` via Spriter2UnityDX ao abrir o Unity) + 1 frame solto com "idle" no nome. Detalhe completo em `CHARACTER_IMPORT_CHECKLIST.md` (item 6, ampliado).
+
+- 2026-07-11: Retarget do "Slashing Dagger" passou a rodar automaticamente dentro de
+  `Tools > AutoArms > Import Female Character` (`FemaleCharacterImportGenerator.ProcessCharacter`
+  chama `RetargetSlashingDaggerNow` logo após montar o Animator Controller) — antes dependia de
+  rodar `Retarget Slashing Dagger For All Characters` manualmente DEPOIS, passo que ficou pra trás
+  em `Magician_Girl_1/2`, `Medusa_2`, `Winter_Witch_1/2` (reportado pelo usuário: cabeça "descolando"
+  no Slashing Dagger — causa real era o clipe cru compartilhado da Assassin Guy, nunca retargetado
+  pra essas 5). Refatorado `TryLoadSlashDaggerSource` (carrega clipe/prefab da Assassin Guy uma vez)
+  compartilhado entre o novo `RetargetSlashingDaggerNow` (por personagem, chamado no import) e o
+  `RetargetSlashingDaggerForAll` existente (em lote, mantido só pra reprocessar quem foi importado
+  antes deste ajuste). Detalhe em `CHARACTER_IMPORT_CHECKLIST.md` (passo 4).
+
+- 2026-07-11: `Magician_Girl_1`, `Magician_Girl_2`, `Medusa_2`, `Winter_Witch_1` e `Winter_Witch_2` (`Assets/Personagens/<nome>/Vector Parts/`) importados com GUIDs regenerados — completa a lista dos 6 personagens que tinham sido apagados por corrupção de GUID (item 6 do `CHARACTER_IMPORT_CHECKLIST.md`; `Archer_2` ainda não recuperado, arte de origem não localizada). Confirmado que os `.unitypackage` numerados vêm da CraftPix com os mesmos GUIDs internos entre variantes do mesmo personagem-base (mesmo template clonado), colidindo com a variante já processada no projeto (`Magician_Girl_3`/`Medusa_3`/`Winter_Witch_3`) mesmo importando cada pacote direto pelo Unity — inclusive entre si (`Winter_Witch_1` e `_2` também colidiam um com o outro, não só com o `_3`). Detalhe do problema/fix em `CHARACTER_IMPORT_CHECKLIST.md` (item 6, ampliado). Faltam pra cada um: 1 frame solto com "idle" no nome (fonte do `previewIcon`) e rodar `Tools > AutoArms > Import Female Character`.
+
 - 2026-07-10: Pipeline de importação incremental de personagens novos (`Assets/Editor/FemaleCharacterImportGenerator.cs`, menu `Tools > AutoArms`) — 13 personagens processados (Amazon Warrior 3, Citizen Women 2, Dark Elves 1, Fallen Angels 1, Magician Girl 3, Medieval Hooded Girl, Medusa 3, Necromancer of the Shadow 1, Succubus, Valkyrie 1, Vampire 2, Vampire Hunter 3, Winter Witch 3), cada um ganhando prefab jogável completo (componentes de combate + Animator Controller reconstruído campo a campo a partir do `Assassin Guy.controller`) e `PlayerProfile` próprio, todos ocultos/travados por padrão. Duas flags novas em `PlayerProfile`: `isUnlockedForSelection` (aparece no grid de `02_SelectCharacter` ou não) e `isPlayable` (fica clicável/escolhível pra batalhar ou só travado/cinza) — antes só o `SelectedProfileHolder.currentProfile` era clicável, beco sem saída pra escolher qualquer personagem novo pela UI; `CharacterSelectController.PopulateCharacterGrid` reescrito pra usar as duas flags, com guarda contra referência `null` órfã na lista. Animações reaproveitadas (Block/Catch Weapon/Slashing Dagger, compartilhadas da Assassin Guy) ganharam retargeting automático por delta de pose de repouso (`RetargetPositionCurves`) — a numeração interna de bone do Spriter não é portável entre pacotes CraftPix diferentes (confirmado: mesmo `bone_XXX` é o braço num personagem e a perna em outro), então aplicar uma animação de outro corpo sem isso desloca partes pro lugar errado (achado real: cabeça "descolando", perna sumindo). Archer (arqueira, sem golpe corpo-a-corpo no pacote) resolvida à parte — `Slashing` dela é uma cópia do próprio "Throwing" (mesmo rig, sem risco). Detalhe completo dos problemas encontrados e como evitá-los da próxima vez: `CHARACTER_IMPORT_CHECKLIST.md` (novo, raiz do projeto) — inclui o achado de que copiar pastas "Vector Parts" de variantes numeradas (ex. Magician_Girl_1/2/3) por fora do Unity duplica GUID e corrompe os assets (6 personagens tiveram que ser apagados por causa disso).
 
 - 2026-07-10: Limpeza dos órfãos apontados em ASSET_SIZE_REPORT.md — removidos `Medieval Warrior/Medieval Warrior.prefab` + `.controller` (duplicatas soltas na raiz da pasta, fora de `Prefab/`) e `Animations.scml` (fonte do Spriter, sem referência em runtime); ~1.27 MB liberados. `Prefab/Medieval Warrior - Copy.prefab` foi **mantido** — checagem de GUID antes de apagar revelou que ele embute um `AnimationClip` de fato usado (`m_Motion`) tanto pelo `Medieval Warrior.controller` quanto pelo `Medieval Warrior Girl.controller` em uso; a auditoria original tinha marcado errado esse arquivo como órfão (só checou se o prefab em si era referenciado, não os sub-assets embutidos nele).
