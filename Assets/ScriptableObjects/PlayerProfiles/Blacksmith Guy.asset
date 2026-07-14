@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Blacksmith Guy
   characterPrefab: {fileID: 1445933129344734, guid: 05f023e1624a6ba49b4e913c1e162bfa, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: da1cdfac18955e141adc0ce427153583, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 485374e140e392740a5152fb796bdb90, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

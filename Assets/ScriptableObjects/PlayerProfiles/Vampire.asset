@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Vampire
   characterPrefab: {fileID: 1542494739772580, guid: 49ce14f20ee778946a2dc5282e0eaf86, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 8e8b48a08118e4744aec37aff80c7577, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 344585427d6e9a74f9957678be2037dc, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

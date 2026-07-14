@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Necromancer of the Shadow 1
   characterPrefab: {fileID: 1753241052511756779, guid: 78a546c554e014a458d74f82323c87bb, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 1a32fce6cbf515f4c93b7c21a32f3276, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 8b318cd52a464fc42a173f925b707d46, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

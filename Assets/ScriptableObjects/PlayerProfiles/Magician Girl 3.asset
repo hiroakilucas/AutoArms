@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Magician Girl 3
   characterPrefab: {fileID: 4021960240597338792, guid: 372c70907384678458026f65ca892b13, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 0}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 2373f1f8d7a15694eac18e7df10cba63, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

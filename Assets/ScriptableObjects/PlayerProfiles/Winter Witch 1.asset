@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Winter Witch 1
   characterPrefab: {fileID: 3125084127375158869, guid: f19fe96e968c25048a93abd7a37f6f36, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: c3dd7ff3b04c7a0449029a22df9fe6a3, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 7b20165b47b280346a5e3897e00d8533, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

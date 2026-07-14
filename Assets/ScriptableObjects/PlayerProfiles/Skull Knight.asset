@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Skull Knight
   characterPrefab: {fileID: 1662870720394714, guid: 77083c9125d410b47b0b49e76c1422a8, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 4f16949b3434228478d08d274cb5321b, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: c0a3211f2c37f504aa778847b60c52f9, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

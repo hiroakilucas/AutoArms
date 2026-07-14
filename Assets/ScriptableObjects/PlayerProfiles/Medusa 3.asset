@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Medusa 3
   characterPrefab: {fileID: 5363196567429593535, guid: 25927936362a1784f8ab54a42fde19ec, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 30da75c6afa705641ae579158f6975bc, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 6531bd4d4167a4c42a321a00cabb60db, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons:
   - {fileID: 11400000, guid: bb20000000000000000000000000000c, type: 2}

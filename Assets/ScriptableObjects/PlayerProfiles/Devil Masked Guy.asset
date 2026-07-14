@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Devil Masked Guy
   characterPrefab: {fileID: 1952282733832106, guid: 837122bf921743b409de3c9b7de0bcb6, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 9ad924e8877880a40bf30c633c1c7651, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: bd37b3c142cfd2e4c9a9e989d3c02858, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

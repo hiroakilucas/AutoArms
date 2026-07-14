@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Desert Nomad 3
   characterPrefab: {fileID: 679931889553598466, guid: 81d84dd1012dd804a8a516a444643a4e, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 0f16b2bc68586a144ab73bf7c570e7d7, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: a205dbf64010deb48b7eac8b967471ad, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

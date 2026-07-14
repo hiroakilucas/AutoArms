@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Death Knight
   characterPrefab: {fileID: 1545848619786308, guid: 6aed86b65acb93349882a77b9ab4b810, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 76f5f9d5c9824dc429e1c4276c362b47, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 65bd8ff2e4f223443839fee2e1b6aaec, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

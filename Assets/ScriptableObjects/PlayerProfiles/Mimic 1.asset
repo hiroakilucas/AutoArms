@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Mimic 1
   characterPrefab: {fileID: 5121366955861255237, guid: 6cc457bb2a403064da543ebf4d3faa5f, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 750994afc967cc44db4ccef2a0f9e722, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 169c856780e427f449a638dd3f3f3bbe, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Demons of Darkness 1
   characterPrefab: {fileID: 1175730463436500, guid: 04ac8cdf1988c40458a239c447188443, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 05469ad93054c3c429d4f80100b6061e, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 75112faba2259c949a7556f933664146, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

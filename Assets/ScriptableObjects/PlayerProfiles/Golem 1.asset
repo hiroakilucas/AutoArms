@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Golem 1
   characterPrefab: {fileID: 1714274998676182, guid: 6d0265f627f732c4e8c257e2f4bd0ca0, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: d50980086ce653441b9a7f8768dad8e1, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 998ade6cd2e0dd64c80b88c41204a9db, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

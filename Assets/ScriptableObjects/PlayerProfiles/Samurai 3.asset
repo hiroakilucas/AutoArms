@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Samurai 3
   characterPrefab: {fileID: 7190735498552843311, guid: 604b643438e2c9644b25f7998cc41cc0, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: c9ba1d8c9966c1b4b87fced27f4569bd, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 333434f2f6130e04a90ecfa7cf7ae23a, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

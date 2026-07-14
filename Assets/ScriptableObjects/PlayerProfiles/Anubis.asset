@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Anubis
   characterPrefab: {fileID: 1954800345768002, guid: 7f01e1cdd789f9645930a9537634add6, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 13516eb32bb1b714dbfb168cd5392533, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: e282d8a66a5aeff4e95b0691ad337751, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

@@ -17,7 +17,7 @@ MonoBehaviour:
   isUnlockedForSelection: 1
   isPlayable: 1
   previewIcon: {fileID: 21300000, guid: afebf40d075589240953327e697d8f0d, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 978148677f2360b4ba568302a3a8234a, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons:
   - {fileID: 11400000, guid: bb20000000000000000000000000000c, type: 2}

@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: White Ninja
   characterPrefab: {fileID: 1576765955616764, guid: a423ed0cf40f30646b531f27d523b10f, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 031e496578353d74792b05c49f5da33c, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: acf2299e94349c747a56a902d70fbb5e, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

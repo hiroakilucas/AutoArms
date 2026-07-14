@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Fallen Angels 3
   characterPrefab: {fileID: 1143415924545394, guid: ab8efeab60fbd78478cfd01be14f9e55, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 4a23dbc0fe04175448934c2838b74eb1, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 69d3fc52acd025740bbef6a208d170b0, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

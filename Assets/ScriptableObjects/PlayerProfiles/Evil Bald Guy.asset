@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Evil Bald Guy
   characterPrefab: {fileID: 1272213094105938, guid: 9ce48e29e0cfd33468a0c33861473476, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 1a731751545a2ab42b3fefa8a02bf4f0, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 3adf88c7705054849ab4c91fe0d22fa7, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

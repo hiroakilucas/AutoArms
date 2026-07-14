@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Ghoul
   characterPrefab: {fileID: 1053054566726172, guid: c5d43675a6075cc4ea54185777215f95, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: a70def88365a86142a7cc4fb2de73108, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: dc72acf9fe8867c47b97e7cfe5f3cd8c, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

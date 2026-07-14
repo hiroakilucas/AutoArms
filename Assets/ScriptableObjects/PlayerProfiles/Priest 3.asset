@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Priest 3
   characterPrefab: {fileID: 8485427343114119695, guid: 54ac0e767b3b2a24198d9728d78b51ae, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: ab62a7f20412df4469acdd77bf9f2d98, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 8a79a34c55fb3b34d9aa133c64145cb5, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

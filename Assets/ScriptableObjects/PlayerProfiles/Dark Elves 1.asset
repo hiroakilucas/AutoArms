@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Dark Elves 1
   characterPrefab: {fileID: 1186967064277618, guid: 408056912a617024aba77673b747526e, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: a0ee65b5170ff7044b64954538b72604, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 8f5b236ee6a84c947b144ed3f2073266, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons:
   - {fileID: 11400000, guid: bb20000000000000000000000000000c, type: 2}

@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Dark Oracle 3
   characterPrefab: {fileID: 4546954367047260722, guid: bc966caa9f96a3f4fbaa03f5b3355d12, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: d211009d2b9b4f84dba3d270c08a67ea, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: c8578803c436c1644a6e74349d60b6ce, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

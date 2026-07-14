@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Egyptian Sentry
   characterPrefab: {fileID: 1435728539128650, guid: ce0caca0158a7b447a5cb216d3bf77ad, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: b8e20eebf7cbfa34a814dd567852fd92, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 5264a10eec013c9408f4d77198d20b68, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

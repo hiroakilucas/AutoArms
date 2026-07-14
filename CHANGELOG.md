@@ -3,6 +3,19 @@
 ### Progresso
 - Total: 122 tarefas | Concluídas: 63
 
+- 2026-07-14: `isUnlockedForSelection`/`isPlayable` ligados em massa (`true`) nos 72 `PlayerProfile`
+  — pedido do usuário pra visualizar todos os personagens já importados no grid de
+  `02_SelectCharacter` (antes só Assassin Guy/Medieval Warrior/Medieval Warrior Girl apareciam
+  desbloqueados; os outros 56+ importados via `Import Female Character` ficavam ocultos por
+  padrão). Puramente visual/seleção — não afeta o hardcode de Medieval Warrior Girl como Player2
+  em `04_CombatScenePVP`.
+- 2026-07-14: `splashArt` atribuído em massa aos 70 `PlayerProfile` com arte gerada em
+  `Assets/Personagens/00-SplashArt/` (nome do arquivo casado com o nome do personagem/número da
+  variante; 2 casos ambíguos resolvidos por comparação visual — "Dark Knight.jpg" pertence ao
+  **Death Knight**, não ao Hell Knight; "Golem.jpg"/"Globin.jpg" para Golem 1/Goblin). `Medieval
+  Warrior.asset` tinha uma referência de `splashArt` órfã (guid sem arquivo correspondente,
+  provavelmente do path antigo `Assets/Personagens/SplashArt/`) — corrigida para apontar ao novo
+  arquivo da mesma pasta.
 - 2026-07-13: `Tools > AutoArms > Import Female Character` rodado com sucesso sobre todo o backlog
   acumulado — **56 personagens novos** ganharam `PlayerProfile` + prefab jogável completo nesta
   passada (todos ocultos/travados por padrão, `isUnlockedForSelection=false`/`isPlayable=false`):

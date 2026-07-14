@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Ghost Knight 3
   characterPrefab: {fileID: 5025879745250392089, guid: e10ae02667e602a4eb809bb04ab2828e, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 10b67872207946741b5cb066e5f13194, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: d0fe26137a80698468dc4c2df8f7c439, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

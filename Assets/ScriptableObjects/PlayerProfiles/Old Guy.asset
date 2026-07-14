@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Old Guy
   characterPrefab: {fileID: 1077442858634602, guid: 30bdaf3c3f2eb1a4eae2372b0c86b8a4, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: f7e2925f83f7711458a76d27f1681eaf, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 0e4806c54ea59464f8c40d59c5886769, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

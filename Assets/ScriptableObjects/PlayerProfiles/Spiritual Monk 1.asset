@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Spiritual Monk 1
   characterPrefab: {fileID: 9184331693708306646, guid: d56a899c7da8c3a418dd784f347e31cc, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 9f1953ce238128548b0d7ac9cd82b2d8, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 78eb03cd84bb22b47ab370a35b6697b1, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

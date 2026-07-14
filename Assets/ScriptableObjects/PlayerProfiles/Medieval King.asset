@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Medieval King
   characterPrefab: {fileID: 1104465774215058, guid: ce35193a39275224397f65748f404ba6, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 7e75fab0fce440d408cc71d7ed476726, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: 6925ad48bbe065b4cb20ef0287f2f92b, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

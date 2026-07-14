@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   profileName: Shamans 3
   characterPrefab: {fileID: 1225729451792618, guid: 6a8d4353750b23b488a1ce68baf195fb, type: 3}
-  isUnlockedForSelection: 0
-  isPlayable: 0
+  isUnlockedForSelection: 1
+  isPlayable: 1
   previewIcon: {fileID: 21300000, guid: 3ea6cdde478d10e41a37170c2a44c31d, type: 3}
-  splashArt: {fileID: 0}
+  splashArt: {fileID: 21300000, guid: d7263926a7ceeec46a7b08e019478d85, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
