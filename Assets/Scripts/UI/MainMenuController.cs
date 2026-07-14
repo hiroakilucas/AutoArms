@@ -28,6 +28,15 @@ public class MainMenuController : MonoBehaviour
         SceneManager.LoadScene("02_SelectCharacter");
     }
 
+    // Botão "Arsenal" (2026-07-14) — abre 03_Arsenal (grade de armas/skills, ver ArsenalController),
+    // não confundir com "03_SelectWeapons" (campo selectWeapons acima, nunca usado em nenhum
+    // método — reservado pra uma futura tela de escolha de LOADOUT pré-combate, propósito
+    // diferente: montar quais armas levar pra luta, não visualizar a coleção inteira).
+    public void OnArsenalButton()
+    {
+        SceneManager.LoadScene("03_Arsenal");
+    }
+
     public void OnPlayButton()
     {
         if (selectedProfileHolder.currentProfile == null) return;

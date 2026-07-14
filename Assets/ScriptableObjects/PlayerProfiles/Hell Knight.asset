@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Hell Knight
   characterPrefab: {fileID: 1120490497713288, guid: b1f31fa8eb9c1ad44aa1c8758d1d21c4, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 4600548198d3b4146b032192a8543051, type: 3}
   splashArt: {fileID: 21300000, guid: 1d04a06431d996248a3d25d91d0cf484, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

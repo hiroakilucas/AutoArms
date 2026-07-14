@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -6,7 +8,16 @@ public class MainMenuCharacterPreview : MonoBehaviour
 {
     public Transform spawnPoint;
     private GameObject currentCharacter;
+    private GameObject levelXpHudGo;
     [SerializeField] private SelectedProfileHolder selectedProfileHolder;
+
+    // Troca rápida de personagem (2026-07-14, pedido do usuário) — setas laterais + arrastar o
+    // personagem central. Lista/ordem compartilhada com o grid de 02_SelectCharacter
+    // (CharacterDatabase.GetPlayableCharactersOrdered, favoritado primeiro depois alfabético),
+    // pra não ter uma ordem diferente em cada tela.
+    [SerializeField] private CharacterDatabase characterDatabase;
+    private List<PlayerProfile> _orderedProfiles;
+    private int _currentIndex;
 
     // Reduz o personagem central levemente — o root dos prefabs de personagem fica nos pés
     // (mesmo pressuposto de CombatSceneLoader/RandomSpawnPosition), então escalar em torno da
@@ -36,22 +47,200 @@ public class MainMenuCharacterPreview : MonoBehaviour
 
         if (profile == null) return;
 
+        _orderedProfiles = characterDatabase != null
+            ? characterDatabase.GetPlayableCharactersOrdered()
+            : new List<PlayerProfile>();
+        _currentIndex = Mathf.Max(0, _orderedProfiles.IndexOf(profile));
+
+        SpawnCharacter(profile);
+        BuildSwapArrows();
+    }
+
+    // Extraído de Start() (2026-07-14) — instanciação simples/instantânea, usada só pelo 1º
+    // personagem exibido (sem transição, ver SlideToCharacter abaixo pra troca rápida animada).
+    private void SpawnCharacter(PlayerProfile profile)
+    {
+        if (currentCharacter != null) Destroy(currentCharacter);
+        if (levelXpHudGo != null) Destroy(levelXpHudGo);
+        if (profile == null || profile.characterPrefab == null) return;
+
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
         currentCharacter.transform.localScale = profile.scale * PreviewScaleFactor;
         currentCharacter.transform.position = new Vector3(CharacterCenterX, CharacterGroundY, 0);
         Camera.main.orthographicSize = OrthographicSize;
 
-        DestroyImmediate(currentCharacter.GetComponent<PlayerCombat>());
-        DestroyImmediate(currentCharacter.GetComponent<WeaponHandler>());
-        DestroyImmediate(currentCharacter.GetComponent<MovementController>());
-
-        // AnimationController continua vivo (2026-07-08, diferente de antes) — precisa dele pra
-        // reagir a clique com Hurt/Slashing, ver `CharacterPreviewReaction`/BuildClickReaction.
-        var animController = currentCharacter.GetComponent<AnimationController>();
-        if (animController != null) animController.SetIdle(true);
-
+        var animController = PrepareCharacterForPreview(currentCharacter);
         BuildClickReaction(currentCharacter, animController);
         BuildLevelXpHud(profile);
+    }
+
+    // Remove os componentes de combate ativos (o personagem aqui é só um preview em Idle, nunca
+    // luta) e devolve o AnimationController — compartilhado entre SpawnCharacter (1ª exibição) e
+    // SlideToCharacter (troca rápida animada) pra não duplicar essa sequência duas vezes.
+    private AnimationController PrepareCharacterForPreview(GameObject character)
+    {
+        DestroyImmediate(character.GetComponent<PlayerCombat>());
+        DestroyImmediate(character.GetComponent<WeaponHandler>());
+        DestroyImmediate(character.GetComponent<MovementController>());
+
+        // AnimationController continua vivo (2026-07-08) — precisa dele pra reagir a clique com
+        // Hurt/Slashing, ver CharacterPreviewReaction/BuildClickReaction.
+        var animController = character.GetComponent<AnimationController>();
+        if (animController != null) animController.SetIdle(true);
+        return animController;
+    }
+
+    // Chamado pelas setas (BuildArrowButton) e pelo arraste (CharacterSwipeInput) — mesma ação
+    // nos dois casos. direction: +1 = próximo, -1 = anterior (índice cíclico dentro de
+    // _orderedProfiles). Atualiza o personagem equipado de verdade
+    // (SelectedProfileHolder.currentProfile), não só o preview — troca rápida aqui é
+    // equivalente a escolher o personagem em 02_SelectCharacter, sem precisar navegar até lá.
+    // Ignorado enquanto uma transição de slide já está em andamento (_isSliding) — evita duas
+    // trocas se sobrepondo (2 personagens saindo/entrando ao mesmo tempo).
+    private void SwitchCharacter(int direction)
+    {
+        if (_isSliding || _orderedProfiles == null || _orderedProfiles.Count == 0) return;
+
+        _currentIndex = ((_currentIndex + direction) % _orderedProfiles.Count + _orderedProfiles.Count) % _orderedProfiles.Count;
+        var profile = _orderedProfiles[_currentIndex];
+
+        selectedProfileHolder.currentProfile = profile;
+        StartCoroutine(SlideToCharacter(profile, direction));
+
+        // CharacterPanel (lado direito) só lê SelectedProfileHolder.currentProfile uma vez por
+        // RefreshAll — não escuta o holder sozinho, precisa ser cutucado manualmente.
+        var panel = FindObjectOfType<CharacterPanel>();
+        if (panel != null) panel.Refresh();
+    }
+
+    // Transição de "carrossel" pedida pelo usuário (2026-07-14): arrastar/clicar pra um lado
+    // desliza o personagem ATUAL pra fora nesse mesmo sentido até sumir, enquanto o PRÓXIMO
+    // entra do lado oposto até centralizar — em vez da troca instantânea de antes.
+    // `slideSign` é o sentido de saída do personagem atual: dragged/seta pra a DIREITA (aqui,
+    // direction=-1, "anterior") desliza o atual pra a direita (slideSign=+1) e traz o novo da
+    // ESQUERDA; direction=+1 ("próximo") é o espelho disso. `SlideDistance` (10, maior que a
+    // meia-largura visível ~8.89 em world units) garante que o personagem saia de fato da tela
+    // antes de ser destruído, não só "quase".
+    private const float SlideDistance = 10f;
+    private const float SlideDuration = 0.28f;
+    private bool _isSliding;
+
+    private IEnumerator SlideToCharacter(PlayerProfile profile, int direction)
+    {
+        _isSliding = true;
+        float slideSign = -direction;
+
+        var oldCharacter = currentCharacter;
+        var oldHud = levelXpHudGo;
+        currentCharacter = null;
+        levelXpHudGo = null;
+
+        GameObject newCharacter = null;
+        AnimationController newAnimController = null;
+        if (profile != null && profile.characterPrefab != null)
+        {
+            newCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
+            newCharacter.transform.localScale = profile.scale * PreviewScaleFactor;
+            float startX = CharacterCenterX - slideSign * SlideDistance;
+            newCharacter.transform.position = new Vector3(startX, CharacterGroundY, 0f);
+            Camera.main.orthographicSize = OrthographicSize;
+            newAnimController = PrepareCharacterForPreview(newCharacter);
+        }
+
+        Vector3 oldStart = oldCharacter != null ? oldCharacter.transform.position : Vector3.zero;
+        Vector3 oldEnd = oldStart + new Vector3(slideSign * SlideDistance, 0f, 0f);
+        Vector3 newStart = newCharacter != null ? newCharacter.transform.position : Vector3.zero;
+        Vector3 newEnd = new Vector3(CharacterCenterX, CharacterGroundY, 0f);
+
+        float elapsed = 0f;
+        while (elapsed < SlideDuration)
+        {
+            float t = elapsed / SlideDuration;
+            if (oldCharacter != null) oldCharacter.transform.position = Vector3.Lerp(oldStart, oldEnd, t);
+            if (newCharacter != null) newCharacter.transform.position = Vector3.Lerp(newStart, newEnd, t);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        if (oldCharacter != null) oldCharacter.transform.position = oldEnd;
+        if (newCharacter != null) newCharacter.transform.position = newEnd;
+
+        if (oldCharacter != null) Destroy(oldCharacter);
+        if (oldHud != null) Destroy(oldHud);
+
+        currentCharacter = newCharacter;
+        if (newCharacter != null)
+        {
+            BuildClickReaction(newCharacter, newAnimController);
+            BuildLevelXpHud(profile);
+        }
+
+        _isSliding = false;
+    }
+
+    // Setas laterais (2026-07-14, pedido do usuário) — canvas próprio, sortingOrder abaixo do
+    // LevelXpHud (4) pra não competir visualmente. Construídas uma única vez em Start(); só o
+    // personagem/HUD de XP por trás delas é reconstruído a cada troca.
+    private const float ArrowOffsetX = 340f; // pixels do centro da tela — chute inicial, calibrar visualmente
+    private const float ArrowSize = 64f;
+    private const float ArrowYFraction = 0.5f; // centralizado verticalmente — chute inicial, calibrar visualmente
+
+    private void BuildSwapArrows()
+    {
+        var theme = ResolveTheme();
+        if (theme == null) return;
+
+        var canvasGo = new GameObject("SwapArrowsHud");
+        canvasGo.transform.SetParent(transform, false);
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 3;
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        BuildArrowButton(canvasGo.transform, theme, isLeft: true);
+        BuildArrowButton(canvasGo.transform, theme, isLeft: false);
+    }
+
+    // Glyph "<"/">" em ASCII puro, não os caracteres Unicode "◀"/"▶" — a fonte TMP do projeto já
+    // mostrou não ter cobertura de glyphs fora do ASCII básico (mesmo bug do "★"/"☆" de
+    // CharacterCardUI, virava um quadrado "tofu"). `PulsingScale` dá a respirada sutil pedida
+    // (aumenta/diminui via seno, sem precisar de Animator só pra isso).
+    private void BuildArrowButton(Transform parent, UITheme theme, bool isLeft)
+    {
+        var go = new GameObject(isLeft ? "ArrowLeft" : "ArrowRight");
+        go.transform.SetParent(parent, false);
+        var rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, ArrowYFraction);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(ArrowSize, ArrowSize);
+        rt.anchoredPosition = new Vector2(isLeft ? -ArrowOffsetX : ArrowOffsetX, 0f);
+
+        var img = go.AddComponent<Image>();
+        img.sprite = UIShapeUtil.RoundedRect(theme.panelBackgroundAlt, ArrowSize / 2f);
+        img.type = Image.Type.Sliced;
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+        int direction = isLeft ? -1 : 1;
+        btn.onClick.AddListener(() => SwitchCharacter(direction));
+
+        var glyphGo = new GameObject("Glyph");
+        glyphGo.transform.SetParent(go.transform, false);
+        var glyphRt = glyphGo.AddComponent<RectTransform>();
+        glyphRt.anchorMin = Vector2.zero;
+        glyphRt.anchorMax = Vector2.one;
+        glyphRt.offsetMin = glyphRt.offsetMax = Vector2.zero;
+        var glyphTxt = glyphGo.AddComponent<TextMeshProUGUI>();
+        glyphTxt.raycastTarget = false;
+        glyphTxt.text = isLeft ? "<" : ">";
+        glyphTxt.fontSize = 32;
+        glyphTxt.fontStyle = FontStyles.Bold;
+        glyphTxt.color = theme.textOnDark;
+        glyphTxt.alignment = TextAlignmentOptions.Center;
+
+        go.AddComponent<PulsingScale>();
     }
 
     // Clique no personagem central reage com Hurt/Slashing (2026-07-08, pedido do usuário) —
@@ -61,7 +250,10 @@ public class MainMenuCharacterPreview : MonoBehaviour
     // `Collider2D`/`OnMouseDown` (mensagem nativa da Unity, não depende de EventSystem nenhum).
     // `BoxCollider2D` dimensionado a partir dos bounds REAIS dos `Renderer`s do personagem (soma
     // de todas as partes do sprite, Spriter2UnityDX) em vez de um tamanho fixo chutado — cada
-    // personagem tem proporções diferentes.
+    // personagem tem proporções diferentes. Mesmo collider também alimenta `CharacterSwipeInput`
+    // (2026-07-14) — arrastar o personagem pra esquerda/direita troca de personagem, mesma ação
+    // das setas (`SwitchCharacter`). Unity manda `OnMouseDown`/`OnMouseUp` pros dois componentes
+    // no mesmo GameObject sem conflito.
     private void BuildClickReaction(GameObject character, AnimationController animController)
     {
         if (animController == null) return;
@@ -78,6 +270,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         collider.size = new Vector2(combined.size.x / scale.x, combined.size.y / scale.y);
 
         character.AddComponent<CharacterPreviewReaction>().Init(animController);
+        character.AddComponent<CharacterSwipeInput>().Init(SwitchCharacter);
     }
 
     // Barra de XP fina + "Level X" acima dela, estilo My Brute — única barra de XP do menu
@@ -113,6 +306,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         float yFraction = CalibratedYFraction + (CharacterGroundY - CalibratedGroundY) / (2f * OrthographicSize);
 
         var canvasGo = new GameObject("LevelXpHud");
+        levelXpHudGo = canvasGo; // guardado pra SpawnCharacter destruir e reconstruir a cada troca rápida
         canvasGo.transform.SetParent(transform, false);
         var canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -193,5 +387,56 @@ public class MainMenuCharacterPreview : MonoBehaviour
     {
         var controller = FindObjectOfType<MainMenuController>();
         return controller != null ? controller.Theme : null;
+    }
+}
+
+// Pulsa a escala do próprio RectTransform via seno (mesmo espírito de PulsingAlpha em
+// AttributePipBar.cs, só que em escala em vez de alpha) — dá a "respirada" sutil pedida pelo
+// usuário pras setas de troca rápida de personagem, sem precisar de Animator só pra isso.
+public class PulsingScale : MonoBehaviour
+{
+    private const float Speed = 2.5f;
+    private const float MinScale = 0.92f;
+    private const float MaxScale = 1.08f;
+
+    private RectTransform _rt;
+
+    private void Awake() => _rt = GetComponent<RectTransform>();
+
+    private void Update()
+    {
+        float t = (Mathf.Sin(Time.time * Speed) + 1f) * 0.5f;
+        float s = Mathf.Lerp(MinScale, MaxScale, t);
+        _rt.localScale = new Vector3(s, s, 1f);
+    }
+}
+
+// Detecta arrastar horizontal no personagem central do 01_MainMenu — mesmo Collider2D/mensagens
+// nativas OnMouse* de CharacterPreviewReaction (não depende de EventSystem), num componente
+// separado pra não misturar a lógica de reação de combate com a de troca de personagem.
+// Só decide a DIREÇÃO ao soltar (sem arrastar o personagem visualmente durante o gesto).
+public class CharacterSwipeInput : MonoBehaviour
+{
+    private const float SwipeThresholdPixels = 80f;
+
+    private System.Action<int> onSwipe; // +1 = próximo, -1 = anterior
+    private float startX;
+    private bool dragging;
+
+    public void Init(System.Action<int> callback) => onSwipe = callback;
+
+    private void OnMouseDown()
+    {
+        startX = Input.mousePosition.x;
+        dragging = true;
+    }
+
+    private void OnMouseUp()
+    {
+        if (!dragging) return;
+        dragging = false;
+        float delta = Input.mousePosition.x - startX;
+        if (delta <= -SwipeThresholdPixels) onSwipe?.Invoke(1);
+        else if (delta >= SwipeThresholdPixels) onSwipe?.Invoke(-1);
     }
 }

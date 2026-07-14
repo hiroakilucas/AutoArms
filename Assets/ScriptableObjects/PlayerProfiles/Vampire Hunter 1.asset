@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Vampire Hunter 1
   characterPrefab: {fileID: 5457629699572089641, guid: 5964f29a810deb4428818e69c202d143, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 5f6750ac9187cda43a17f320ecd97834, type: 3}
   splashArt: {fileID: 21300000, guid: 5e9e23a0d7654ed41bd73f5c09f2ff48, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

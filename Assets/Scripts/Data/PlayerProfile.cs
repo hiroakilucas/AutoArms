@@ -11,6 +11,19 @@ public enum PetType
     Boar,
 }
 
+// Raridade do personagem (não confundir com o `level` de progressão/XP abaixo, que continua
+// crescendo sem teto) — usada só pra colorir o PortraitBox na seleção de personagem
+// (CharacterCardUI), do menos ao mais raro. Cores em UITheme.rarityNormal/Uncommon/Rare/
+// Legendary/Immortal (ver UI_PALETTE.md).
+public enum CharacterRarity
+{
+    Normal,
+    Uncommon,
+    Rare,
+    Legendary,
+    Immortal,
+}
+
 [CreateAssetMenu(fileName = "NewPlayerProfile", menuName = "Game/Player Profile", order = 100)]
 public class PlayerProfile : ScriptableObject
 {
@@ -28,11 +41,17 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("Controla se este personagem fica clic�vel/escolh�vel pra batalhar dentro do grid (diferente de isUnlockedForSelection, que s� controla se ele aparece). false = aparece no grid mas travado/cinza, sem Button. Default false por seguran�a � precisa ser ligado manualmente por personagem, inclusive nos j� existentes.")]
     public bool isPlayable = false;
 
+    [Tooltip("Favoritado pelo jogador (estrela no canto superior direito do card em 02_SelectCharacter) � personagens favoritados aparecem primeiro na grade, antes da ordem alfab�tica. Alterado em runtime por CharacterCardUI.OnFavoriteClicked, persistido via EditorUtility.SetDirty (mesmo padr�o de level/xp).")]
+    public bool isFavorite = false;
+
     [Tooltip("�cone utilizado na UI de sele��o de personagens")]
     public Sprite previewIcon;
 
     [Tooltip("Arte de fundo em tela cheia (splash art) mostrada no Frame ao selecionar este personagem em 02_SelectCharacter. Vazio = mant�m o placeholder dourado.")]
     public Sprite splashArt;
+
+    [Tooltip("Raridade do personagem (Normal/Uncommon/Rare/Legendary/Immortal) — colore o fundo do PortraitBox na sele��o de personagem. N�o tem nenhum efeito em combate.")]
+    public CharacterRarity rarity = CharacterRarity.Normal;
 
     [Header("Par�metros de Combate")]
     [Tooltip("Configura��es de ataque e anima��o (velocidade, idle, delay etc.)")]

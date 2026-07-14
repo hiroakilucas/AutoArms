@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Black Ninja
   characterPrefab: {fileID: 1605060364457366, guid: 2dc90051c6e2887489827e207c13d40b, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: fa5d9f450b4a3a94590af490098b24f9, type: 3}
   splashArt: {fileID: 21300000, guid: 885a58941e9e364418964387bab28727, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

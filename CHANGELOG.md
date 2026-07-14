@@ -1,8 +1,211 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 122 tarefas | Concluídas: 63
+- Total: 122 tarefas | Concluídas: 68
 
+- 2026-07-14: Roadmap (Fase 1) — 2 itens marcados como concluídos após verificação no código
+  (nenhum dos dois exigiu implementação nova, só confirmação de que já estavam cobertos):
+  "Arte chibi + retrato realista do personagem" (`PlayerProfile.splashArt`, já preenchido nos 72
+  `PlayerProfile` — nenhum com `{fileID: 0}` — exibido em tela cheia atrás do preview chibi em
+  `02_SelectCharacter`) e "Exibir status base... armadura" (já aparece na seção PASSIVAS do
+  `CharacterPanel` Expanded, `SetPassive("Armor", ...)` — a nota antiga dizendo que faltava esse
+  campo estava desatualizada).
+
+- 2026-07-14: Grid de `02_SelectCharacter` trocado de scroll horizontal (3 linhas fixas,
+  `FixedRowCount`) pra scroll VERTICAL (3 cards por linha, `FixedColumnCount`) — mesmo padrão do
+  Arsenal, pedido do usuário. `CharacterCardUI.CardWidth`/`CardHeight` reduzidos de 600×310 pra
+  500×259 (~5/6, junto com os demais elementos internos do card — portrait, faixa de nome,
+  barra de XP, estrela de favorito, fontes) pra 3 caberem na largura nova do Scroll View
+  (1544.65px). `CharacterSelectController.EnsureGridLayout`: `Content` passou do esquema "largura
+  auto-fit, altura = Viewport" pro esquema "largura = Viewport, altura auto-fit"
+  (`ContentSizeFitter.verticalFit=PreferredSize`); `childAlignment=UpperCenter` (3×500+2×17=1534
+  não preenche exatamente os 1544.65px, então centraliza em vez de deixar vão à direita); os dois
+  scrollbars desligados (só arraste, igual ao Arsenal). Scroll View reposicionado: pos=(175.03,
+  -21), size=(1544.65, 964). O `Viewport` já tinha `Image`+`Mask` próprios desde a montagem
+  original da cena — diferente do bug corrigido antes no Arsenal, aqui arrastar em qualquer
+  ponto da tela (não só em cima de um card) já funcionava sem precisar de nenhum fix adicional.
+
+- 2026-07-14: Sombra de bloqueado das skills em `03_Arsenal` ajustada de 0.90 pra 0.96 de
+  opacidade (pedido do usuário — valor final desta rodada de ajuste).
+
+- 2026-07-14: Sombra de bloqueado das skills em `03_Arsenal` (`ArsenalSlotUI.LightLockedOverlayColor`)
+  ajustada de 0.72 pra 0.90 de opacidade (pedido do usuário — valor final desta rodada).
+
+- 2026-07-14: Dois ajustes em `03_Arsenal`: (1) sombra de bloqueado das skills (`dimIcon=false`)
+  escurecida de 0.5 pra 0.72 de opacidade — 0.5 tinha ficado "muito claro" (pedido do usuário).
+  (2) Corrigido scroll que só funcionava arrastando em cima de um ícone — o `Viewport` do
+  `ScrollRect` só tinha `RectMask2D` (sem nenhum `Image`), então o `GraphicRaycaster` não achava
+  nada pra "bater" nas áreas vazias entre/abaixo dos ícones, e o `ScrollRect` nunca recebia o
+  evento de arrastar ali. Adicionado um `Image` quase invisível (alpha 0.001, só cosmético — o
+  raycast não liga pra alpha) cobrindo o Viewport inteiro, mesmo padrão do ScrollView default da
+  própria Unity — arrastar em qualquer ponto da tela agora rola.
+
+- 2026-07-14: `ArsenalSlotUI.Build` ganhou o parâmetro `dimIcon` (default `true`) — bloqueado
+  antes ficava "totalmente preto" nas skills (ícone tingido quase-preto + overlay 55% em cima,
+  os dois se somando). Armas mantêm esse visual (`dimIcon=true`, "pode manter totalmente escuro
+  como está" — pedido do usuário); skills usam `dimIcon=false`: ícone na cor original + só uma
+  sombra de 50% por cima, bem mais claro. `ArsenalController.BuildScrollView` passa `dimIcon:
+  true` pra ARMAS e `dimIcon: false` pra SKILLS.
+
+- 2026-07-14: `Btn_Arsenal` reposicionado em `01_MainMenu.unity` — de pos=(-617.32, 8.18) (ao
+  lado do "Chibers") pra pos=(-837.91, -203.69) (mesmo X do "Chibers", abaixo dele), mesmo
+  tamanho (200.59×166.73). `ArsenalController.BuildSkillSlots` passou a pular Garimpeiro/Magneto
+  (`skillName`) — skills ainda não implementadas (`effectText` vazio), não devem aparecer no
+  grid do Arsenal até terem mecânica de verdade.
+
+- 2026-07-14: Corrigido clique não funcionando nos slots de `03_Arsenal` — bug real:
+  `ArsenalSlotUI` tinha o `Button` no `Border`, mas `IconBg`/`Icon` (desenhados DEPOIS, por cima)
+  tinham `raycastTarget=true` por padrão e absorviam o clique antes dele chegar no `Border`.
+  Corrigido com `raycastTarget=false` nos dois. Além disso, o popup de detalhe próprio criado
+  antes foi **substituído** por uma instância real de `CharacterPanel` (mesmo componente do HUD
+  lateral de `01_MainMenu`) — `ShowWeaponDetail`/`ShowSkillDetail` tornados públicos e
+  reaproveitados diretamente, garantindo popup IDÊNTICO ao do menu principal (pedido do
+  usuário), em vez de uma versão simplificada própria. Novo `CharacterPanel.HideRootPermanently()`
+  move o HUD Compact/Expanded desse painel embutido pra fora da tela sem desativar seu Canvas
+  (diferente de `HideSlideOut`), já que o popup é sibling do mesmo Canvas e precisa dele ativo
+  pra continuar funcionando. Funciona também pra armas/skills bloqueadas — mostra os atributos da
+  família/T1 com uma nota indicando que ainda não foi obtida.
+
+- 2026-07-14: Ajustes na tela de Arsenal (`03_Arsenal`), a pedido do usuário: (1) grids de ARMAS e
+  SKILLS centralizados (`GridLayoutGroup.childAlignment` de `UpperLeft` pra `UpperCenter` — antes
+  sobrava um vão vazio à direita, já que as células não preenchem sozinhas a largura toda do
+  Content) + título de cada seção também centralizado; (2) todo slot agora é clicável, mesmo
+  bloqueado/não possuído (`ArsenalSlotUI.Build` ganhou um `onClick` opcional no `Border`, que
+  cobre o slot inteiro) — abre um popup de detalhe (overlay + painel, auto-size via
+  `VerticalLayoutGroup`+`ContentSizeFitter`) mostrando os atributos completos da arma (tipos,
+  dano, velocidade, alcance, chance de puxar, bônus condicionais só se não-zero) ou skill
+  (descrição + effectText), inclusive quando o personagem não possui — nesse caso mostra os
+  atributos da família/T1 como referência, com uma nota indicando que ainda não foi obtida.
+
+- 2026-07-14: Criada tela de Arsenal (Armas & Skills) com grid de 6 colunas, tier visual
+  (bronze/prata/ouro) e estado bloqueado/desbloqueado por personagem. Nova cena `03_Arsenal.unity`
+  (registrada em Build Settings) — cena minimalista (só Main Camera + `ArsenalController`), a UI
+  inteira (Canvas/ScrollView/grids/botão Voltar) é montada via código em `Start()`, mesmo padrão
+  de `CharacterSelectController`. Acessível por um novo botão "Arsenal" em `01_MainMenu`, mesma
+  linha de atalhos de "Chibers" e mesmo estilo card (`CharacterCardButtonStyle`) + outline/drop
+  shadow (`UIButtonShadowStyle`, mesmo componente do JOGAR/Chibers).
+  Novo `WeaponDatabase` (`Assets/ScriptableObjects/Databases/WeaponDatabase.asset`) — as armas
+  nunca tiveram um database equivalente ao `SkillDatabase` (que já existia); lista os 26
+  `WeaponData` T1 (raiz de cada família). Novo componente reutilizável `ArsenalSlotUI`
+  (ícone + borda por tier + escurecido/bloqueado se não possuído) compartilhado entre a grade de
+  ARMAS e a de SKILLS, evitando duplicar a lógica entre as duas. `ArsenalController` resolve o
+  maior tier possuído subindo a cadeia `previousTier` de cada arma/skill do `PlayerProfile` até
+  achar a raiz da família e comparando com a célula da grade — só LÊ `PlayerProfile.weapons`/
+  `skills`, nunca altera.
+  **Decisão de nomeação de cena**: `03_SelectWeapons` (campo `MainMenuController.selectWeapons`,
+  referenciado mas nunca chamado por nenhum método, e nunca criado) foi deixado intocado —
+  reservado pra uma futura tela de escolha de LOADOUT pré-combate (propósito diferente: montar
+  quais armas levar pra uma luta específica, não visualizar a coleção inteira). Arsenal ganhou o
+  nome/slot próprio `03_Arsenal` em vez de reaproveitar esse slot reservado, pra não confundir os
+  dois conceitos.
+
+- 2026-07-14: Adicionado outline + drop shadow reutilizável nos botões principais do main menu
+  (JOGAR, Chibers) para melhorar legibilidade contra o background. Novo componente
+  `UIButtonShadowStyle` (`Assets/Scripts/UI/`, `[ExecuteAlways]`) adiciona/configura os efeitos
+  nativos `UnityEngine.UI.Outline` + `Shadow` sobre o próprio `Graphic` do GameObject (mesmo
+  Image de fundo do botão, sem sprite pré-renderizado) — cor/distância/`useGraphicAlpha` de cada
+  efeito expostos no Inspector, com defaults sutis (contorno marrom escuro ~2px, sombra preta
+  ~45% opacidade, offset (0,-3)). Aplicado em `Btn_SelectCharacter` ("Chibers") e `BtnJogar`
+  ("JOGAR") em `01_MainMenu.unity`, sem alterar cor de fundo nem `onClick` de nenhum dos dois.
+  Detalhe de implementação: `GetComponent<Shadow>()` também casaria com um `Outline` já presente
+  (`Outline` herda de `Shadow` em `UnityEngine.UI`) — `FindPlainShadow()` filtra pelo tipo exato
+  pra não confundir os dois efeitos num só.
+
+- 2026-07-14: Background de `01_MainMenu` ("floating castle", `SpriteRenderer` world-space,
+  `sortingOrder -1`, atrás de tudo) desativado (`m_IsActive: 0`, não deletado — reversível) a
+  pedido do usuário.
+  **Substituído no mesmo dia**: o usuário adicionou a arte nova em
+  `Assets/Resources/Backgrounds/Background Main Menu.jpg` (já importada como Sprite) —
+  reaproveitado o mesmo GameObject (renomeado de "floating castle" pra "Background Main Menu",
+  reativado) em vez de criar um novo do zero: `SpriteRenderer.m_Sprite` trocado pro novo asset,
+  `Transform` ajustado pra pos=(-0.02, 3.38, 0)/scale=(1.992416, 1.992416, 1.992416) (valores
+  calibrados pelo usuário no Editor).
+
+- 2026-07-14: `Btn_SelectCharacter` ("Chibers") reposicionado/redimensionado em `01_MainMenu.unity`
+  — `RectTransform` (anchor 0.5/0.5) de pos=(0, −422.4)/size=(495, 170) pra pos=(−837.91, 8.18)/
+  size=(200.59, 166.73), a pedido do usuário.
+
+- 2026-07-14: `isPlayable` desligado (`false`) em massa nos 71 `PlayerProfile` restantes (script
+  em lote, `sed` direto nos `.asset`) — só `Medieval Warrior` continua jogável/clicável no grid
+  de `02_SelectCharacter`; os outros 71 continuam aparecendo (isUnlockedForSelection segue `true`),
+  só travados/cinza sem Button, mesma regra de sempre. `CharacterCardUI` também parou de desenhar
+  a estrela de favorito em cards travados (`isEnabled=false`) — não fazia sentido favoritar um
+  personagem que ainda nem pode ser escolhido pra jogar.
+
+- 2026-07-14: `CharacterDatabase.ComparePlayerProfiles` ganhou um critério de ordenação novo entre
+  favorito e nome: raridade crescente (Normal/"comum" → Uncommon → Rare → Legendary → Immortal —
+  já é a ordem dos valores do enum `CharacterRarity`, só comparar os ints). Afeta o grid de
+  `02_SelectCharacter` e a troca rápida de personagem do menu principal ao mesmo tempo (os dois
+  usam esse mesmo comparador, ver histórico acima) — favoritos continuam vindo primeiro, depois
+  agrupados por raridade, e só dentro da mesma raridade a ordem alfabética desempata.
+
+- 2026-07-14: Roadmap "Seta lateral no personagem central para troca rápida de personagem" (Fase
+  1) implementado — `MainMenuCharacterPreview` ganhou setas `<`/`>` (canvas próprio,
+  `BuildSwapArrows`/`BuildArrowButton`) flanqueando o personagem central, com pulso sutil de
+  escala (`PulsingScale`, novo componente, mesmo espírito de `PulsingAlpha` em
+  `AttributePipBar.cs`). Clicar numa seta ou arrastar o próprio personagem (`CharacterSwipeInput`,
+  novo componente no mesmo `BoxCollider2D`/mensagens `OnMouse*` já usadas por
+  `CharacterPreviewReaction`) chama `SwitchCharacter(direction)`, que avança/volta dentro de
+  `CharacterDatabase.GetPlayableCharactersOrdered()` (novo, filtro `isUnlockedForSelection &&
+  isPlayable` + mesmo critério de ordenação favorito-depois-alfabético já usado pelo grid de
+  `02_SelectCharacter` — `ComparePlayerProfiles`, agora estático em `CharacterDatabase` e
+  reaproveitado por `CharacterSelectController` em vez de duplicado). A troca atualiza
+  `SelectedProfileHolder.currentProfile` de verdade (não só o preview) e chama o novo
+  `CharacterPanel.Refresh()` público pra o painel lateral reflitir o personagem novo na hora.
+  `SpawnCharacter` (extraído de `Start()`) usa `Destroy()` em vez de `DestroyImmediate()` pro
+  GameObject do personagem — a troca pode ser disparada de dentro de um `OnMouseUp` rodando no
+  próprio objeto (arraste), e destruir na hora um GameObject cuja própria mensagem nativa ainda
+  está no stack é arriscado.
+  **Refinamento no mesmo dia**: pedido do usuário pra dar feedback visual de verdade ao arrastar —
+  a troca não é mais instantânea; `SwitchCharacter` agora roda a coroutine `SlideToCharacter`
+  (nova, substitui a chamada direta a `SpawnCharacter` na troca — `SpawnCharacter` continua só
+  pro 1º personagem exibido em `Start()`, sem transição): o personagem atual desliza pra fora no
+  mesmo sentido do arraste/seta (~10 unidades de mundo, além da meia-largura visível ~8.89, garante
+  sair da tela de vez) enquanto o próximo entra do lado oposto até centralizar (`SlideDuration`
+  0.28s, `Vector3.Lerp`). `_isSliding` ignora uma 2ª troca disparada no meio da animação (evita
+  dois personagens entrando/saindo ao mesmo tempo). Lógica de "tirar componentes de combate +
+  Idle" extraída pra `PrepareCharacterForPreview` (compartilhada entre `SpawnCharacter` e
+  `SlideToCharacter`, evita duplicar a sequência duas vezes).
+
+- 2026-07-14: Grade de `02_SelectCharacter` ordenada alfabeticamente por nome (era a ordem crua de
+  `CharacterDatabase.unlockedCharacters`) + novo campo `PlayerProfile.isFavorite` com estrela no
+  canto superior direito do `PortraitBox` de cada `CharacterCardUI` — clicar na estrela
+  favorita/desfavorita o personagem sem selecionar o card (Button próprio, não borbulha) e
+  repopula a grade (`CharacterSelectController.PopulateCharacterGrid`/`CompareFavoriteThenName`),
+  trazendo favoritados pro início da lista (antes da ordenação alfabética, dentro do mesmo grupo
+  habilitado/travado). Como o `GridLayoutGroup` já usa `FixedRowCount=3`/`Axis.Vertical`, a ordem
+  da lista já corresponde à leitura "cima pra baixo, esquerda pra direita" sem mudar o layout.
+  **Correção no mesmo dia**: a 1ª versão desenhava a estrela como glyph Unicode TMP ("★"/"☆") —
+  a fonte usada no projeto não tem esse glyph no atlas, renderizava como um quadrado "tofu"
+  (reportado pelo usuário). Trocado por `UIShapeUtil.Star(Color, filled)` (novo, mesmo padrão de
+  `RoundedRect`) — rasteriza o polígono de 5 pontas em runtime (ray-casting point-in-polygon),
+  sem depender de cobertura de fonte nem de importar sprites externos; contorno vazado (não
+  favoritado) é o mesmo polígono encolhido subtraído do preenchido. **2ª correção**: a estrela
+  gerada apareceu de cabeça pra baixo — `StarPoints` usava `rot = -90°` pro 1º vértice, mas
+  `Texture2D`/`Sprite` tem `y=0` na base (convenção padrão da Unity), então esse ângulo apontava
+  pra BAIXO em vez de pra cima; trocado pra `+90°`.
+- 2026-07-14: `PlayerProfile.rarity` (novo enum `CharacterRarity`: Normal/Uncommon/Rare/Legendary/
+  Immortal, default Normal) — raridade puramente cosmética por personagem, sem efeito em combate.
+  `UITheme` ganhou 5 cores novas (`rarityNormal` cinza, `rarityUncommon` verde, `rarityRare` azul,
+  `rarityLegendary` laranja, `rarityImmortal` vermelho — ver UI_PALETTE.md). `CharacterCardUI`
+  (grid de `02_SelectCharacter`) agora colore o fundo do `PortraitBox` pela raridade do
+  `PlayerProfile` em vez do hash do nome (paleta arco-íris antiga, sem significado nenhum) —
+  bloqueado continua dessaturando a mesma cor (`Desaturate`, padrão já existente).
+- 2026-07-14: Roadmap "Criação do primeiro personagem masculino e feminino" (Fase 1) marcado como
+  concluído no CLAUDE.md — já estava coberto desde os primeiros personagens (Assassin Guy/Medieval
+  Warrior Girl), confirmado agora com os 69 `PlayerProfile` existentes cobrindo ambos os gêneros.
+- 2026-07-14: Renomeado botão Guerreiros para Chibers + restyle visual estilo card (ícone +
+  label, badge de notificação). `01_MainMenu.unity` — `Btn_SelectCharacter` teve o texto TMP
+  trocado de "GUERREIROS" pra "CHIBERS" (nenhum script referenciava a string antiga — nome do
+  GameObject/lógica de navegação, `MainMenuController.OnCharacterButton`, inalterados) e ganhou
+  o componente `CharacterCardButtonStyle` (novo, `Assets/Scripts/UI/`), que reestiliza o botão em
+  runtime no padrão card (estilo Brawl Stars): fundo arredondado (`UIShapeUtil.RoundedRect`,
+  raio 16px, cor `UITheme.secondaryButton`), ícone placeholder preenchendo o topo do card (tint
+  claro do mesmo tom, até a arte definitiva existir — `iconOverride` já expõe o campo pra
+  substituição), faixa inferior mais escura (`panelBackgroundAlt`) com o label bold+outline, e um
+  badge circular de notificação (`NotificationBadge`, filho desativado por padrão — `danger`,
+  canto superior direito) ligado via `SetNotificationCount(int)`. Cores todas via `UITheme`, sem
+  hex hardcoded (ver UI_PALETTE.md).
 - 2026-07-14: `isUnlockedForSelection`/`isPlayable` ligados em massa (`true`) nos 72 `PlayerProfile`
   — pedido do usuário pra visualizar todos os personagens já importados no grid de
   `02_SelectCharacter` (antes só Assassin Guy/Medieval Warrior/Medieval Warrior Girl apareciam

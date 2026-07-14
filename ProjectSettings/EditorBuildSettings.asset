@@ -12,6 +12,9 @@ EditorBuildSettings:
     path: Assets/Scenes/02_SelectCharacter.unity
     guid: 2abc3dbfec1530d42b7b2009682739f0
   - enabled: 1
+    path: Assets/Scenes/03_Arsenal.unity
+    guid: 1b133c4d3d3d4b7cb5368eeee6b02faa
+  - enabled: 1
     path: Assets/Scenes/04_CombatScenePVP.unity
     guid: 8c9cfa26abfee488c85f1582747f6a02
   - enabled: 1

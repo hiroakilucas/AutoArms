@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Forest Guardian 1
   characterPrefab: {fileID: 8705174542114271638, guid: b8cdf89617ddc974f9b1a2019dec1bf0, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 13cc447c83693bd4598f7e6d9fd99f97, type: 3}
   splashArt: {fileID: 21300000, guid: 7898d1b9aa553104b99ef1dda5b8d39e, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Assasin Guy
   characterPrefab: {fileID: 1492118923640976, guid: 75e46bf5ec767a441a2b58925f34f38a, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: afebf40d075589240953327e697d8f0d, type: 3}
   splashArt: {fileID: 21300000, guid: 978148677f2360b4ba568302a3a8234a, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

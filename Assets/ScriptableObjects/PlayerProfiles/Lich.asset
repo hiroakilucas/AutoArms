@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Lich
   characterPrefab: {fileID: 1714288130964204, guid: 447fd9dbcbde2364497ab8c0036f62fa, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 548b1a2a95e9ff64fb568a2b9d7db9ef, type: 3}
   splashArt: {fileID: 21300000, guid: 9fd2c7cf9fc565945b965ca5de0eb21a, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

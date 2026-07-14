@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Egyptian Mummy
   characterPrefab: {fileID: 1290197860212044, guid: c73606b589c893e41ba6a48494bf15c9, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: dbc9f8ded2a58cf4d9a18bad2df96d0d, type: 3}
   splashArt: {fileID: 21300000, guid: 0b20e2d117a7e3042be6fe183357f262, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

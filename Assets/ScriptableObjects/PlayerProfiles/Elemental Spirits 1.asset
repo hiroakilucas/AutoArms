@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Elemental Spirits 1
   characterPrefab: {fileID: 496245811973268332, guid: d347f08e9913dcc4dbf838e72a238fc2, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: b43e50a985c742a4eafabf56298a4409, type: 3}
   splashArt: {fileID: 21300000, guid: 16c565c434133794891191166dd5ecd8, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

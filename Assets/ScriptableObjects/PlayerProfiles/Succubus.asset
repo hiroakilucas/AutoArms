@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Succubus
   characterPrefab: {fileID: 1943085063419492, guid: 3eee6ca49dc328b46ae5e76fcf3907f3, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: b748c6247101f8544bebccfed7b87fae, type: 3}
   splashArt: {fileID: 21300000, guid: 1b8962ce5c19b5c4eb8fcf5e6497f5a4, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

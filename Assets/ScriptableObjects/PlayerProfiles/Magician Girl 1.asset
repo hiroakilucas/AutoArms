@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Magician Girl 1
   characterPrefab: {fileID: 6126806809904464624, guid: 0b8d7fa722bf09a46aac16d4c935c3ae, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 224a03e928712a546b84d10c0288e466, type: 3}
   splashArt: {fileID: 21300000, guid: 429716eea6c5dd4478f7b41060ee8e0d, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

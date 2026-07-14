@@ -78,4 +78,82 @@ public static class UIShapeUtil
         _gradientCache[key] = sprite;
         return sprite;
     }
+
+    // Estrela de 5 pontas rasterizada em runtime (mesmo espírito de RoundedRect acima) — usada
+    // pelo favorito de CharacterCardUI. Existe porque o glyph Unicode "★"/"☆" não está incluso
+    // no atlas da fonte TMP do projeto (renderizava como um quadrado "tofu" em vez da estrela,
+    // bug reportado pelo usuário) — em vez de depender de cobertura de fonte ou de importar
+    // sprites externos, desenha o polígono direto (ray-casting point-in-polygon, 10 vértices
+    // alternando raio externo/interno). `filled=false` desenha só o contorno (mesmo polígono
+    // encolhido subtraído do polígono cheio, formando um anel).
+    private static readonly Dictionary<(Color, bool), Sprite> _starCache = new Dictionary<(Color, bool), Sprite>();
+
+    public static Sprite Star(Color color, bool filled)
+    {
+        var key = (color, filled);
+        if (_starCache.TryGetValue(key, out var cached)) return cached;
+
+        var texture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        float half = TextureSize / 2f;
+        float outerR = half - 2f;
+        float innerR = outerR * 0.45f;
+        const float OutlineThickness = 0.22f; // fração do raio externo, só usada quando !filled
+        var outerPts = StarPoints(half, half, outerR, innerR);
+        var innerPts = filled ? null : StarPoints(half, half, outerR * (1f - OutlineThickness), innerR * (1f - OutlineThickness));
+
+        var pixels = new Color[TextureSize * TextureSize];
+        for (int y = 0; y < TextureSize; y++)
+        {
+            for (int x = 0; x < TextureSize; x++)
+            {
+                var p = new Vector2(x + 0.5f, y + 0.5f);
+                bool insideOuter = PointInPolygon(p, outerPts);
+                bool inside = filled ? insideOuter : insideOuter && !PointInPolygon(p, innerPts);
+                pixels[y * TextureSize + x] = inside ? color : Color.clear;
+            }
+        }
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        var sprite = Sprite.Create(texture, new Rect(0, 0, TextureSize, TextureSize), new Vector2(0.5f, 0.5f), 100f);
+        _starCache[key] = sprite;
+        return sprite;
+    }
+
+    private static Vector2[] StarPoints(float cx, float cy, float outerR, float innerR, int spikes = 5)
+    {
+        var pts = new Vector2[spikes * 2];
+        float angleStep = Mathf.PI / spikes;
+        // +90° (não -90°): Texture2D/Sprite tem y=0 na base (convenção padrão da Unity), então
+        // sin(angle)>0 sobe na imagem — -90° apontava pra BAIXO, deixando a estrela de cabeça
+        // pra baixo (bug reportado pelo usuário).
+        float rot = Mathf.PI / 2f; // 1º vértice apontando pra cima
+        for (int i = 0; i < spikes * 2; i++)
+        {
+            float r = (i % 2 == 0) ? outerR : innerR;
+            float angle = rot + i * angleStep;
+            pts[i] = new Vector2(cx + Mathf.Cos(angle) * r, cy + Mathf.Sin(angle) * r);
+        }
+        return pts;
+    }
+
+    // Ray-casting padrão (par/ímpar de cruzamentos com as arestas do polígono).
+    private static bool PointInPolygon(Vector2 p, Vector2[] poly)
+    {
+        bool inside = false;
+        int j = poly.Length - 1;
+        for (int i = 0; i < poly.Length; i++)
+        {
+            if ((poly[i].y > p.y) != (poly[j].y > p.y) &&
+                p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)
+            {
+                inside = !inside;
+            }
+            j = i;
+        }
+        return inside;
+    }
 }

@@ -35,6 +35,13 @@ public class UITheme : ScriptableObject
     public Color tierSilver = HexToColor("#C0C0C0");
     public Color tierGold = HexToColor("#FFD700");
 
+    [Header("Raridade de Personagem (PlayerProfile.rarity)")]
+    public Color rarityNormal = HexToColor("#9E9E9E");
+    public Color rarityUncommon = HexToColor("#43A047");
+    public Color rarityRare = HexToColor("#1E88E5");
+    public Color rarityLegendary = HexToColor("#FB8C00");
+    public Color rarityImmortal = HexToColor("#E53935");
+
     public static Color HexToColor(string hex)
     {
         ColorUtility.TryParseHtmlString(hex, out var color);

@@ -67,6 +67,16 @@ Objetivo: nenhuma cor de interface deve ser hardcoded num prefab/script novo —
 | `tierSilver` | `#C0C0C0` | Borda do ícone de skill/arma **T2** |
 | `tierGold` | `#FFD700` | Borda do ícone de skill/arma **T3** — tom distinto de `currencyGold` (mais saturado/"medalha"), de propósito, pra não confundir com moeda |
 
+### Raridade de Personagem (`PlayerProfile.rarity`)
+
+| Campo | Hex | Uso |
+|---|---|---|
+| `rarityNormal` | `#9E9E9E` | Fundo do `PortraitBox` (02_SelectCharacter) — raridade Normal (cinza) |
+| `rarityUncommon` | `#43A047` | Raridade Incomum (verde) |
+| `rarityRare` | `#1E88E5` | Raridade Rara (azul) |
+| `rarityLegendary` | `#FB8C00` | Raridade Lendária (laranja) |
+| `rarityImmortal` | `#E53935` | Raridade Imortal (vermelho) — tier mais raro |
+
 ## Status de adoção
 
 Fundação criada (2026-07-07). Botão "Jogar" de `01_MainMenu` (`primaryAction`) foi o primeiro
@@ -88,3 +98,5 @@ duplicar hex. `CombatResultPanel`/`WeaponHUD`/`02_SelectCharacter` ainda não mi
 - `danger` — fundo do botão de fechar (X) do painel lateral.
 - `tierBronze`/`tierSilver`/`tierGold` (2026-07-07) — borda ao redor de cada ícone nas seções HABILIDADES/ARMAS do `CharacterPanel`, conforme o tier (T1/T2/T3) da skill/arma equipada; reaproveitados também na estrela de raridade (★) do popup de detalhe de arma.
 - `secondaryButton`/`tierBronze`/`secondaryButtonAlt`/`currencyGold`/`currencyGem`/`success`/`danger` (2026-07-07) — cor própria por `WeaponType` (Blunt/Heavy/Long/Fast/Thrown/Ranged/Sharp) na linha "Types" do popup de detalhe de arma; e `primaryActionAlt`/`success`/`secondaryButtonAlt` pro destaque de tier atual vs. os outros dois nos campos `[T1/T2/T3]` (Damage/Draw Chance laranja, Crit Bonus verde, inativos cinza).
+- `secondaryButton`/`panelBackgroundAlt`/`textOnDark`/`panelBackground`/`danger` (2026-07-14) — `CharacterCardButtonStyle` (`Btn_SelectCharacter`/"Chibers" em `01_MainMenu`): fundo do card (`secondaryButton`, mesmo token já documentado acima pra esse botão), faixa de label (`panelBackgroundAlt`), texto+outline do label (`textOnDark`/`panelBackground`) e badge circular de notificação (`danger`). Ícone placeholder usa um tint claro (`Color.Lerp` com branco) do próprio `secondaryButton`, mesmo padrão de derivar variantes já usado pra SPD em `AttributePipBar`.
+- `rarityNormal`/`rarityUncommon`/`rarityRare`/`rarityLegendary`/`rarityImmortal` (2026-07-14) — `CharacterCardUI.BuildPortraitBox` (02_SelectCharacter): fundo do `PortraitBox` de cada card, escolhido por `PlayerProfile.rarity` em vez do hash-do-nome usado antes (paleta arco-íris sem significado). Bloqueado usa a mesma cor passada por `Desaturate` (padrão já existente).

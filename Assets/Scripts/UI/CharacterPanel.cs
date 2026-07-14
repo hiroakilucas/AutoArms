@@ -175,6 +175,23 @@ public class CharacterPanel : MonoBehaviour
         RefreshAll();
     }
 
+    // Reconstrói nome/HP/pips/skills/armas/passivas a partir de `_holder.currentProfile` de novo
+    // (sem tocar em `_overrideProfile`) — usado por 01_MainMenu (troca rápida de personagem via
+    // setas/arraste, ver MainMenuCharacterPreview) depois de mudar
+    // `SelectedProfileHolder.currentProfile` em runtime, já que este painel só lê o holder uma
+    // vez por RefreshAll e não escuta nenhum evento de mudança sozinho.
+    public void Refresh() => RefreshAll();
+
+    // Move o Root pra fora da tela SEM desativar `_canvasGo` (diferente de HideSlideOut, que
+    // também desliga o Canvas ao final da animação) — usado por telas que só querem o POPUP de
+    // detalhe deste painel (ex: ArsenalController/03_Arsenal), sem mostrar o HUD Compact/
+    // Expanded. O popup (BuildPopup, sibling mais recente de `_canvasGo`) continua funcionando
+    // normalmente, já que o Canvas em si permanece ativo — só o Root fica fora da área visível.
+    public void HideRootPermanently()
+    {
+        _rootRt.anchoredPosition = _restAnchoredPos + new Vector2(HideOffsetX, 0f);
+    }
+
     public void ShowSlideIn(float duration = 0.3f)
     {
         _canvasGo.SetActive(true);
@@ -786,7 +803,12 @@ public class CharacterPanel : MonoBehaviour
     // arma já teve um bug real de espaçamento gigante entre linhas causado por
     // `childControlHeight=false` numa VerticalLayoutGroup (ver ShowWeaponDetail) — evitado aqui
     // não usando layout automático nenhum pro texto da skill.
-    private void ShowSkillDetail(SkillData skill)
+    // Público (2026-07-14) — ArsenalController (03_Arsenal) reaproveita o MESMO popup pra
+    // mostrar os atributos de qualquer arma/skill do jogo (não só as equipadas do personagem),
+    // inclusive quando bloqueada/não possuída — evita duplicar toda essa lógica de popup numa
+    // 2ª tela. Ver CharacterPanel.HideRootPermanently, usado pra esconder o HUD Compact/Expanded
+    // deste painel quando instanciado só pelo popup.
+    public void ShowSkillDetail(SkillData skill)
     {
         ClearPopupContent();
         // Ativa o popup ANTES de criar/medir os textos novos: `_popupOverlayGo` começa/fica
@@ -935,7 +957,8 @@ public class CharacterPanel : MonoBehaviour
     // Evasion, Dexterity, Reversal, Block, Accuracy, Disarm, Combo, Deflect, Counter) só
     // aparecem se != 0 pra essa arma (`AddTieredBonusRow`); `critDamageMultiplier` nunca aparece
     // (pedido do usuário — não é um "bônus" no mesmo sentido dos outros).
-    private void ShowWeaponDetail(WeaponData w)
+    // Público (2026-07-14) — ver comentário de ShowSkillDetail acima.
+    public void ShowWeaponDetail(WeaponData w)
     {
         ClearPopupContent();
 

@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Technomage 2
   characterPrefab: {fileID: 6760499614742390556, guid: 819f62e66285e0f49854b4d9f65571cd, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: bdfca5b35c1b4264fb10566f9af624b4, type: 3}
   splashArt: {fileID: 21300000, guid: f3eef6b5f69fa974b9625d46b613dc60, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

@@ -10,32 +10,38 @@ using TMPro;
 public class CharacterCardUI : MonoBehaviour
 {
     // Expostos pra CharacterSelectController dimensionar o GridLayoutGroup sem duplicar os
-    // números aqui e lá. Tamanho calibrado (2026-07-10) pra caber exatamente 3 colunas × 3 linhas
-    // dentro do Scroll View de 1834×964 (spacing 17 em CharacterSelectController.EnsureGridLayout):
-    // 3×600 + 2×17 = 1834; 3×310 + 2×17 = 964.
-    public const float CardWidth = 600f;
+    // números aqui e lá. Reduzido (2026-07-14, ~5/6 do tamanho antigo, pedido do usuário) pra
+    // caber 3 colunas dentro do Scroll View de 1544.65×964 (agora scroll VERTICAL, igual ao
+    // Arsenal — antes eram 3 linhas fixas com scroll horizontal, spacing 17 em
+    // CharacterSelectController.EnsureGridLayout): 3×500 + 2×17 = 1534, cabe com folga em
+    // 1544.65 (childAlignment=UpperCenter absorve os ~10px de sobra).
+    public const float CardWidth = 500f;
     public const float CardHeight = TopMargin + PortraitBoxHeight + Gap + LevelXpHeight + BottomMargin;
 
     // Portrait não é mais quadrado (era 170×170, igual a CardWidth por coincidência) — a altura
     // do card é limitada pelo orçamento das 3 linhas (ScrollHeight), então a caixa de portrait
     // vira um retângulo mais largo que alto, com uma margem de 30px de cada lado dentro do card.
-    private const float PortraitBoxWidth = 540f;
-    private const float PortraitBoxHeight = 200f;
-    private const float NameStripHeight = 40f;
-    private const float LevelXpHeight = 64f;
-    private const float TopMargin = 20f;
-    private const float Gap = 12f;
-    private const float BottomMargin = 14f;
+    private const float PortraitBoxWidth = 450f;
+    private const float PortraitBoxHeight = 167f;
+    private const float NameStripHeight = 33f;
+    private const float LevelXpHeight = 53f;
+    private const float TopMargin = 17f;
+    private const float Gap = 10f;
+    private const float BottomMargin = 12f;
 
     private PlayerProfile profile;
     private CharacterSelectController controller;
 
-    // Paleta simples "por enquanto" (pedido do usuário) — cor sólida atrás do portrait, tokens
-    // do UITheme, escolhida deterministicamente pelo NOME do personagem (não pelo índice no
-    // grid, pra não mudar de cor se a ordem do CharacterDatabase mudar no futuro).
-    private static Color[] Palette(UITheme theme) => new[]
+    // Cor sólida atrás do portrait — agora por RARIDADE (PlayerProfile.rarity), não mais um
+    // hash do nome (paleta arco-íris antiga sem significado nenhum). Tokens em UITheme.rarity*,
+    // ver UI_PALETTE.md.
+    private static Color RarityColor(UITheme theme, CharacterRarity rarity) => rarity switch
     {
-        theme.primaryActionAlt, theme.secondaryButtonAlt, theme.success, theme.currencyGem, theme.tierBronze
+        CharacterRarity.Uncommon => theme.rarityUncommon,
+        CharacterRarity.Rare => theme.rarityRare,
+        CharacterRarity.Legendary => theme.rarityLegendary,
+        CharacterRarity.Immortal => theme.rarityImmortal,
+        _ => theme.rarityNormal,
     };
 
     public void Setup(PlayerProfile profile, CharacterSelectController controller, UITheme theme, bool isEnabled)
@@ -79,9 +85,8 @@ public class CharacterCardUI : MonoBehaviour
 
     private float BuildPortraitBox(UITheme theme, bool isEnabled, float y)
     {
-        var palette = Palette(theme);
-        int index = Mathf.Abs(profile.profileName.GetHashCode()) % palette.Length;
-        Color bgColor = isEnabled ? palette[index] : Desaturate(palette[index]);
+        Color rarityColor = RarityColor(theme, profile.rarity);
+        Color bgColor = isEnabled ? rarityColor : Desaturate(rarityColor);
 
         var boxGo = new GameObject("PortraitBox");
         boxGo.transform.SetParent(transform, false);
@@ -108,6 +113,12 @@ public class CharacterCardUI : MonoBehaviour
             var portraitImg = portraitGo.AddComponent<Image>();
             portraitImg.sprite = profile.previewIcon;
             portraitImg.preserveAspect = true;
+            // localScale 2.3x infla o retângulo usado pelo raycast (não só o visual) — sem isso,
+            // a área clicável do Portrait vaza pra dentro do card vizinho na grade (~34% da
+            // largura do card ao lado), roubando o clique perto da borda direita/esquerda. O
+            // card já tem seu próprio Button (`hit`, cobrindo o card inteiro) — o Portrait não
+            // precisa ser clicável por conta própria.
+            portraitImg.raycastTarget = false;
             // Silhueta quase preta via tint (sem shader custom) — bloqueado fica bem escuro/preto
             // no sombreamento, estilo personagem não desbloqueado do Brawl Stars (era um cinza
             // médio 0.42, pedido do usuário pra ficar bem mais escuro).
@@ -139,10 +150,79 @@ public class CharacterCardUI : MonoBehaviour
         nameTxt.color = FadeIfLocked(theme.textOnDark, isEnabled);
         nameTxt.alignment = TextAlignmentOptions.Center;
         nameTxt.enableAutoSizing = true;
-        nameTxt.fontSizeMin = 14;
-        nameTxt.fontSizeMax = 24;
+        nameTxt.fontSizeMin = 12;
+        nameTxt.fontSizeMax = 20;
+
+        // Só personagens jogáveis (isPlayable) podem ser favoritados (2026-07-14, pedido do
+        // usuário) — travado/cinza não ganha a estrela.
+        if (isEnabled) BuildFavoriteStar(boxGo.transform, theme);
 
         return y - PortraitBoxHeight;
+    }
+
+    private const float FavoriteStarSize = 40f;
+    private const float FavoriteStarMargin = 5f;
+
+    // Estrela de favorito no canto superior direito do PortraitBox — sprite gerado em runtime
+    // por UIShapeUtil.Star (preenchida ou só contorno), não mais o glyph Unicode "★"/"☆" (a
+    // fonte TMP do projeto não tem esse glyph no atlas — renderizava como um quadrado "tofu",
+    // reportado pelo usuário). Última filha de `boxGo` (desenha por cima do Portrait/NameStrip,
+    // mesma regra de ordem de hierarquia do Canvas). Tem seu próprio Button — cliques nela nunca
+    // borbulham pro Button do card inteiro (`hit`), então favoritar não abre/seleciona o
+    // personagem. Aparece em cards travados também (favoritar independe de `isPlayable`).
+    private Image favoriteStarImg;
+
+    private void BuildFavoriteStar(Transform parent, UITheme theme)
+    {
+        var starGo = new GameObject("FavoriteStar");
+        starGo.transform.SetParent(parent, false);
+        var starRt = starGo.AddComponent<RectTransform>();
+        starRt.anchorMin = starRt.anchorMax = starRt.pivot = new Vector2(1f, 1f);
+        starRt.sizeDelta = new Vector2(FavoriteStarSize, FavoriteStarSize);
+        starRt.anchoredPosition = new Vector2(-FavoriteStarMargin, -FavoriteStarMargin);
+
+        // Graphic invisível só pra dar área de raycast RETANGULAR ao Button (mesmo truque do
+        // `hit` do card) — o sprite da estrela abaixo tem raycastTarget desligado; sem esse
+        // retângulo, a versão "contorno" (vazada no meio) teria um buraco morto sem clique.
+        var hitImg = starGo.AddComponent<Image>();
+        hitImg.color = new Color(0f, 0f, 0f, 0.001f);
+
+        var btn = starGo.AddComponent<Button>();
+        btn.targetGraphic = hitImg;
+        btn.onClick.AddListener(OnFavoriteClicked);
+
+        var iconGo = new GameObject("Star");
+        iconGo.transform.SetParent(starGo.transform, false);
+        var iconRt = iconGo.AddComponent<RectTransform>();
+        iconRt.anchorMin = Vector2.zero;
+        iconRt.anchorMax = Vector2.one;
+        iconRt.offsetMin = iconRt.offsetMax = Vector2.zero;
+        favoriteStarImg = iconGo.AddComponent<Image>();
+        favoriteStarImg.raycastTarget = false;
+        RefreshFavoriteStarVisual(theme);
+    }
+
+    private void RefreshFavoriteStarVisual(UITheme theme)
+    {
+        if (favoriteStarImg == null) return;
+        // Favoritado: estrela cheia dourada. Não favoritado: só o contorno, em textOnDark (claro
+        // neutro) — legível contra qualquer cor de raridade do PortraitBox, sem competir
+        // visualmente com o dourado (reservado só pro estado "já favoritado").
+        favoriteStarImg.sprite = profile.isFavorite
+            ? UIShapeUtil.Star(theme.currencyGold, filled: true)
+            : UIShapeUtil.Star(theme.textOnDark, filled: false);
+    }
+
+    private void OnFavoriteClicked()
+    {
+        profile.isFavorite = !profile.isFavorite;
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(profile);
+#endif
+        // Repopula a grade inteira em vez de só trocar o sprite local — favoritar precisa mover
+        // o card pro início da lista (CharacterSelectController.PopulateCharacterGrid), não só
+        // atualizar a estrela no lugar.
+        controller?.PopulateCharacterGrid();
     }
 
     // Mesmo estilo visual de MainMenuCharacterPreview.BuildLevelXpHud (fundo sólido
@@ -171,7 +251,7 @@ public class CharacterCardUI : MonoBehaviour
         lvlRt.offsetMin = lvlRt.offsetMax = Vector2.zero;
         var lvlTxt = lvlGo.AddComponent<TextMeshProUGUI>();
         lvlTxt.text = $"Level {profile.level}";
-        lvlTxt.fontSize = 18;
+        lvlTxt.fontSize = 15;
         lvlTxt.fontStyle = FontStyles.Bold;
         lvlTxt.color = textColor;
         lvlTxt.alignment = TextAlignmentOptions.Center;
@@ -208,7 +288,7 @@ public class CharacterCardUI : MonoBehaviour
         xpRt.offsetMin = xpRt.offsetMax = Vector2.zero;
         var xpTxt = xpTxtGo.AddComponent<TextMeshProUGUI>();
         xpTxt.text = $"{profile.xpCurrent}/{req}";
-        xpTxt.fontSize = 14;
+        xpTxt.fontSize = 12;
         xpTxt.fontStyle = FontStyles.Bold;
         xpTxt.color = textColor;
         xpTxt.alignment = TextAlignmentOptions.Center;

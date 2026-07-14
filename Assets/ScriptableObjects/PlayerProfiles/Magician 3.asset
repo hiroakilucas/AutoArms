@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Magician 3
   characterPrefab: {fileID: 1297440615167326, guid: 19dbede4eecbaf04cba435f0590bb406, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 3639e88a4546c6d4c8eb3b1eeab8636c, type: 3}
   splashArt: {fileID: 21300000, guid: 3a3db406e2639c842bcfdd19a408de2d, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

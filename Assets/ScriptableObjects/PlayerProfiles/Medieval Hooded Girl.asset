@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Medieval Hooded Girl
   characterPrefab: {fileID: 1164319515515670, guid: 8cde31b5514064246850bbb2634c0641, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 5e665a54c1a9e604cbdf6d8e9b14d8d5, type: 3}
   splashArt: {fileID: 21300000, guid: 0825397cce1888c459eebc86fd5aeaed, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

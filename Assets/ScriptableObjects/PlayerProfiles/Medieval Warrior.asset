@@ -16,8 +16,10 @@ MonoBehaviour:
   characterPrefab: {fileID: 1545498302350534, guid: 927828765a1dfce40ad37a9e0b167b7b, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 1
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: acde409e0b6e5794e80031314f35d193, type: 3}
   splashArt: {fileID: 21300000, guid: df638e56e9b61c04191f6b46d33af88a, type: 3}
+  rarity: 0
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}

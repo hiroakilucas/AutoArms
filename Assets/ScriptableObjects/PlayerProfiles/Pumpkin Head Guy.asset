@@ -15,7 +15,7 @@ MonoBehaviour:
   profileName: Pumpkin Head Guy
   characterPrefab: {fileID: 1774807131041856, guid: 9f8388ad1634b2541b0ef955bd5e123b, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   previewIcon: {fileID: 21300000, guid: 0140ee474874f654fae0ae6afe40aad6, type: 3}
   splashArt: {fileID: 21300000, guid: b743fc64913cc4b488e5121edea7c2ca, type: 3}
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}

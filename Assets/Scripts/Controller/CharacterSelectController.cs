@@ -66,15 +66,17 @@ public class CharacterSelectController : MonoBehaviour
     private GameObject previewCharacterGo;
     private CharacterPreviewReaction previewReaction;
 
-    // Grid ancorado na lateral esquerda (2026-07-10: painel bem maior, "quase tela cheia") —
-    // largura/altura pra caber exatamente 3 colunas × 3 linhas de CharacterCardUI visíveis de
-    // uma vez (3 × CardWidth(600) + 2 × spacing(17) = 1834; 3 × CardHeight(310) + 2 × spacing(17)
-    // = 964); o resto (4ª coluna em diante) scrolla horizontalmente. Valores calibrados
-    // manualmente pelo usuário no Inspector (Width/Height/PosX/PosY do Scroll View) e replicados
-    // aqui.
-    private const float GridLeftMargin = 40f;
+    // Grid reposicionado (2026-07-14, pedido do usuário) — scroll agora é VERTICAL, igual ao
+    // Arsenal (03_Arsenal), com 3 CharacterCardUI por linha (FixedColumnCount, ver
+    // EnsureGridLayout) em vez das 3 linhas fixas + scroll horizontal de antes. Valores de
+    // posição/tamanho calibrados pelo usuário no Inspector do Scroll View e replicados aqui
+    // (mesmo esquema de anchor ponto (0, 0.5)/(0, 0.5) de sempre — Pos X/Y mapeiam direto pra
+    // anchoredPosition, Width/Height pra sizeDelta). CardWidth/CardHeight (CharacterCardUI)
+    // reduzidos (~5/6 do tamanho antigo) pra 3 caberem dentro da largura nova: 3×500 + 2×17 =
+    // 1534, cabe em 1544.65 com ~10px de folga (childAlignment=UpperCenter absorve isso).
+    private const float GridLeftMargin = 175.03f;
     private const float GridPosY = -21f;
-    private const float GridScrollWidth = 1834f;
+    private const float GridScrollWidth = 1544.65f;
     private const float ScrollHeight = 964f;
 
     // Janela vertical compartilhada por `CharacterPanel` (Root) e pelo anchor Y do `Portrait`
@@ -257,8 +259,13 @@ public class CharacterSelectController : MonoBehaviour
         txt.alignment = TextAlignmentOptions.Center;
     }
 
-    // Ordena habilitados (== currentProfile) primeiro, desabilitados depois — mantém a ordem
-    // relativa de cada grupo conforme já vêm do CharacterDatabase.
+    // Ordena habilitados (isPlayable) primeiro, desabilitados depois; dentro de cada grupo,
+    // favoritados primeiro, depois ordem alfabética por nome (2026-07-14, pedido do usuário —
+    // era a ordem crua do CharacterDatabase). GridLayoutGroup usa FixedRowCount=3 com
+    // Axis.Vertical (ver EnsureGridLayout), então o 1º da lista cai na célula de cima da 1ª
+    // coluna, preenchendo de cima pra baixo antes de abrir a coluna seguinte à direita — "cima
+    // pra baixo, esquerda pra direita" já é a ordem de leitura do grid sem precisar mudar o
+    // layout, só a ordem da lista em si.
     public void PopulateCharacterGrid()
     {
         foreach (Transform child in gridContent)
@@ -273,11 +280,18 @@ public class CharacterSelectController : MonoBehaviour
         // personagem pela UI). Não-jogável ainda aparece no grid, só travado/cinza sem Button.
         // p == null: referência órfã (asset deletado por fora sem tirar da lista) — ignora em vez
         // de derrubar a cena inteira com NullReferenceException.
-        var ordered = new List<PlayerProfile>();
+        var enabled = new List<PlayerProfile>();
+        var locked = new List<PlayerProfile>();
         foreach (var p in characterDatabase.unlockedCharacters)
-            if (p != null && p.isUnlockedForSelection && p.isPlayable) ordered.Add(p);
-        foreach (var p in characterDatabase.unlockedCharacters)
-            if (p != null && p.isUnlockedForSelection && !p.isPlayable) ordered.Add(p);
+        {
+            if (p == null || !p.isUnlockedForSelection) continue;
+            (p.isPlayable ? enabled : locked).Add(p);
+        }
+        enabled.Sort(CharacterDatabase.ComparePlayerProfiles);
+        locked.Sort(CharacterDatabase.ComparePlayerProfiles);
+
+        var ordered = new List<PlayerProfile>(enabled);
+        ordered.AddRange(locked);
 
         foreach (var profile in ordered)
         {
@@ -289,54 +303,62 @@ public class CharacterSelectController : MonoBehaviour
         }
     }
 
-    // Scroll HORIZONTAL apenas — GridLayoutGroup com FixedRowCount=3 preenche cada coluna de
-    // cima a baixo (3 cards) antes de abrir uma nova coluna à direita; revela mais personagens
-    // conforme o CharacterDatabase cresce, sem ajuste manual de layout. O grid fica ancorado na
-    // lateral esquerda da tela (não mais centralizado), deixando o centro livre pro preview e a
-    // direita livre pro painel.
+    // Scroll VERTICAL (2026-07-14, pedido do usuário — "igual do Arsenal") — GridLayoutGroup com
+    // FixedColumnCount=3 preenche cada linha da esquerda pra direita (3 cards) antes de abrir
+    // uma nova linha abaixo; revela mais personagens conforme o CharacterDatabase cresce, sem
+    // ajuste manual de layout. Era FixedRowCount=3 + scroll horizontal (3 linhas fixas, colunas
+    // extras à direita) — invertido a pedido do usuário. O grid fica ancorado na lateral
+    // esquerda da tela (não mais centralizado), deixando o centro livre pro preview e a direita
+    // livre pro painel.
     private void EnsureGridLayout()
     {
         var grid = gridContent.GetComponent<GridLayoutGroup>();
         if (grid == null) grid = gridContent.gameObject.AddComponent<GridLayoutGroup>();
         grid.cellSize = new Vector2(CharacterCardUI.CardWidth, CharacterCardUI.CardHeight);
         grid.spacing = new Vector2(17f, 17f);
-        grid.startAxis = GridLayoutGroup.Axis.Vertical;
-        grid.constraint = GridLayoutGroup.Constraint.FixedRowCount;
+        grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         grid.constraintCount = 3;
-        grid.childAlignment = TextAnchor.UpperLeft;
+        // Centralizado (mesmo motivo do Arsenal) — 3×500+2×17=1534 não preenche exatamente os
+        // 1544.65px do Content, então UpperCenter absorve a sobra em vez de deixar um vão à
+        // direita (UpperLeft).
+        grid.childAlignment = TextAnchor.UpperCenter;
 
-        // O Content vinha da cena configurado pro scroll VERTICAL antigo (anchorMin/Max=(0,1)-(1,1),
-        // pivot=(0,1), sizeDelta.y=300) — trocar só anchorMin/Max/pivot sem zerar sizeDelta/
-        // anchoredPosition deixava esse sizeDelta.y=300 residual sendo somado à altura esticada
-        // (anchorMin.y=0/anchorMax.y=1 já casa exatamente com o Viewport; +300 sobrando empurrava
-        // o conteúdo mais alto que os ScrollHeight px de 3 linhas, cortando o primeiro card no topo e
-        // descentralizando tudo). Zerado explicitamente — só a LARGURA (sizeDelta.x) continua
-        // controlada pelo ContentSizeFitter horizontal, a altura sempre casa exata com o Viewport.
+        // Content estica pra combinar com a largura do Viewport (mesmo padrão do Arsenal) —
+        // anchorMin=(0,1)/anchorMax=(1,1)/pivot=(0.5,1)/sizeDelta.y=0, altura cresce pra baixo
+        // via ContentSizeFitter conforme o nº de linhas. Substitui o esquema antigo (scroll
+        // horizontal: anchorMin/Max=(0,0)-(0,1), largura controlada pelo fitter horizontal).
         var contentRt = gridContent.GetComponent<RectTransform>();
-        contentRt.anchorMin = new Vector2(0f, 0f);
-        contentRt.anchorMax = new Vector2(0f, 1f);
-        contentRt.pivot = new Vector2(0f, 0.5f);
-        contentRt.sizeDelta = new Vector2(contentRt.sizeDelta.x, 0f);
+        contentRt.anchorMin = new Vector2(0f, 1f);
+        contentRt.anchorMax = new Vector2(1f, 1f);
+        contentRt.pivot = new Vector2(0.5f, 1f);
+        contentRt.sizeDelta = new Vector2(0f, 0f);
         contentRt.anchoredPosition = Vector2.zero;
 
         var fitter = gridContent.GetComponent<ContentSizeFitter>();
         if (fitter == null) fitter = gridContent.gameObject.AddComponent<ContentSizeFitter>();
-        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-        fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         var scrollRect = gridContent.GetComponentInParent<ScrollRect>();
         if (scrollRect == null) return;
 
-        scrollRect.horizontal = true;
-        scrollRect.vertical = false;
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
 
-        // Scrollbar vertical desligada/desconectada de vez — só a horizontal (já existente na
-        // cena) continua funcionando. `vertical=false` já impede o ScrollRect de rolar, mas a
-        // barra em si (se ainda ativa/wireada) ficava visível sem função nenhuma.
+        // Os dois scrollbars desligados/desconectados de vez (2026-07-14 — antes só o vertical,
+        // já que horizontal era o eixo ativo) — "igual do Arsenal", que não tem scrollbar
+        // visível nenhum, só arraste. `vertical=true`/`horizontal=false` já bastam pra travar os
+        // eixos errados, isso aqui é só pra não sobrar uma barra inativa visível na tela.
         if (scrollRect.verticalScrollbar != null)
         {
             scrollRect.verticalScrollbar.gameObject.SetActive(false);
             scrollRect.verticalScrollbar = null;
+        }
+        if (scrollRect.horizontalScrollbar != null)
+        {
+            scrollRect.horizontalScrollbar.gameObject.SetActive(false);
+            scrollRect.horizontalScrollbar = null;
         }
 
         var scrollRt = scrollRect.GetComponent<RectTransform>();
