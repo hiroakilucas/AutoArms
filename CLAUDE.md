@@ -8,6 +8,7 @@
 - UI_PALETTE.md — paleta de cores central de UI (`UITheme`/`UIThemeApplier`) — ler antes de hardcodear cor num elemento de interface novo
 - CHARACTER_IMPORT_CHECKLIST.md — ler antes de importar/processar qualquer personagem novo (pacote CraftPix) — problemas reais já encontrados (bone não portável entre pacotes, GUID duplicado em variantes numeradas, etc.) e as ferramentas de `Tools > AutoArms`
 - ARQUITETURA.md — regras arquiteturais **permanentes** (ex: diamante nunca é gravável direto pelo cliente no Firestore, sempre via Cloud Function) — ler antes de desenhar qualquer sistema com dinheiro real, conta de usuário ou persistência online
+- LIMPEZA_BASE.md — passo a passo pra zerar a base Firebase (Auth + Firestore) e o cache local (save.json, LevelDB, PlayerProfile.asset contaminado) — usar antes de uma rodada de testes que precise de estado limpo
 - CHANGELOG.md — histórico completo de atualizações
 - VISION.md — conceito do jogo, inspirações, progressão (raramente necessário)
 

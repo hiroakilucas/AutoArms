@@ -3,6 +3,11 @@
 ### Progresso
 - Total: 143 tarefas | Concluídas: 43 (recontado em 2026-07-15 — ver nota em CLAUDE.md)
 
+- 2026-07-15: Novo `LIMPEZA_BASE.md` — passo a passo pra zerar a base Firebase (Auth + Firestore) e
+  o cache local (save.json, LevelDB do Firestore, `PlayerProfile.asset` contaminado por teste) —
+  usuário zerou a base pela primeira vez seguindo este processo, antes de iniciar a próxima tarefa
+  (12 personagens bot com stats escaláveis por level + matchmaking por level em
+  `05_SelectOpponent`, planejado mas ainda não implementado).
 - 2026-07-15: Revisão de código pedida pelo usuário pra atualizar itens de roadmap já
   implementados — `ROADMAP_FUTURO.md`: Fase 6 ("banco de dados"/"persistência online" → Firebase,
   concluído; "login múltiplos métodos" desmembrado em email/senha e Google concluídos, Apple/
