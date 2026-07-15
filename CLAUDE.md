@@ -964,5 +964,9 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 Ver ROADMAP_FUTURO.md — não carregar nesta sessão.
 
 ### Progresso
-- Total: 127 tarefas | Concluídas: 68
+- Total: 143 tarefas | Concluídas: 43
+- Contagem recalculada em 2026-07-15 (todo `- [ ]`/`- [x]` em CLAUDE.md Fase 0-3 + ROADMAP_FUTURO.md
+  Fase 4-13 — SKILLS_SYSTEM.md/PETS.md/etc. têm suas próprias listas de implementação, não contam
+  aqui). O número antigo (127/68) estava dessincronizado, provável resíduo da divisão dos docs em 8
+  arquivos — recontar do zero (mesmo método) sempre que suspeitar de nova divergência.
 - Histórico completo em CHANGELOG.md

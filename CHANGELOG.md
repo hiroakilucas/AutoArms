@@ -1,8 +1,22 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 122 tarefas | Concluídas: 68
+- Total: 143 tarefas | Concluídas: 43 (recontado em 2026-07-15 — ver nota em CLAUDE.md)
 
+- 2026-07-15: Revisão de código pedida pelo usuário pra atualizar itens de roadmap já
+  implementados — `ROADMAP_FUTURO.md`: Fase 6 ("banco de dados"/"persistência online" → Firebase,
+  concluído; "login múltiplos métodos" desmembrado em email/senha e Google concluídos, Apple/
+  Facebook pendentes), Fase 8 ("autenticação segura do jogador" → concluído, com nota de que
+  validação server-side de dado crítico continua pendente), Fase 10 ("tela de seleção de
+  oponente"/"histórico de confronto" → já existiam desde 2026-07-07, nunca tinham sido marcados).
+  `CLAUDE.md` (Fase 0-3) conferido também — as 4 pendências (tutorial, atributos aleatórios na
+  criação, HUD de moeda/diamante/energia, raridade de armas) seguem genuinamente não
+  implementadas, sem mudança. Contador de Progresso recontado do zero a pedido do usuário — método:
+  toda linha `- [ ]`/`- [x]` em CLAUDE.md (Fase 0-3) + ROADMAP_FUTURO.md (Fase 4-13), sem contar
+  SKILLS_SYSTEM.md/PETS.md/etc (listas de implementação por skill/pet, não roadmap de projeto).
+  Resultado: CLAUDE.md 36/40 concluídas, ROADMAP_FUTURO.md 7/103 concluídas — total 43/143
+  (número antigo, 127/68, estava dessincronizado — provável resíduo da refatoração dos docs em 8
+  arquivos, ver `project_docs_structure` em memória).
 - 2026-07-15: Fatia 6 (busca de adversário online) confirmada funcionando pelo usuário em teste
   real com múltiplas contas (`teste5@teste.com` incluída) — encerra o plano de contas/save na
   nuvem/matchmaching básico (Fatia -1 a 6); só falta a Fatia 7 (Sign in with Apple + build iOS),

@@ -45,10 +45,20 @@
 
 ### Fase 6 — Infraestrutura
 - [ ] Criar cena 03_SelectWeapons (já referenciada no código)
-- [ ] Definir banco de dados para salvar personagens (Firebase ou PlayFab)
-- [ ] Integrar persistência de dados online
+- [x] Definir banco de dados para salvar personagens (Firebase ou PlayFab) — **Firebase** (Auth +
+  Firestore), decidido e implementado em 2026-07-14/15 (plano de contas/save na nuvem, Fatia -1 a
+  6). Ver ARQUITETURA.md.
+- [x] Integrar persistência de dados online — `LocalSaveService` (save local em JSON, corrige
+  progresso que nunca persistia em build) + `FirestoreService`/`CloudSyncService` (sync local↔
+  nuvem, "último gravado ganha" por `updatedAtTicks`) + `opponents_index`/`OpponentSearchService`
+  (superfície pública pra matchmaking, ver Fase 10 abaixo). Testado ponta a ponta pelo usuário com
+  múltiplas contas reais (2026-07-15).
 - [ ] **Decidir arquitetura de servidor — por região vs. por temporada/tempo**: ainda não decidido, pensar com calma antes de implementar. Servidor **por região** (ex: Brasil, EUA, Europa) reduz latência e é o padrão pra jogos competitivos/PVP em tempo real — mas esse jogo é turn-based assíncrono (`CombatSimulator` pré-calcula o combate inteiro), então a sensibilidade a latência é bem menor que num jogo de ação ao vivo, o que reduz a urgência de sharding por região. Servidor **por tempo/temporada** (ex: reset periódico de ranking/torneio, ligado ao Battle Pass mensal já planejado acima) é mais sobre ciclo de conteúdo/economia do que sobre infraestrutura física, e os dois não são mutuamente exclusivos (pode ter região E temporada ao mesmo tempo). Definir antes de decidir: se vai ter PVP em tempo real de verdade (justificaria região) ou só matchmaking assíncrono (não justificaria tanto).
 - [ ] **Login/criação de conta por múltiplos métodos**: além de conta própria por email, permitir login/criação de conta via Google, Apple e Facebook (OAuth). Depende da escolha de backend de autenticação (Firebase Auth ou PlayFab Auth, já listado em Segurança/Fase 8).
+  - [x] Email/senha — `AuthService.SignInAsync`/`SignUpAsync`, `00_Login.unity`/`LoginController` (2026-07-14).
+  - [x] Google — `AuthService.SignInWithGoogleAsync` (2026-07-15) — só funciona em build Android/iOS de verdade (plugin lança exceção em Editor/Windows Standalone, mensagem amigável tratada).
+  - [ ] Apple — depende de Mac com Xcode (Fatia 7 do plano de contas, ainda bloqueada).
+  - [ ] Facebook — não iniciado.
 
 ### Fase 7 — Plataformas & Distribuição
 - [ ] Instalar módulos Android e iOS no Unity Hub (Android SDK, NDK, OpenJDK)
@@ -73,13 +83,14 @@
 - [ ] Verificar se precisa de contrato social (caso vá ter sócio) ou se abre como EI/MEI sozinho.
 
 ### Fase 8 — Segurança
-- [ ] Nunca armazenar dados críticos (XP, level, diamantes) só localmente — sempre validar no servidor
+- [ ] **Nunca armazenar dados críticos (XP, level, diamantes) só localmente — sempre validar no servidor**: parcialmente coberto — `users/{uid}/characters` já grava na nuvem (não é mais "só local") e as regras do Firestore já validam FAIXA de valor amarrada ao `level` (ver ARQUITETURA.md), mas isso não é validação server-side de verdade (um cliente ainda pode escrever qualquer valor dentro da faixa generosa sem passar por nenhuma Cloud Function) — item permanece aberto até essa validação real existir.
 - [ ] Validação server-side de compras (Google Play Billing / Apple StoreKit / Steam)
 - [ ] Ofuscar código C# com ferramentas como Obfuscator-ILLVM ou Beebyte
 - [ ] Não expor API keys no código — usar variáveis de ambiente ou Unity Cloud
 - [ ] Calcular resultado do combate no servidor (anti-cheat)
 - [ ] Rate limiting nas chamadas de API para evitar abuso
-- [ ] Autenticação segura do jogador (Firebase Auth ou PlayFab Auth)
+- [x] Autenticação segura do jogador (Firebase Auth ou PlayFab Auth) — Firebase Auth (email/senha +
+  Google; Apple pendente de Mac, ver Fase 6), 2026-07-14/15.
 - [ ] SSL/HTTPS em todas as chamadas de rede
 - [ ] Validar integridade do save local com hash
 
@@ -133,8 +144,16 @@
 - Inspiração: My Brute usava sons cartunizados e exagerados — funcionava bem com o visual 2D
 
 ### Fase 10 — Fluxo de Partida & Matchmaking
-- [ ] Tela de seleção de oponente ao clicar em Play (grid com 6 personagens inimigos)
-- [ ] Histórico de confronto entre jogador e oponente selecionado (nº de batalhas e vitórias de cada lado) — diferente da aba "Histórico de batalhas" da Fase 5 (log geral de lutas): aqui é um recorte cabeça-a-cabeça mostrado antes de escolher o oponente
+- [x] Tela de seleção de oponente ao clicar em Play (grid com 6 personagens inimigos) —
+  `05_SelectOpponent`/`SelectOpponentController` (2026-07-07). Desde 2026-07-15 (Fatia 6 do plano
+  de contas), tenta buscar adversários REAIS primeiro via `OpponentSearchService`/`opponents_index`
+  no Firestore — só cai no pool local fixo (`CharacterDatabase.opponentCharacters`) como fallback
+  (offline, sem sessão, ou ninguém sincronizado ainda).
+- [x] Histórico de confronto entre jogador e oponente selecionado (nº de batalhas e vitórias de
+  cada lado) — diferente da aba "Histórico de batalhas" da Fase 5 (log geral de lutas): aqui é um
+  recorte cabeça-a-cabeça mostrado antes de escolher o oponente. Cada card mostra
+  `"{batalhas} batalhas · {vitórias} vitórias"` (`SelectOpponentController`, `PlayerPrefs` local +
+  espelho em `users/{uid}/matchHistory` no Firestore desde a Fatia 6).
 - [ ] Tela de Replay (últimas partidas normais, ataques recebidos, último torneio) — cobre o sistema de replay já mencionado na Fase 5 (histórico de torneio) e estende pra partidas normais/defesa também
 
 ### Fase 11 — Social & Comunidade
