@@ -82,17 +82,105 @@ service cloud.firestore {
       }
     }
 
-    // opponents_index (Fatia 5+, ainda não implementada): qualquer usuário autenticado pode ler
-    // (é a superfície pública de busca de adversário), só o dono pode escrever o próprio doc.
+    // opponents_index (Fatia 5, implementado em 2026-07-15; lido pela busca de adversário na
+    // Fatia 6): qualquer usuário autenticado pode ler (é a superfície pública), só o dono pode
+    // escrever o próprio doc. A regra abaixo não depende do nome do path variable ({characterId}
+    // aqui é só um placeholder de segmento — não precisa bater com nenhum campo), já que a
+    // checagem real é sempre sobre o campo `ownerUid` dentro do documento. Mesma validação de
+    // faixa amarrada ao `level` que `characters/{characterId}` já tem acima (Fatia 6, 2026-07-15)
+    // — necessário porque, desde a correção da Fatia 6, este documento também carrega os stats
+    // BASE (não só os `eff*` de exibição), então fica sujeito ao mesmo risco de valor
+    // grosseiramente forjado pelo cliente.
     match /opponents_index/{characterId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerUid;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.ownerUid;
+      allow write: if request.auth != null && request.auth.uid == request.resource.data.ownerUid
+        && request.resource.data.level is int
+        && request.resource.data.level >= 1
+        && request.resource.data.level <= 9999
+        && request.resource.data.str is number
+        && request.resource.data.str <= 20 + 4 * request.resource.data.level
+        && request.resource.data.agility is number
+        && request.resource.data.agility <= 20 + 4 * request.resource.data.level
+        && request.resource.data.speed is number
+        && request.resource.data.speed <= 20 + 4 * request.resource.data.level
+        && request.resource.data.maxHealth is number
+        && request.resource.data.maxHealth <= 80 + 16 * request.resource.data.level
+        && request.resource.data.weapons is list
+        && request.resource.data.weapons.size() <= 50
+        && request.resource.data.skills is list
+        && request.resource.data.skills.size() <= 100;
     }
   }
 }
 ```
 
+**ID do documento em `opponents_index` é `{ownerUid}_{characterId}`, NÃO só `characterId`**
+(`FirestoreService.OpponentIndexDoc`, Fatia 5) — `characterId` hoje é só o nome do personagem
+(`PlayerProfile.OpponentId()`), que não é único entre contas diferentes; duas contas jogando de
+"Medieval Warrior" colidiriam no mesmo documento se o ID fosse só `characterId`. `ownerUid` e
+`characterId` continuam gravados como campos dentro do documento também, pra consulta/exibição —
+a regra acima não depende de saber a composição do ID, só lê os campos.
+
 Isso não substitui validação server-side de verdade (Cloud Function, Fase 8, correto deixar pra
 depois) — só fecha o caso mais grosseiro de edição direta de documento sem precisar de Cloud
 Function agora.
+
+## Stat base vs. stat efetivo — nunca confundir os dois em UI voltada a PvP
+
+Contexto: bug real investigado em 2026-07-15 (não era o bug reportado, mas motivou este registro
+pra não virar um de verdade mais tarde) — `PlayerProfile.speed`/`str`/`agility`/`maxHealth` são
+os valores **base** (o que o level-up soma direto), enquanto `PlayerProfile.GetEffectiveStats()`
+retorna esses mesmos stats **com os bônus PERCENTUAIS de skills passivas já somados** (ex:
+Lightning Bolt em cima de `speed`), calculado ao vivo, nunca persistido.
+
+**Regra:**
+
+- `users/{uid}/characters/{characterId}` (Fatia 3, implementado) guarda o valor **base**
+  (`PlayerProfileConverter.ToDTO` lê `profile.speed` etc. direto) — é o correto pra esse
+  documento, porque é reaplicado sobre `GetEffectiveStats()` de novo a cada carregamento; salvar
+  o valor efetivo duplicaria o bônus percentual da skill a cada sincronização.
+- `opponents_index/{ownerUid}_{characterId}` (Fatia 5, implementado em 2026-07-15) é uma
+  superfície **diferente**, feita pra ser lida/exibida por OUTROS jogadores antes de uma luta —
+  guarda os DOIS conjuntos de campos, com propósitos diferentes: os campos prefixados `eff*`
+  (`effHp`, `effStr`, `effAgility`, `effSpeed`) são pra EXIBIÇÃO rápida (card de oponente) sem
+  precisar recalcular nada no cliente; os campos base (`str`/`agility`/`speed`/`maxHealth`/
+  `weapons`/`skills`, mesmo formato de `characters/{id}`) são o que
+  `PlayerProfileConverter.FromOpponentIndexMap` (Fatia 6) usa pra reconstruir um `PlayerProfile`
+  de verdade e permitir lutar contra esse adversário — **nunca usar os campos `eff*` pra
+  reconstruir um personagem lutável**: isso re-somaria o bônus percentual da skill em cima de um
+  valor que já o contém (mesmo erro de duplicação, na direção oposta).
+- Qualquer tela que mostre stat de personagem pra decisão de PvP (card de oponente, comparação
+  pré-luta) deve usar os campos `eff*`/`GetEffectiveStats()`, nunca o base direto — mesmo padrão
+  que `SelectOpponentController`/`CharacterPanel` já seguem hoje.
+- Ao implementar a escrita de `opponents_index` (Fatia 5): calcular os `eff*` no MESMO momento em
+  que `characters/{characterId}` é salvo (depois do level-up choice resolvido, mesmo ponto único
+  de save já corrigido em `AttackSequencer`/`CombatResultPanel`) — não em um momento separado,
+  senão os dois documentos podem ficar dessincronizados um do outro.
+
+## Nome de exibição público — nickname da conta + nome do personagem (requisito futuro)
+
+Contexto: registrado por pedido explícito do usuário (2026-07-15) — o sistema de nickname/apelido
+de usuário **ainda não existe** no projeto. Esta regra é só requisito de design pra quando ele for
+implementado; não implementar nada agora.
+
+**Regra:**
+
+1. O nome exibido de um personagem em qualquer lugar **público** (`opponents_index`, ranking
+   futuro, histórico de batalha, etc.) deve ser a concatenação
+   **`{nickname da conta} - {nome do personagem}`** — ex.: `"Hiroaki - Medieval Warrior"`.
+2. `profileName` (já existe hoje em `characters/{id}` e `opponents_index/{id}`) continua guardando
+   **só** o nome do personagem (ex.: `"Medieval Warrior"`) — isso não muda quando o nickname for
+   implementado.
+3. O nickname mora em `users/{uid}` (documento da CONTA), **nunca** dentro de
+   `characters/{characterId}` — é um dado por conta, não por personagem; o mesmo nickname vale
+   pra todos os personagens daquele jogador.
+4. A concatenação `"{nickname} - {nome do personagem}"` é feita **só na hora de exibir** (UI —
+   card de oponente, ranking, etc.), lendo os dois campos separadamente e montando a string em
+   runtime — **nunca gravada como string fixa** em nenhum documento do Firestore. Isso garante
+   que, se o jogador trocar o nickname depois, todo personagem já salvo reflete o novo nickname
+   automaticamente, sem precisar reescrever nenhum documento existente.
+
+**Consequência prática pra quando `opponents_index` for lido de verdade (Fatia 6)**: montar o
+nome de exibição do card de oponente vai exigir buscar o nickname em `users/{ownerUid}` (um
+documento a mais por oponente listado, já que `opponents_index` não guarda o nickname em si) —
+considerar isso no desenho da query/paginação da busca de adversário quando ela for implementada.
