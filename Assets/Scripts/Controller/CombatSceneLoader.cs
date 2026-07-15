@@ -128,6 +128,11 @@ public class CombatSceneLoader : MonoBehaviour
             Debug.LogError("[CombatSceneLoader] No PlayerProfile selected.");
             yield break;
         }
+        // Restaura o save local (2026-07-14, ver LocalSaveService.cs) ANTES de copiar qualquer
+        // stat pro PlayerCombat abaixo — este é o ponto mais crítico: sem isso, num build real,
+        // toda luta usaria os stats/armas/skills do ASSET original em vez do progresso salvo
+        // (XP/level/skills ganhos ficariam esquecidos a cada reinício do jogo).
+        LocalSaveService.ApplyIfSaved(profile);
 
         player2Profile = selectedOpponentHolder != null ? selectedOpponentHolder.currentOpponentProfile : null;
         if (player2Profile == null)
@@ -137,6 +142,7 @@ public class CombatSceneLoader : MonoBehaviour
             Debug.LogError("[CombatSceneLoader] No opponent PlayerProfile selected.");
             yield break;
         }
+        LocalSaveService.ApplyIfSaved(player2Profile);
 
         GameObject player1Obj = Instantiate(profile.characterPrefab);
         player1Obj.name = "Player1";

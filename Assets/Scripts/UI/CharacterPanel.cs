@@ -1041,16 +1041,11 @@ public class CharacterPanel : MonoBehaviour
         _popupOverlayGo.SetActive(true);
     }
 
-    // Remove o sufixo " T1"/" T2"/" T3" que vem embutido no próprio `weaponName` do asset (ex:
-    // "Knife T1") — a indicação de tier no popup vem só da borda colorida do ícone agora,
-    // então esse texto nunca deve aparecer no título (pedido explícito do usuário, 2026-07-07).
-    private static string StripTierSuffix(string name)
-    {
-        if (string.IsNullOrEmpty(name)) return name;
-        foreach (var suffix in new[] { " T1", " T2", " T3" })
-            if (name.EndsWith(suffix)) return name.Substring(0, name.Length - suffix.Length);
-        return name;
-    }
+    // A indicação de tier no popup vem só da borda colorida do ícone agora, então o sufixo
+    // " T1"/" T2"/" T3" embutido no `weaponName` do asset nunca deve aparecer no título (pedido
+    // explícito do usuário, 2026-07-07). Lógica extraída (2026-07-14) pra WeaponNameUtil —
+    // reaproveitada também pela camada de save (LocalSaveService/PlayerProfileConverter).
+    private static string StripTierSuffix(string name) => WeaponNameUtil.StripWeaponTierSuffix(name);
 
     // Quantos dos 10 bônus condicionais essa arma vai realmente mostrar (!= 0) — usado só pra
     // calcular a altura dinâmica do popup antes de construir as linhas de verdade.

@@ -67,8 +67,13 @@ public class CombatResultPanel : MonoBehaviour
 
         // Continue button — disabled until choice is made when leveling up
         bool choiceDone = false;
+        // Assíncrono (2026-07-14) — mesmo ajuste feito em ArsenalController.OnBackClicked:
+        // LoadSceneAsync evita bloquear a thread principal num frame só, sem custo/risco. Não
+        // resolve sozinho um eventual atraso maior (ver investigação de 03_Arsenal no
+        // CHANGELOG — naquele caso era overhead específico do Editor/Play Mode, não do jogo em
+        // build real), mas é estritamente melhor que o LoadScene síncrono de qualquer forma.
         var continueBtn = MakeButton(panel, "Continuar", new Vector2(0f, -172f),
-            () => SceneManager.LoadScene("01_MainMenu"));
+            () => StartCoroutine(LoadMainMenuAsync()));
         continueBtn.interactable = !didLevelUp;
 
         // Animate XP bar
@@ -273,6 +278,10 @@ public class CombatResultPanel : MonoBehaviour
 #if UNITY_EDITOR
         UnityEditor.EditorUtility.SetDirty(profile);
 #endif
+        // Save real (2026-07-14) — ver LocalSaveService.cs. Este é o único dos 6 pontos que pode
+        // mudar profile.weapons/skills (Kind.Weapon/Kind.Skill acima), então também é o único
+        // onde a lista de armas/skills salva localmente pode de fato divergir da anterior.
+        LocalSaveService.Save(profile);
     }
 
     // TESTE: mostra todas as skills/armas/atributos disponíveis em vez de sortear 2 opções
@@ -549,6 +558,12 @@ public class CombatResultPanel : MonoBehaviour
         var go = new GameObject("EventSystem");
         go.AddComponent<EventSystem>();
         go.AddComponent<StandaloneInputModule>();
+    }
+
+    private static IEnumerator LoadMainMenuAsync()
+    {
+        var op = SceneManager.LoadSceneAsync("01_MainMenu");
+        while (op != null && !op.isDone) yield return null;
     }
 
     private static Canvas FindScreenCanvas()

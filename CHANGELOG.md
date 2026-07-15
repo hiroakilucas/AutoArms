@@ -3,6 +3,274 @@
 ### Progresso
 - Total: 122 tarefas | Concluídas: 68
 
+- 2026-07-15: Fatia 6 (busca de adversário online) confirmada funcionando pelo usuário em teste
+  real com múltiplas contas (`teste5@teste.com` incluída) — encerra o plano de contas/save na
+  nuvem/matchmaching básico (Fatia -1 a 6); só falta a Fatia 7 (Sign in with Apple + build iOS),
+  bloqueada por acesso a Mac.
+- 2026-07-15: Corrigido bug latente em `OpponentSearchService.FetchOpponentsAsync` (Fatia 6) —
+  buscava exatamente `count` (6) documentos crus do Firestore e só depois excluía o próprio
+  jogador/resultados sem molde resolvido, então a lista final podia vir menor que 6 mesmo havendo
+  mais oponentes válidos no `opponents_index` nunca chegados a buscar (não visível ainda com o
+  pool pequeno de contas de teste, mas reproduziria assim que passasse de ~6 jogadores reais).
+  Corrigido buscando `count + 5` documentos crus antes de filtrar, mantendo o corte final em
+  `count` depois da filtragem.
+- 2026-07-15: Diagnosticado (via Visualizador de Eventos + crash dump) o crash "fecha sozinho" do
+  Development Build ao criar conta — não era bug de código: `FirestoreService.PersistenceEnabled`
+  usa um cache local (LevelDB) com lock exclusivo por processo/máquina para o mesmo projeto
+  Firebase; rodar o Editor em Play Mode e o build ao mesmo tempo (ou 2 builds) faz o segundo
+  processo falhar ao abrir o lock, e o SDK C++ do Firestore trata isso como falha interna
+  irrecuperável (`abort()`, sem exceção .NET capturável). Decisão do usuário: manter
+  `PersistenceEnabled = true`, só evitar rodar 2 processos ao mesmo tempo — ver regra registrada em
+  ARQUITETURA.md.
+- 2026-07-15: 2ª rodada da correção de isolamento entre contas — o fix anterior (accountScope +
+  CapturePristineIfNeeded/RestoreAllPristine) não foi suficiente: usuário reportou conta nova
+  recebendo um personagem em Level 2 (nem o estado de fábrica, nem o último nível jogado). Causa:
+  `CloudSyncService.SyncCharacterAsync` gravava (`LocalSaveService.Save`) DE FORMA INCONDICIONAL ao
+  final — um modelo "opt-out" que assumia ser sempre seguro persistir o que quer que estivesse em
+  memória, dependendo inteiramente do reset de logout nunca falhar. Bastava essa função rodar uma
+  vez (todo login chama) com qualquer resíduo em memória pra criar um personagem "fantasma" na
+  conta nova. Corrigido invertendo pra um modelo "opt-in": novo
+  `PlayerProfileConverter.MarkOwnerScope`/`GetOwnerScope` rastreia explicitamente qual conta é
+  "dona" do estado em memória de cada `PlayerProfile` tocado na sessão — `SyncCharacterAsync` só
+  grava se puder afirmar que o estado pertence à conta atual (veio da nuvem dela agora, já era
+  dela desde antes, está genuinamente intocado, ou é progresso offline pré-login reivindicável pela
+  1ª conta real). `RestoreAllPristine` (logout) também limpa essa marca de posse.
+- 2026-07-15: Corrigido bug real de isolamento entre contas, reportado pelo usuário (conta nova
+  herdando personagens/progresso de uma conta antiga testada no mesmo executável). Duas causas
+  distintas: (1) `LocalSaveService`/`save.json` não vinculava o save a nenhuma conta — chave do
+  cache agora é `{accountScope}:{characterId}` (`accountScope` = uid do Firebase Auth, novo campo
+  em `CharacterDTO`, ou `"offline"` sem sessão); entradas gravadas antes da correção (sem
+  `accountScope`) são tratadas como órfãs e nunca aplicadas a nenhuma conta. (2) Estado em memória
+  dos `PlayerProfile` (ScriptableObject, vive durante todo o processo) ficava "contaminado" entre
+  contas dentro da mesma sessão do jogo — sem relação com o `save.json` — porque nada resetava o
+  profile ao trocar de conta sem fechar o jogo (fluxo só existe desde o botão de logout, adicionado
+  numa sessão anterior). `PlayerProfileConverter` ganhou `CapturePristineIfNeeded`/
+  `RestoreAllPristine` (snapshot de fábrica de cada profile na 1ª vez que é tocado no processo);
+  `MainMenuController.OnLogoutClicked` chama `RestoreAllPristine()` antes do `SignOut`, devolvendo
+  todo profile já tocado ao estado de fábrica antes da próxima conta poder logar.
+- 2026-07-15: Fatia 6 do plano de contas/save na nuvem — busca de adversário online, conectada em
+  `05_SelectOpponent`. Correção de desenho feita antes de implementar: `opponents_index` (Fatia 5)
+  só gravava os campos `eff*` (pensados pra exibição) — pra realmente LUTAR contra um adversário
+  achado, o `CombatSimulator` precisa dos stats BASE + lista de skills/armas (mecânicas de combate
+  que um número efetivo único não cobre), senão o bônus de skill seria contado 2x ao reconstruir o
+  oponente. `FirestoreService.SaveOpponentIndexAsync` agora reaproveita `CharacterDTOMap.ToMap`
+  (mesmos campos base de `characters/{id}`) e só acrescenta `ownerUid`/`levelBucket`/`eff*`/
+  `randomSeed` por cima — regras de segurança do Firestore atualizadas com a mesma validação de
+  faixa amarrada ao `level` que já existia pra `characters/{id}`. Novo
+  `Data/PlayerProfileConverter.FromOpponentIndexMap` reconstrói um `PlayerProfile` runtime a
+  partir de um documento de `opponents_index`, achando o "molde" visual certo (prefab/ícone) em
+  `CharacterDatabase.unlockedCharacters` pelo nome. Novo `Backend/OpponentSearchService.cs` —
+  busca ~6 adversários via o truque de `randomSeed` (Firestore não tem "N aleatórios" nativo).
+  `SelectOpponentController.Start` virou assíncrono: tenta a busca online primeiro, cai pro pool
+  local de sempre (`CharacterDatabase.opponentCharacters`) se vier vazio (offline/sem
+  sessão/ninguém sincronizado ainda) — comportamento local 100% preservado nesse fallback.
+  `AttackSequencer.OnCombatEnd` também grava o histórico de batalhas em
+  `users/{uid}/matchHistory/{opponentId}` (espelho do PlayerPrefs, fire-and-forget) — a leitura do
+  card continua só PlayerPrefs por enquanto (decisão de escopo, não implementado leitura
+  Firestore-primeiro nesta fatia).
+
+- 2026-07-15: Registrado em `ARQUITETURA.md` — requisito de design futuro (sistema de nickname
+  ainda não existe): nome de exibição público de personagem = `"{nickname da conta} -
+  {nome do personagem}"`, montado só na hora de EXIBIR (nunca gravado como string fixa no
+  Firestore) — nickname mora em `users/{uid}` (por conta), `profileName` continua só o nome do
+  personagem. Nenhum código alterado nesta entrada, só documentação.
+
+- 2026-07-15: Fatia 5 do plano de contas/save na nuvem — escrita em `opponents_index` (coleção
+  flat no topo do banco, superfície pública pra busca de adversário na Fatia 6, ainda não
+  implementada). `FirestoreService.SaveOpponentIndexAsync` calcula os campos `eff*`
+  (`effHp`/`effStr`/`effAgility`/`effSpeed`) via `PlayerProfile.GetEffectiveStats()` — regra
+  "Stat base vs. stat efetivo" registrada em `ARQUITETURA.md` — chamado sempre junto de
+  `SaveCharacterAsync`, dentro de `LocalSaveService.Save`, no mesmo instante/mesmo `profile`, pra
+  não dessincronizar os dois documentos. Bug de desenho corrigido antes de implementar: o ID do
+  documento é `{ownerUid}_{characterId}`, não só `characterId` — esse último hoje é só o nome do
+  personagem (`PlayerProfile.OpponentId()`), que não é único entre contas diferentes (duas
+  contas jogando de "Medieval Warrior" colidiriam no mesmo documento). Regras de segurança do
+  Firestore pra `opponents_index` (já documentadas desde a Fatia 3) confirmadas compatíveis com o
+  ID composto — não dependem do nome do path variable, só dos campos `ownerUid`/`characterId`
+  dentro do documento.
+
+- 2026-07-15: Fatia 4 do plano de contas/save na nuvem — escopo mínimo por decisão do usuário
+  (só a esteira de sincronização, sem fluxo de criar personagem novo do zero). Nova
+  `Backend/CloudSyncService.cs` — extrai `LoginController.SyncCharacterRoutine` pra um serviço
+  compartilhado (`SyncCharacterAsync`), reaproveitado agora também em
+  `CharacterSelectController.OnClickSelect` (grid de `02_SelectCharacter`, bloqueia a navegação
+  até sincronizar) e `MainMenuCharacterPreview.SwitchCharacter` (setas rápidas/arraste do
+  MainMenu, fire-and-forget pra não travar a animação de troca — `CharacterPanel.Refresh()`
+  chamado de novo quando a sincronização termina). Antes desta fatia, só o personagem ativo no
+  momento do login era sincronizado com a nuvem — trocar de personagem depois do login (grid ou
+  setas) não puxava o save daquele personagem específico, arriscando sobrescrever a nuvem com
+  dado local desatualizado/default na próxima gravação. Sem efeito no fluxo offline/sem conta
+  (`CloudSyncService` não faz nada quando `AuthService.IsSignedIn` é falso). Continua exigindo
+  que o jogador tenha mais de 1 `PlayerProfile` com `isPlayable = true` pra ser testável de
+  verdade — hoje só "Medieval Warrior" está nesse estado.
+
+- 2026-07-15: Registrado em `ARQUITETURA.md` — regra permanente "stat base vs. stat efetivo":
+  `opponents_index` (Fatia 5, ainda não implementada) precisa usar `GetEffectiveStats()` (campos
+  `eff*`) pra exibir personagem em contexto de PvP, nunca o valor base salvo em
+  `characters/{characterId}` — motivado pela investigação do bug de save prematuro (linha acima),
+  pra não confundir os dois quando a busca de adversário for construída.
+
+- 2026-07-15: Bug real corrigido — usuário reportou que o save na nuvem (Fatia 3) ficava "um
+  passo atrás" do personagem depois de subir de nível (ex: SPD mostrado 13 no MainMenu, salvo
+  como 8, e antes disso como 6). Duas causas distintas encontradas:
+  1. **Saves prematuros/duplicados** (causa real do "um passo atrás"): `AttackSequencer.OnCombatEnd`
+     salvava logo após decrementar `battlesRemaining`, e `XpSystem.AddXP` salvava de novo (via
+     `MarkDirty`) logo após atualizar XP/level — ambos ANTES do jogador escolher o bônus de
+     level-up (`CombatResultPanel.ApplyBonus`, que só roda depois que o painel de escolha
+     aparece), capturando `str`/`agility`/`speed` sem o bônus da escolha ainda aplicado.
+     Corrigido: `XpSystem.MarkDirty` não chama mais `LocalSaveService.Save` (só
+     `EditorUtility.SetDirty`, editor-only); `AttackSequencer.OnCombatEnd` só salva se **não**
+     houve level-up (nada mais vai mudar); quando houve, o único save acontece em
+     `CombatResultPanel.ApplyBonus`, depois da escolha — exatamente 1 save por combate agora, não
+     mais 2-3 saves intermediários incompletos.
+  2. **Não era bug** (esclarecido, não alterado): o SPD "13" no `CharacterPanel` do MainMenu é
+     `PlayerProfile.GetEffectiveStats().speed` (base + bônus PERCENTUAL de skills como Lightning
+     Bolt, calculado ao vivo) — `CharacterDTO`/Firestore salva `profile.speed` (o valor BASE, sem
+     o percentual), que é o correto: salvar o valor efetivo duplicaria o bônus da skill na
+     próxima vez que `GetEffectiveStats()` rodasse sobre o valor já salvo.
+
+- 2026-07-15: Botão "Sair da Conta" TEMPORÁRIO em `01_MainMenu` (pedido do usuário, só pra testar
+  o fluxo de logout enquanto não existe tela de Configurações — mover pra lá quando ela for
+  construída, ver `MainMenuController.OnOptionsButton`, ainda um stub). Construído via código em
+  `MainMenuController.BuildLogoutButton` (mesmo padrão do `CharacterPanel` já criado em `Start()`
+  — Canvas próprio, sem editar `01_MainMenu.unity`), canto superior esquerdo. `AuthService.SignOut()`
+  (já existia desde a Fatia 1) + `SceneManager.LoadSceneAsync("00_Login")`. Nenhuma mudança em
+  `LoginController` foi necessária — a checagem `AuthService.IsSignedIn` no `InitializeRoutine`
+  já cai naturalmente pro formulário quando não há sessão, cobrindo o requisito de não
+  auto-logar depois do logout.
+
+- 2026-07-15: Fatia 3 do plano de contas/save na nuvem/busca de adversário — Firestore save/load
+  (1 conta/1 personagem). Refatoração: `PlayerProfileConverter.ToDTO/ApplyDTO` extraído de
+  `LocalSaveService` (Fatia 0) pra `Data/PlayerProfileConverter.cs`, compartilhado agora pelo
+  save local (JSON) e pelo save na nuvem, evitando duas cópias divergentes da mesma lógica. Novo
+  `Data/CharacterDTOMap.cs` converte `CharacterDTO <-> Dictionary<string,object>` pro Firestore —
+  decisão deliberada de não usar os atributos `[FirestoreData]`/`[FirestoreProperty]` do SDK
+  (exigem propriedades, não os campos públicos que `CharacterDTO` já usa pra funcionar com
+  `JsonUtility`); `Dictionary`/`SetAsync`/`ToDictionary()` é a API mais estável/documentada.
+  Novo `Backend/FirestoreService.cs` (save/load em `users/{uid}/characters/{characterId}`,
+  `PersistenceEnabled` habilitado). `LoginController` ganhou `SyncCharacterRoutine` — todo login
+  bem-sucedido (auto-login, email/senha, Google) compara o personagem local com a nuvem e aplica
+  o mais recente por `updatedAtTicks` (reconciliação "último gravado ganha", relógio do cliente —
+  simplificação assumida no plano). `LocalSaveService.Save` agora também empurra pro Firestore em
+  segundo plano (fire-and-forget) quando há sessão ativa — acopla `LocalSaveService` ao Firebase
+  pela primeira vez, decisão consciente registrada no próprio arquivo. Regras de segurança do
+  Firestore pra `users/{uid}/characters` (validação de faixa amarrada ao `level`, não só
+  ownership — pedido explícito do usuário) documentadas e prontas pra colar no Console, ver
+  `ARQUITETURA.md`.
+
+- 2026-07-15: Fatia 2 do plano de contas/save na nuvem/busca de adversário — Google Sign-In
+  (caminho Android nativo, escopo definido pelo usuário; desktop/Editor fica pra depois).
+  `AuthService.SignInWithGoogleAsync` (usa `Google.GoogleSignIn` do plugin
+  `google-signin-plugin-1.0.4`, API lida direto do `.cs` importado pra evitar suposição errada de
+  versão) + botão "Entrar com Google" em `00_Login`. Bug real corrigido antes disso: o pacote do
+  plugin trazia `Assets/Parse/Plugins/{Unity.Compat,Unity.Tasks}.dll` — DLLs de compatibilidade
+  de uma versão antiga do Unity (.NET 3.5, sem `System.Threading.Tasks` nativo), sobrando de uma
+  dependência transitiva de "Parse" nunca usada no projeto — conflitavam com os mesmos tipos já
+  existentes no `mscorlib` do .NET Standard 2.1 atual, gerando 39 erros de compilação em pacotes
+  de terceiros (`com.unity.searcher`, `com.unity.visualscripting`, etc.). Removida a pasta
+  `Assets/Parse/` inteira (nada no projeto referenciava `Parse`). **Só testável em build Android
+  de verdade** (`GoogleSignIn.DefaultInstance` lança exceção em qualquer outra plataforma,
+  inclusive Editor/Windows — `LoginController` mostra uma mensagem clara nesse caso em vez de
+  travar) — módulo Android ainda não instalado no Unity Hub (Fase 7 do roadmap), então o fluxo
+  fica como código pronto mas não verificado end-to-end até lá.
+
+- 2026-07-14: Fatia 1 do plano de contas/save na nuvem/busca de adversário — Firebase Auth
+  (email/senha). Nova cena `00_Login.unity` (índice 0 no Build Settings, antes de `01_MainMenu`),
+  construída via código (mesmo padrão de `ArsenalController`/`SelectOpponentController`):
+  formulário de email/senha ("Entrar"/"Criar Conta") + botão "Pular (offline)" sempre visível.
+  Novos `Backend/FirebaseBootstrapper.cs` (`CheckAndFixDependenciesAsync`, idempotente) e
+  `Backend/AuthService.cs` (wrapper fino sobre `Firebase.Auth`, com tradução dos erros mais
+  comuns pra português). Sessão em cache do Firebase Auth → auto-login silencioso, sem passar
+  pelo formulário. **Nada depois do login ainda lê dados de conta** (isso começa na Fatia 3) —
+  hoje o login é só autenticação; `01_MainMenu` continua funcionando exatamente como antes,
+  inclusive pulando a tela de login inteira. Google Sign-In (Fatia 2) e Sign in with Apple
+  (Fatia 7, depende de Mac) entram como métodos novos em `AuthService`/`LoginController` depois,
+  sem alterar o que já existe.
+
+- 2026-07-14: Bug real corrigido — progressão do jogador (level, XP, skills/armas ganhas,
+  favoritos, batalhas restantes) só era "salva" via `EditorUtility.SetDirty`, que é editor-only e
+  não faz nada num build real — ou seja, nenhum progresso persistia entre sessões fora do Editor.
+  Corrigido com `LocalSaveService` novo (`Assets/Scripts/Backend/LocalSaveService.cs`), que grava
+  um snapshot (`CharacterDTO`) em `Application.persistentDataPath/save.json` nos mesmos 5 pontos
+  que já chamavam `EditorUtility.SetDirty` de verdade (`XpSystem.MarkDirty`,
+  `AttackSequencer.OnCombatEnd`, `CharacterCardUI.OnFavoriteClicked`,
+  `CombatResultPanel.ApplyBonus`) — o 6º ponto (`PlayerCombat.ResetToLevel1`, um
+  `[ContextMenu]` de debug só acessível no Editor) foi deixado de fora de propósito, já que é uma
+  ferramenta de reset pra teste, não parte do fluxo real de progressão. Restauração conectada em
+  `MainMenuController.Start`, `CombatSceneLoader.Initialize` (ponto mais crítico — garante que o
+  combate usa os stats/armas/skills salvos, não os do asset original) e `CharacterCardUI.Setup`
+  (cobre qualquer personagem exibido na grade, não só o atual). `PlayerProfile.characterId`
+  (novo campo, retrocompatível) e `OpponentId()` atualizado pra usá-lo quando preenchido.
+  `WeaponDatabase.asset`/`SkillDatabase.asset` movidos pra `Assets/Resources/` (mesmo padrão já
+  usado por `SelectedProfileHolder`/`BattleGround`) — `LocalSaveService` precisa resolvê-los via
+  `Resources.Load` pra reconstruir a lista de armas/skills salva (nomes+tier) de volta em
+  referências reais de asset, usando os novos `WeaponDatabase.FindByFamilyNameAndTier`/
+  `SkillDatabase.FindByFamilyNameAndTier`. **Dívida técnica conhecida, registrada por pedido
+  explícito do usuário**: `save.json` é texto plano, editável por qualquer editor de
+  texto/save-editor — decisão consciente de não ofuscar/criptografar por enquanto (ver comentário
+  no topo de `LocalSaveService.cs` e `ARQUITETURA.md`); revisitar quando houver ranking
+  competitivo de verdade. Primeira etapa ("Fatia 0") do plano de contas/save na nuvem/busca de
+  adversário — Firebase entra nas próximas fatias.
+
+- 2026-07-14: Bug de performance — usuário reportou o botão "Continuar" de `CombatResultPanel`
+  (tela de fim de combate) demorando pra voltar ao `01_MainMenu`. Mesmo padrão já corrigido em
+  `ArsenalController.OnBackClicked`: o botão chamava `SceneManager.LoadScene` (síncrono)
+  diretamente no `onClick`. Trocado por `SceneManager.LoadSceneAsync` (via coroutine
+  `LoadMainMenuAsync`) — `04_CombatScenePVP` carrega ainda mais assets que `03_Arsenal` (os 2
+  personagens completos, todas as armas em `AttackSequencer.allWeapons`, o `SkillDatabase`
+  inteiro), então é candidato ainda mais forte ao mesmo overhead de Play Mode do Editor
+  investigado antes — o fix é o mesmo (sem custo, estritamente melhor), independente da causa
+  ser Editor ou real.
+
+- 2026-07-14: Bug de performance — conclusão final da investigação do "Voltar" lento em
+  `03_Arsenal` (entradas abaixo). Instrumentação temporária (`Stopwatch`, removida depois de
+  usada) mediu ~700-800ms entre o clique e `MainMenuController.Start()` no Editor (Play Mode),
+  contra ~160ms do "Voltar" equivalente em `02_SelectCharacter` — confirmando que o atraso era
+  real e específico do Arsenal, não imaginação. Uma tentativa de evitar o descarregamento
+  automático de assets (carregar `01_MainMenu` em modo aditivo + descarregar `03_Arsenal`
+  manualmente via `UnloadSceneAsync`) **não reduziu o tempo** — o próprio carregamento aditivo (sem
+  nenhum descarregamento ainda) já mostrava os mesmos ~700ms, descartando aquela hipótese.
+  Usuário testou o mesmo fluxo num **build real** (fora do Editor) e confirmou que é rápido lá —
+  ou seja, era overhead específico do Play Mode do Editor (serialização/GC mais pesados,
+  escalando com o quanto `03_Arsenal` carrega: é a única cena que referencia
+  `WeaponDatabase`/`SkillDatabase`, o catálogo inteiro de armas/skills do jogo), sem impacto real
+  no jogo jogável. A tentativa de carga aditiva foi revertida (complexidade sem benefício
+  comprovado); `ArsenalController.OnBackClicked` ficou só com `SceneManager.LoadSceneAsync`
+  (assíncrono simples, ver entrada abaixo) — estritamente melhor que o `LoadScene` síncrono
+  original, sem custo. Toda a instrumentação de diagnóstico (`PerfDebugClock` e os `Debug.Log`
+  associados em `MainMenuController`/`MainMenuCharacterPreview`/`CharacterSelectController`) foi
+  removida.
+
+- 2026-07-14: Bug de performance — usuário reportou o "Voltar" de `03_Arsenal` ainda lento depois
+  do fix do `CharacterPanel` preguiçoso (entrada abaixo), diferente do "Voltar" de
+  `02_SelectCharacter` (mais rápido, por comparação subjetiva nesse momento). Hipótese
+  investigada nesta rodada (revista pela entrada acima após medição): `03_Arsenal` é a única cena
+  que referencia `WeaponDatabase`/`SkillDatabase` — o catálogo inteiro de armas/skills do jogo —
+  e `SceneManager.LoadScene` (síncrono) descarregaria esse volume todo num frame só.
+  `ArsenalController.OnBackClicked` trocado de `SceneManager.LoadScene` (síncrono) pra
+  `SceneManager.LoadSceneAsync` (via coroutine) — mudança mantida (sem custo, estritamente
+  melhor), mas não foi essa a causa raiz real (ver entrada acima).
+
+- 2026-07-14: Bug de performance — usuário reportou o botão "Voltar" de `03_Arsenal` lento
+  também. Causa: `ArsenalController.BuildDetailPanel` construía eager em `Start()` um
+  `CharacterPanel` completo (HUD Compact+Expanded, grades de Habilidades/Armas, seção Passivas,
+  popup — ~150 GameObjects) só pra reaproveitar `ShowWeaponDetail`/`ShowSkillDetail`; o HUD nunca
+  aparece (`HideRootPermanently`), mas o custo de montar e depois destruir tudo isso era pago
+  mesmo sem o jogador clicar em nenhum slot. Trocado por construção preguiçosa
+  (`EnsureDetailPanel`, chamado só na 1ª vez que um slot é clicado) — entrar/sair do Arsenal sem
+  abrir nenhum detalhe não paga mais esse custo.
+
+- 2026-07-14: Bug de performance — usuário reportou travamento ao clicar em "Chibers"/"Arsenal"
+  no menu principal. Causa em `02_SelectCharacter`: `CharacterSelectController.PopulateCharacterGrid`
+  criava os 72 `CharacterCardUI` (cada um com ~8 GameObjects + TMP com auto-sizing) num único
+  frame de `Start()` — pico perceptível de CPU. Corrigido construindo os cards em lotes de 12 por
+  frame via coroutine (`PopulateCharacterGridRoutine`), mesmo resultado final, sem pico único.
+  Também a câmera de preview (`BuildPortraitPreview`) ficava ativa renderizando desde o `Start()`
+  mesmo sem nenhum personagem instanciado ainda pra filmar — agora começa desativada, só liga ao
+  selecionar um card (`OnCharacterSelected` já fazia isso; só faltava o estado inicial coerente).
+  `03_Arsenal` foi auditada também (grid de ~77 armas/skills, sem auto-sizing) e está bem mais
+  leve — não precisou de mudança.
+
 - 2026-07-14: Roadmap (Fase 1) — 2 itens marcados como concluídos após verificação no código
   (nenhum dos dois exigiu implementação nova, só confirmação de que já estavam cobertos):
   "Arte chibi + retrato realista do personagem" (`PlayerProfile.splashArt`, já preenchido nos 72

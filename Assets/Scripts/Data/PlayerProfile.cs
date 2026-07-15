@@ -31,6 +31,9 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("Nome do personagem para exibi��o")]
     public string profileName;
 
+    [Tooltip("ID estavel de save (2026-07-14). Vazio nos assets pre-autorados de hoje (sem conta ainda) - OpponentId()/LocalSaveService caem pro nome do asset Unity (name) quando vazio, retrocompativel. Passa a ser preenchido de verdade quando existir personagem por conta (Firestore).")]
+    public string characterId = "";
+
     [Header("Prefab e Imagem")]
     [Tooltip("Prefab do personagem (deve conter todos os componentes necess�rios para o combate)")]
     public GameObject characterPrefab;
@@ -41,7 +44,7 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("Controla se este personagem fica clic�vel/escolh�vel pra batalhar dentro do grid (diferente de isUnlockedForSelection, que s� controla se ele aparece). false = aparece no grid mas travado/cinza, sem Button. Default false por seguran�a � precisa ser ligado manualmente por personagem, inclusive nos j� existentes.")]
     public bool isPlayable = false;
 
-    [Tooltip("Favoritado pelo jogador (estrela no canto superior direito do card em 02_SelectCharacter) � personagens favoritados aparecem primeiro na grade, antes da ordem alfab�tica. Alterado em runtime por CharacterCardUI.OnFavoriteClicked, persistido via EditorUtility.SetDirty (mesmo padr�o de level/xp).")]
+    [Tooltip("Favoritado pelo jogador (estrela no canto superior direito do card em 02_SelectCharacter) - personagens favoritados aparecem primeiro na grade, antes da ordem alfabetica. Alterado em runtime por CharacterCardUI.OnFavoriteClicked, persistido via LocalSaveService (save real em build) + EditorUtility.SetDirty (so no Editor).")]
     public bool isFavorite = false;
 
     [Tooltip("�cone utilizado na UI de sele��o de personagens")]
@@ -115,11 +118,13 @@ public class PlayerProfile : ScriptableObject
     public int battlesRemaining = 6;
 
     // Chave estável pro histórico de batalhas por oponente (PlayerPrefs "battles_{id}"/
-    // "wins_{id}", ver SelectOpponentController/AttackSequencer) — usa o nome do próprio asset
-    // (Object.name), já que não existe um campo de ID dedicado. Repetir o mesmo PlayerProfile
-    // várias vezes no pool de oponentes (ex: 6x Medieval Warrior Girl) soma no mesmo histórico
-    // de propósito — é literalmente o mesmo personagem.
-    public string OpponentId() => name;
+    // "wins_{id}", ver SelectOpponentController/AttackSequencer) e pro save local
+    // (LocalSaveService) — usa `characterId` quando preenchido (personagem com conta/save real,
+    // 2026-07-14), senão cai pro nome do próprio asset (Object.name), retrocompatível com todo
+    // asset pré-autorado que ainda não tem characterId. Repetir o mesmo PlayerProfile várias
+    // vezes no pool de oponentes (ex: 6x Medieval Warrior Girl) soma no mesmo histórico de
+    // propósito — é literalmente o mesmo personagem.
+    public string OpponentId() => string.IsNullOrEmpty(characterId) ? name : characterId;
 
     public bool HasSkill(string skillName)
     {

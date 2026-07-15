@@ -266,7 +266,26 @@ public class CharacterSelectController : MonoBehaviour
     // coluna, preenchendo de cima pra baixo antes de abrir a coluna seguinte à direita — "cima
     // pra baixo, esquerda pra direita" já é a ordem de leitura do grid sem precisar mudar o
     // layout, só a ordem da lista em si.
+    //
+    // Construção em lotes (2026-07-14, correção de perf — reportado pelo usuário como "trava" ao
+    // entrar na cena): com 72 personagens em `unlockedCharacters` hoje, criar os 72
+    // `CharacterCardUI` (cada um com ~8 GameObjects + texto TMP com auto-sizing) num único frame
+    // de `Start()` gera um pico perceptível. `PopulateCharacterGrid()` agora só (re)inicia uma
+    // coroutine que constrói `CardsPerFrame` cards por frame — o resultado final (mesma ordem,
+    // mesmo conteúdo) é idêntico, só distribuído ao longo de alguns frames em vez de travar um
+    // só. Chamado de novo em `OnFavoriteClicked` (repopula a grade inteira) — cancela qualquer
+    // construção em andamento antes de recomeçar, pra não duplicar cards se o usuário favoritar
+    // outro personagem antes da grade terminar de aparecer.
+    private const int CardsPerFrame = 12;
+    private Coroutine populateRoutine;
+
     public void PopulateCharacterGrid()
+    {
+        if (populateRoutine != null) StopCoroutine(populateRoutine);
+        populateRoutine = StartCoroutine(PopulateCharacterGridRoutine());
+    }
+
+    private IEnumerator PopulateCharacterGridRoutine()
     {
         foreach (Transform child in gridContent)
             Destroy(child.gameObject);
@@ -293,6 +312,7 @@ public class CharacterSelectController : MonoBehaviour
         var ordered = new List<PlayerProfile>(enabled);
         ordered.AddRange(locked);
 
+        int builtThisFrame = 0;
         foreach (var profile in ordered)
         {
             var cardGo = new GameObject($"Card_{profile.profileName}");
@@ -300,7 +320,16 @@ public class CharacterSelectController : MonoBehaviour
             cardGo.AddComponent<RectTransform>();
             var card = cardGo.AddComponent<CharacterCardUI>();
             card.Setup(profile, this, theme, profile.isPlayable);
+
+            builtThisFrame++;
+            if (builtThisFrame >= CardsPerFrame)
+            {
+                builtThisFrame = 0;
+                yield return null;
+            }
         }
+
+        populateRoutine = null;
     }
 
     // Scroll VERTICAL (2026-07-14, pedido do usuário — "igual do Arsenal") — GridLayoutGroup com
@@ -431,6 +460,12 @@ public class CharacterSelectController : MonoBehaviour
         previewCamera.targetTexture = previewRenderTexture;
         previewCamera.depth = -10;
         previewCameraGo = camGo;
+        // Perf (2026-07-14): sem personagem nenhum instanciado ainda em Start(), essa câmera não
+        // tem nada útil pra filmar — deixá-la ativa só soma um render extra por frame à toa até o
+        // 1º clique num card. OnCharacterSelected já reativa (`previewCameraGo.SetActive(true)`)
+        // e HideOverlayAfterDelay já desativa de novo ao fechar o painel; esse é só o estado
+        // inicial coerente com esses dois pontos.
+        previewCameraGo.SetActive(false);
 
         var portraitGo = new GameObject("Portrait");
         portraitGo.transform.SetParent(overlayParent, false);
@@ -603,6 +638,20 @@ public class CharacterSelectController : MonoBehaviour
     {
         if (selectedProfile == null) return;
         selectedProfileHolder.currentProfile = selectedProfile;
-        SceneManager.LoadScene("01_MainMenu");
+        StartCoroutine(SyncAndLoadMainMenuRoutine());
+    }
+
+    // Sincroniza com a nuvem (CloudSyncService, 2026-07-15, Fatia 4) antes de ir pro menu — o
+    // personagem escolhido aqui no grid pode não ser o mesmo que estava ativo no login (ver
+    // LoginController.SyncCharacterRoutine, que só cobria esse caso antes desta fatia), então
+    // sem isso o MainMenu podia mostrar dados desatualizados/default até a próxima sincronização
+    // acontecer por acaso em outro ponto.
+    private IEnumerator SyncAndLoadMainMenuRoutine()
+    {
+        var syncTask = CloudSyncService.SyncCharacterAsync(selectedProfile);
+        yield return new WaitUntil(() => syncTask.IsCompleted);
+
+        var op = SceneManager.LoadSceneAsync("01_MainMenu");
+        while (op != null && !op.isDone) yield return null;
     }
 }

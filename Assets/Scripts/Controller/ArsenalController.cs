@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -54,7 +55,8 @@ public class ArsenalController : MonoBehaviour
         BuildBackground(canvasGo.transform);
         BuildHeader(canvasGo.transform);
         BuildScrollView(canvasGo.transform);
-        BuildDetailPanel();
+        // BuildDetailPanel() não é mais chamado aqui — ver EnsureDetailPanel() abaixo (perf,
+        // 2026-07-14: reportado pelo usuário como "Voltar está lento").
     }
 
     // Cena nova (03_Arsenal) sem EventSystem pré-colocado — mesma necessidade já documentada em
@@ -70,8 +72,19 @@ public class ArsenalController : MonoBehaviour
     // CharacterPanel monta seu PRÓPRIO Canvas (ScreenSpaceOverlay, sortingOrder 20) — precisa
     // ficar SEM pai (raiz da cena), senão vira um Canvas aninhado e ignora seu próprio
     // CanvasScaler (mesma armadilha documentada em CharacterPanel.BuildUI).
-    private void BuildDetailPanel()
+    //
+    // Construção preguiçosa (2026-07-14, correção de perf — reportado pelo usuário como "o botão
+    // Voltar está lento"): `CharacterPanel.Setup()` constrói o HUD Compact+Expanded INTEIRO
+    // (grades de Habilidades/Armas, seção Passivas com 13 linhas, badges/pips) além do popup —
+    // ~150 GameObjects — só pra este controller reaproveitar `ShowWeaponDetail`/`ShowSkillDetail`;
+    // o HUD em si nunca aparece (`HideRootPermanently`). Construir isso eager em `Start()` pagava
+    // esse custo (build + o destroy correspondente ao sair da cena) mesmo quando o jogador nunca
+    // clica em nenhum slot. Agora só constrói na 1ª vez que um slot é clicado (`EnsureDetailPanel`,
+    // chamado pelos `onClick` em `BuildWeaponSlots`/`BuildSkillSlots`) — se o jogador nunca abre um
+    // detalhe, entrar/sair do Arsenal não paga esse custo nenhuma vez.
+    private void EnsureDetailPanel()
     {
+        if (_detailPanel != null) return;
         var go = new GameObject("CharacterPanel (Arsenal Detail)");
         _detailPanel = go.AddComponent<CharacterPanel>();
         _detailPanel.Setup(selectedProfileHolder, theme);
@@ -143,7 +156,24 @@ public class ArsenalController : MonoBehaviour
         txt.alignment = TextAlignmentOptions.Center;
     }
 
-    private void OnBackClicked() => SceneManager.LoadScene("01_MainMenu");
+    // Investigação de perf (2026-07-14, medida com instrumentação temporária desde removida — ver
+    // CHANGELOG): o "Voltar" chegou a medir ~700-800ms dentro do Editor (Play Mode), bem mais que
+    // o equivalente em `02_SelectCharacter` (~160ms) — mas o usuário confirmou que num BUILD real
+    // o mesmo botão é rápido. Ou seja, era overhead específico do Editor (GC/serialização mais
+    // pesados em Play Mode, escalando com o quanto `03_Arsenal` carrega — é a única cena que
+    // referencia `WeaponDatabase`/`SkillDatabase`, o catálogo inteiro de armas/skills do jogo), não
+    // um problema real do jogo. `LoadSceneAsync` (em vez do `LoadScene` síncrono original) é mantido
+    // por ser estritamente melhor sem custo — evita bloquear a thread principal num frame só — mas
+    // a tentativa anterior de carregar em modo aditivo + descarregar manualmente foi revertida por
+    // não resolver nada de real e adicionar complexidade (2 cenas coexistindo, GameObjects
+    // desativados manualmente) sem benefício comprovado fora do Editor.
+    private void OnBackClicked() => StartCoroutine(LoadMainMenuAsync());
+
+    private IEnumerator LoadMainMenuAsync()
+    {
+        var op = SceneManager.LoadSceneAsync("01_MainMenu");
+        while (op != null && !op.isDone) yield return null;
+    }
 
     private void BuildScrollView(Transform parent)
     {
@@ -245,7 +275,7 @@ public class ArsenalController : MonoBehaviour
         {
             if (family == null) continue;
             var (icon, tier, data) = ResolveWeaponSlot(profile, family);
-            result.Add((icon, tier, () => _detailPanel.ShowWeaponDetail(data)));
+            result.Add((icon, tier, () => { EnsureDetailPanel(); _detailPanel.ShowWeaponDetail(data); }));
         }
         return result;
     }
@@ -264,7 +294,7 @@ public class ArsenalController : MonoBehaviour
             // aparecer no Arsenal até terem mecânica de verdade.
             if (family.skillName == "Garimpeiro" || family.skillName == "Magneto") continue;
             var (icon, tier, data) = ResolveSkillSlot(profile, family);
-            result.Add((icon, tier, () => _detailPanel.ShowSkillDetail(data)));
+            result.Add((icon, tier, () => { EnsureDetailPanel(); _detailPanel.ShowSkillDetail(data); }));
         }
         return result;
     }

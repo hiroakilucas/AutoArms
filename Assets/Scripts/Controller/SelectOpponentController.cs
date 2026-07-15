@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -5,10 +6,13 @@ using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using TMPro;
 
-// Cena 05_SelectOpponent — grid de até 6 oponentes (CharacterDatabase.opponentCharacters,
-// excluindo o profile que o jogador está usando). Toda a UI é construída em código (mesmo
-// padrão de CombatResultPanel/CharacterPanel/MainMenuCharacterPreview) — não existe prefab de
-// card nesta cena.
+// Cena 05_SelectOpponent — grid de até 6 oponentes. Desde a Fatia 6 (2026-07-15), tenta buscar
+// adversários REAIS na nuvem primeiro (OpponentSearchService/opponents_index); se vier vazio
+// (offline, sem sessão, ou ainda não há ninguém sincronizado) cai pro pool local de sempre
+// (CharacterDatabase.opponentCharacters, excluindo o profile que o jogador está usando) — esse
+// caminho de fallback não mudou em nada. Toda a UI é construída em código (mesmo padrão de
+// CombatResultPanel/CharacterPanel/MainMenuCharacterPreview) — não existe prefab de card nesta
+// cena.
 public class SelectOpponentController : MonoBehaviour
 {
     [SerializeField] private CharacterDatabase characterDatabase;
@@ -35,10 +39,25 @@ public class SelectOpponentController : MonoBehaviour
         var canvas = CreateCanvas();
         BuildTitle(canvas);
         BuildBackButton(canvas);
-        BuildGrid(canvas, GetOpponentPool());
+        StartCoroutine(BuildGridRoutine(canvas));
     }
 
-    private List<PlayerProfile> GetOpponentPool()
+    private IEnumerator BuildGridRoutine(GameObject canvas)
+    {
+        var onlineTask = OpponentSearchService.FetchOpponentsAsync(characterDatabase, MaxOpponents);
+        yield return new WaitUntil(() => onlineTask.IsCompleted);
+
+        var opponents = onlineTask.Result;
+        if (opponents == null || opponents.Count == 0)
+            opponents = GetLocalOpponentPool();
+
+        BuildGrid(canvas, opponents);
+    }
+
+    // Pool local de sempre (pré-Fatia 6) — agora só o FALLBACK quando a busca online não retorna
+    // ninguém (offline, sem sessão, ou ninguém mais sincronizado ainda). Comportamento idêntico
+    // ao de antes desta fatia.
+    private List<PlayerProfile> GetLocalOpponentPool()
     {
         var result = new List<PlayerProfile>();
         if (characterDatabase == null) return result;

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "921890667694",
+    "project_id": "autoarms-c248f",
+    "storage_bucket": "autoarms-c248f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:921890667694:android:adb57d8aa299348654413f",
+        "android_client_info": {
+          "package_name": "com.autoarms.game"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwvLMxKQs-5bwccgyYuT3eoP8Md9s32tY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

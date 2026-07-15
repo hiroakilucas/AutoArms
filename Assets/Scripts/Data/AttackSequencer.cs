@@ -107,17 +107,37 @@ public class AttackSequencer : MonoBehaviour
         int levelBefore = player1Profile.level;
         var result      = XpSystem.AddXP(player1Profile, xpGained);
 
-        // Histórico de batalhas/vitórias por oponente (05_SelectOpponent) — ainda sem backend
-        // (Fase 6 pendente), então guardado em PlayerPrefs por opponentId. Repetir o mesmo
-        // PlayerProfile em vários slots do pool (ex: 6x Medieval Warrior Girl) soma no mesmo
-        // contador de propósito, ver PlayerProfile.OpponentId.
+        // Save real (2026-07-15, corrigido — bug real reportado pelo usuário: Firestore ficava
+        // "um passo atrás" do valor final de personagem). Antes, tanto aqui quanto dentro de
+        // XpSystem.AddXP (via MarkDirty) o save disparava IMEDIATAMENTE após battlesRemaining/XP,
+        // ANTES do jogador escolher o bônus de level-up (ShowLevelUpChoice, que só roda depois
+        // de CombatResultPanel.Show abaixo) — str/agility/speed ainda não tinham recebido o bônus
+        // da escolha (CombatResultPanel.ApplyBonus), então o save capturava um estado
+        // intermediário/incompleto. Corrigido: só salva aqui se NÃO houve level-up (nada mais vai
+        // mudar no profile depois disso). Quando houve level-up, o único save acontece em
+        // ApplyBonus, depois que o jogador escolhe — MarkDirty não salva mais sozinho, ver
+        // XpSystem.cs.
+        if (!result.didLevelUp)
+            LocalSaveService.Save(player1Profile);
+
+        // Histórico de batalhas/vitórias por oponente (05_SelectOpponent) — guardado em
+        // PlayerPrefs por opponentId (continua sendo a fonte de leitura do card, sem mudança).
+        // Repetir o mesmo PlayerProfile em vários slots do pool (ex: 6x Medieval Warrior Girl)
+        // soma no mesmo contador de propósito, ver PlayerProfile.OpponentId.
         if (player2Profile != null)
         {
             string opponentId = player2Profile.OpponentId();
-            PlayerPrefs.SetInt("battles_" + opponentId, PlayerPrefs.GetInt("battles_" + opponentId, 0) + 1);
-            if (player1Won)
-                PlayerPrefs.SetInt("wins_" + opponentId, PlayerPrefs.GetInt("wins_" + opponentId, 0) + 1);
+            int battles = PlayerPrefs.GetInt("battles_" + opponentId, 0) + 1;
+            int wins    = PlayerPrefs.GetInt("wins_" + opponentId, 0) + (player1Won ? 1 : 0);
+            PlayerPrefs.SetInt("battles_" + opponentId, battles);
+            PlayerPrefs.SetInt("wins_" + opponentId, wins);
             PlayerPrefs.Save();
+
+            // Espelho no Firestore (Fatia 6, 2026-07-15) — fire-and-forget, mesmo padrão de
+            // LocalSaveService.Save. Não substitui o PlayerPrefs acima (continua sendo o que o
+            // card em SelectOpponentController lê), só garante que o dado também exista na nuvem.
+            if (AuthService.IsSignedIn)
+                _ = FirestoreService.SaveMatchHistoryAsync(AuthService.CurrentUser.UserId, opponentId, battles, wins);
         }
 
         gameObject.AddComponent<CombatResultPanel>()

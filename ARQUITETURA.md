@@ -157,6 +157,67 @@ Lightning Bolt em cima de `speed`), calculado ao vivo, nunca persistido.
   de save já corrigido em `AttackSequencer`/`CombatResultPanel`) — não em um momento separado,
   senão os dois documentos podem ficar dessincronizados um do outro.
 
+## Isolamento entre contas — save local e estado em memória devem ser escopados por uid
+
+Contexto: bug real reportado pelo usuário (2026-07-15) — criar uma conta nova no mesmo
+executável/device onde outra conta já tinha sido testada fazia a conta nova herdar os
+personagens/progresso da conta antiga. Duas causas distintas, ambas por não terem vínculo de conta
+nenhum: `LocalSaveService`/`save.json` (persistido em disco) e o estado em memória dos
+`PlayerProfile` (`ScriptableObject`s, vivem durante todo o processo, não só durante uma cena).
+
+**Regra, pra qualquer sistema futuro de save/progressão por conta:**
+
+1. **Nenhum save local (arquivo em disco, `PlayerPrefs`, cache em memória) pode usar uma chave que
+   não inclua o uid da conta** (ou um valor fixo tipo `"offline"` pra sem-sessão) — só `characterId`/
+   `opponentId` sozinho não é suficiente, porque o mesmo device/executável pode logar contas
+   diferentes ao longo do tempo, e uma delas pode ter progredido no mesmo personagem "molde" que a
+   outra. Ver `LocalSaveService.CurrentScope()`/`CacheKey`.
+2. **Qualquer objeto em memória que recebe dado de progressão específico de uma conta (ex:
+   `PlayerProfile` via `ApplyDTO`) precisa ser resetável ao trocar de conta sem fechar o app** — um
+   `ScriptableObject` (ou qualquer singleton/estático) não é implicitamente "por sessão de login",
+   é por PROCESSO inteiro. Todo fluxo de logout/troca de conta deve devolver esses objetos ao
+   estado "de fábrica" (não vinculado a nenhuma conta) antes da próxima conta poder logar — ver
+   `PlayerProfileConverter.CapturePristineIfNeeded`/`RestoreAllPristine`,
+   `MainMenuController.OnLogoutClicked`.
+3. Dado gravado ANTES de uma correção deste tipo (sem o vínculo de conta) deve ser tratado como
+   **órfão/não confiável ao ler**, nunca aplicado a nenhuma conta específica — não tentar
+   "adivinhar" a quem pertencia.
+4. **(2ª rodada, 2026-07-15) O reset de logout (regra 2) sozinho não é suficiente como única
+   linha de defesa.** O fix original dependia inteiramente de `RestoreAllPristine` nunca falhar em
+   restaurar TODO objeto tocado antes da próxima gravação — um modelo "opt-out" (assume que é
+   seguro persistir o que estiver em memória). Bug persistiu mesmo assim (conta nova recebeu
+   personagem em level intermediário). **Qualquer código que possa GRAVAR (local ou nuvem) o
+   estado em memória de um objeto compartilhado como se fosse dado de uma conta deve validar
+   afirmativamente a posse antes de gravar** ("opt-in" — só grava se puder provar que o dado
+   pertence a esta conta: veio dela agora, já era dela, está genuinamente intocado, ou é dado
+   pré-login legitimamente reivindicável), não confiar que um reset anterior necessariamente
+   funcionou. Ver `PlayerProfileConverter.MarkOwnerScope`/`GetOwnerScope`,
+   `CloudSyncService.SyncCharacterAsync`.
+
+## Firestore `PersistenceEnabled` — nunca rodar 2 processos do jogo ao mesmo tempo no mesmo PC
+
+Contexto: bug real diagnosticado via crash dump (2026-07-15) — build Windows (`Development Build`)
+fechava sozinho ao criar conta, mas funcionava normalmente no Editor (Play Mode). Causa raiz (achada
+no `.dmp` de crash, string em texto puro): `FIRESTORE INTERNAL ASSERTION FAILED... Failed to open DB:
+LevelDB error: IO error: .../LOCK: O arquivo já está sendo usado por outro processo`.
+
+`FirestoreService.EnsurePersistence()` liga `Db.Settings.PersistenceEnabled = true` — o cache
+offline nativo do Firestore (LevelDB) usa um arquivo de lock exclusivo em
+`%LOCALAPPDATA%\firestore\__FIRAPP_DEFAULT\{project-id}\...`, **compartilhado por processo/máquina
+para o mesmo projeto Firebase**, não por instância do jogo. Se dois processos (Unity Editor em Play
+Mode + build standalone, ou duas execuções do build) tentam abrir esse cache ao mesmo tempo, o
+segundo falha ao adquirir o lock — e o SDK C++ do Firestore trata essa falha como uma **internal
+assertion**, chamando `abort()` direto (crash irrecuperável, sem exceção .NET capturável por nenhum
+`try/catch` do nosso código).
+
+**Decisão do usuário (2026-07-15)**: manter `PersistenceEnabled = true` — não vale a pena abrir mão
+do cache nativo por esse risco. Consequência prática: **nunca rodar o Unity Editor em Play Mode e um
+build ao mesmo tempo no mesmo PC** (nem duas instâncias do build) enquanto o projeto usar o mesmo
+Firebase project ID — isso vale tanto pra testes quanto, em tese, pra qualquer jogador que abra o
+executável duas vezes. Não é um bug do nosso código — é uma limitação conhecida da SDK C++ do
+Firestore; revisitar (`PersistenceEnabled = false`, já que `LocalSaveService` cobre o offline real)
+se esse tipo de crash voltar a acontecer sem a causa óbvia de "2 instâncias rodando".
+
 ## Nome de exibição público — nickname da conta + nome do personagem (requisito futuro)
 
 Contexto: registrado por pedido explícito do usuário (2026-07-15) — o sistema de nickname/apelido

@@ -111,6 +111,19 @@ public class MainMenuCharacterPreview : MonoBehaviour
         // RefreshAll — não escuta o holder sozinho, precisa ser cutucado manualmente.
         var panel = FindObjectOfType<CharacterPanel>();
         if (panel != null) panel.Refresh();
+
+        // Sincroniza com a nuvem em segundo plano (CloudSyncService, 2026-07-15, Fatia 4) —
+        // fire-and-forget de propósito, pra não travar a animação de troca rápida esperando
+        // rede; se o dado da nuvem for mais novo que o local (personagem trocado pela primeira
+        // vez nesta sessão), o panel é atualizado de novo quando a sincronização terminar.
+        StartCoroutine(SyncSwitchedCharacterRoutine(profile, panel));
+    }
+
+    private IEnumerator SyncSwitchedCharacterRoutine(PlayerProfile profile, CharacterPanel panel)
+    {
+        var task = CloudSyncService.SyncCharacterAsync(profile);
+        yield return new WaitUntil(() => task.IsCompleted);
+        if (panel != null) panel.Refresh();
     }
 
     // Transição de "carrossel" pedida pelo usuário (2026-07-14): arrastar/clicar pra um lado

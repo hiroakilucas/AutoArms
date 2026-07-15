@@ -48,6 +48,10 @@ public class CharacterCardUI : MonoBehaviour
     {
         this.profile = profile;
         this.controller = controller;
+        // Restaura o save local (2026-07-14, ver LocalSaveService.cs) — sem isso, o card de um
+        // personagem que não é o "atual" (favorito/level/XP de outro perfil da grade) mostraria
+        // sempre o valor original do asset num build real, mesmo depois de progredir/favoritar.
+        LocalSaveService.ApplyIfSaved(profile);
         Build(theme, isEnabled);
     }
 
@@ -219,6 +223,8 @@ public class CharacterCardUI : MonoBehaviour
 #if UNITY_EDITOR
         UnityEditor.EditorUtility.SetDirty(profile);
 #endif
+        // Save real (2026-07-14) — ver LocalSaveService.cs.
+        LocalSaveService.Save(profile);
         // Repopula a grade inteira em vez de só trocar o sprite local — favoritar precisa mover
         // o card pro início da lista (CharacterSelectController.PopulateCharacterGrid), não só
         // atualizar a estrela no lugar.
