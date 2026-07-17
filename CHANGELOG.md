@@ -3,6 +3,250 @@
 ### Progresso
 - Total: 143 tarefas | Concluídas: 43 (recontado em 2026-07-15 — ver nota em CLAUDE.md)
 
+- 2026-07-17: **Investigado, sem bug de código encontrado** — reportado que o Macaco causava
+  sempre 3 de dano em combate "independente do tier/STR configurado". Verificação:
+  `CombatSimulator.SimulatePetHit` (`int damage = pet.damage`) lê o campo `damage` direto do
+  `PetData` equipado, e os assets em disco confirmam o tier-scaling correto e independente
+  (`pet_monkey_t1.asset`: `damage: 3`/`str: 24`; `pet_monkey_t3.asset`: `damage: 9`/`str: 34`) —
+  `PetState.Create`/`CombatSimulator.BuildState` constroem cada `PetState` direto de
+  `profile.pets`, então um Macaco T3 de verdade já deveria causar 9, não 3. O usuário confirmou
+  que o teste original foi feito num save ANTIGO, de antes do fix do bug de duplicação de pet no
+  level-up (ver entrada "Bug corrigido — selecionar o mesmo tipo de pet 2x..." acima, mesma
+  sessão) — o profile salvo provavelmente tinha o Macaco preso em T1 por causa daquele bug já
+  corrigido, não um problema novo no cálculo de dano. **Sem alteração de código** — reteste
+  pendente pelo usuário com um profile fresco (Macaco genuinamente evoluído a T2/T3 via level-up
+  pós-fix).
+  **Nota de design em aberto (NÃO implementada, aguardando decisão do usuário)**: diferente do
+  personagem principal (`(weaponBaseDamage + str) × ...`, STR soma direto no dano da arma), o
+  dano do pet hoje é só o valor fixo da coluna "Dano" da tabela aprovada (`PETS.md`) — STR do
+  pet é uma coluna INDEPENDENTE, usada só pela fórmula do Piledriver (agarra o pet e usa
+  `pet.str` como dano daquele golpe específico) e pelo escalonamento por nível do dono (Javali
+  `+3 STR/tier de nível`), nunca somada ao próprio ataque do pet. Somar STR ao dano do pet
+  (proposta levantada nesta investigação) infla os valores MUITO acima da tabela atual (ex:
+  Javali T1 iria de 5 pra 51 de dano, T3 de 15 pra 71 — mais que qualquer arma T3 de personagem
+  no jogo hoje) — mudança de balanceamento significativa, não uma correção de bug. Usuário pediu
+  pra deixar anotado pra decidir depois, sem implementar agora.
+- 2026-07-17: **Bug corrigido** — pets não animavam NENHUM estado (nem Idle "de verdade" —
+  ficavam travados sempre na mesma pose, deslizando estáticos até o oponente e "atacando"
+  estáticos), reportado pelo usuário no Macaco, mas o mesmo bug afeta os 3 pets (Rato/Macaco/
+  Javali) igualmente — não é específico de nenhum deles, ver **Causa raiz compartilhada** abaixo.
+  Investigação anterior (comparação estática de Animator Controllers, prefabs, clipes, GUIDs,
+  código de combate) não achava NENHUMA divergência entre os 3 pets porque o bug não é de dado
+  nenhum — é de TIMING de inicialização em runtime, invisível a qualquer inspeção de arquivo.
+  Causa real: `PetAnimationController.Awake()` enumerava `Animator.parameters` pra cachear quais
+  dos 6 parâmetros esperados existiam (`_hasIdle`/`_hasRunning`/etc.), e todo método de animação
+  (`SetIdle`/`PlayRun`/`PlaySlash`/`PlayHurt`/`PlayJump`/`PlayDying`) só chamava o Animator se a
+  flag correspondente tivesse dado `true` — pensado só pra evitar warnings caso `Tools/AutoArms/
+  Setup Pet Animators` não tivesse rodado ainda. Esse `Awake()` roda SINCRONAMENTE dentro de
+  `gameObject.AddComponent<PetAnimationController>()` (chamado por `PetCombatController.Awake()`,
+  também síncrono via `petObj.AddComponent<PetCombatController>()` em
+  `CombatSceneLoader.SpawnPets`) — tudo no MESMO frame do `Instantiate(prefab)` que criou o pet.
+  `Animator.parameters`, lido tão cedo (antes do Animator ter feito seu próprio bind/init
+  interno, que a Unity só garante a partir do primeiro `Update`/habilitação), pode devolver uma
+  lista VAZIA mesmo com o Controller corretamente configurado — as 6 flags ficavam `false`, e
+  toda chamada de animação virava no-op silencioso pelo resto da luta inteira, enquanto
+  movimento (`MovementController`, componente totalmente separado) e dano
+  (`CombatSimulator`/`HealthSystem`) continuavam funcionando normalmente — exatamente o sintoma
+  reportado. Fix: removida a checagem prévia por completo — `PetAnimationController` agora só
+  guarda `_animator != null` e chama `SetBool`/`SetTrigger` direto pelo nome, mesmo padrão
+  simples do `AnimationController.cs` dos personagens principais (que nunca teve esse gate e
+  nunca demonstrou o bug).
+  **Causa raiz compartilhada (pedido explícito do usuário — documentar pra referência futura)**:
+  este bug não tem relação com o sistema de tiers de pets (`PetData`/`PetTierGenerator`/
+  `PetDatabase`, implementado na sessão anterior) nem com nenhum dado específico de cada pet —
+  é puramente sobre a ORDEM/TIMING em que `AddComponent` é encadeado em `CombatSceneLoader.
+  SpawnPets` (`Instantiate` → `AddComponent<PetCombatController>` → `AddComponent<
+  PetAnimationController>`, tudo síncrono no mesmo frame) versus quando o `Animator` da Unity
+  de fato fica pronto pra responder `.parameters` corretamente. Qualquer componente FUTURO que
+  seja anexado via `AddComponent` encadeado a um objeto recém-`Instantiate`d e que precise ler
+  `Animator.parameters`/`.parameterCount` (não `SetBool`/`SetTrigger` por nome, que são seguros
+  a qualquer momento) está sujeito ao mesmo bug — evitar essa leitura no primeiro frame, ou
+  adiar pra depois de um `yield return null`/`Start()` se for realmente necessária.
+- 2026-07-17: **Bug corrigido** — ícone de HP ainda não alinhava de verdade com o ícone de STR/
+  AGI/SPD nas 3 telas (Main Menu/Seleção de Personagem via `CharacterPanel`, Seleção de Oponente
+  via `SelectOpponentController`), apesar de uma tentativa anterior (2026-07-16) já ter igualado
+  a borda ESQUERDA dos dois ícones. Causa raiz: essa tentativa só igualava o offset esquerdo, mas
+  o retângulo do ícone de HP usava uma largura **fixa** em pixels (34px em `CharacterPanel`, 22px
+  em `SelectOpponentController`) enquanto o retângulo do ícone de STR (`AttributePipBar.Build`)
+  usa uma largura **proporcional** (20% da linha) — como `Image.preserveAspect` + `localScale`
+  centralizam e escalam o sprite em torno do CENTRO do próprio retângulo (não da borda), bordas
+  esquerdas iguais com larguras diferentes produzem CENTROS renderizados diferentes (~16px de
+  diferença em `CharacterPanel`), visível a olho mesmo com o "alinhamento" anterior no código.
+  Fix: recalculada a largura do retângulo do ícone de HP com a MESMA fórmula proporcional do
+  ícone de STR em cada tela (`CharacterPanel.BuildInfoBlock`: `anchorMax.x` de 0.05 fixo pra
+  0.05+0.20×0.90=0.23, espelhando a fração de `lblGo` dentro do espaço do `container`;
+  `SelectOpponentController`: `sizeDelta.x = RightPanelWidth×0.20 − 14`, mesma fórmula de
+  `MakeAttributeRow`/`AttributePipBar.Build`) — mesma largura exata do ícone de STR em ambas as
+  telas, logo mesmo centro renderizado, não importa a largura real do container em pixels.
+- 2026-07-17: **Feature** — nova aba "PETS" no `CharacterPanel` (painel expandido de
+  01_MainMenu/02_SelectCharacter), abaixo de HABILIDADES/ARMAS, mesmo padrão visual e de
+  interação (grade de células com borda colorida por tier, click abre popup de detalhe — não
+  hover). `RefreshPets(p)` mirrora `RefreshArmas` 1:1: itera `PlayerProfile.pets` (agora
+  `List<PetData>`, um pet por instância possuída — sem "singular equipado", mesma lógica de
+  Skills/Armas que também listam tudo que o personagem tem, não um "ativo" só), célula por pet
+  com `data.icon`/`data.tier`, clique chama `ShowPetDetail(data, data.icon)` — método já existia
+  desde a implementação do tier system de pets (2026-07-16), só não tinha nenhum ponto de entrada
+  na UI do menu principal ainda (só era usado em `SelectOpponentController`/05_SelectOpponent).
+  Mensagem "Nenhum pet ainda" quando a lista está vazia, mesmo padrão de "Sem armas equipadas".
+- 2026-07-17: **Bug corrigido** — ícones dos pets não apareciam na grade de level-up
+  (`CombatResultPanel.MakeLevelUpCard`, tela de teste "escolha 1 bônus"), mostrando só uma cor
+  sólida marrom placeholder. Os ícones em si já tinham sido importados e vinculados a
+  `PetData.icon` numa sessão anterior (2026-07-16, `Rato_Icon.png`/`Macaco_Icon.png`/
+  `Javali_Icon.png` em `Assets/Data/UI/Pets/<Nome>/`, conferido ainda intacto) — a causa raiz era
+  só que `MakeLevelUpCard` nunca lia esse campo: o switch que resolve o sprite do card
+  (`iconSprite = opt.kind switch {...}`) tratava `Skill`/`Weapon` mas caía em `_ => null` pra
+  `Kind.Pet`, então o branch de ícone de verdade nunca era alcançado pra pet, só o fallback de
+  cor sólida. Fix de 1 linha: `LevelUpOption.Kind.Pet => opt.petData?.icon` no switch.
+- 2026-07-17: **Bug corrigido** — escolher o mesmo tipo de pet 2x no level-up duplicava (2 Macacos
+  separados) em vez de evoluir o tier (T1→T2→T3). Causa raiz: essa era literalmente a sub-fase B
+  já documentada como pendente desde 2026-07-16 (`LevelUpEngine.ApplyOption`'s Pet case fazia só
+  `profile.pets.Add(...)` sem checar nada, e o pool de opções (`ShowAllOptionsChoice`/
+  `DrawOption`) sempre oferecia os 3 T1 sem filtro nenhum). Fix: novo `LevelUpEngine.
+  BuildAvailablePets(profile, petPoolT1)` — se o jogador não tem nenhum tier daquele TIPO de pet,
+  oferece o T1; se já tem, oferece só `owned.nextTier` (null quando já é T3 = não oferece mais
+  nada desse pet); `ApplyOption` agora remove o tier anterior antes de adicionar o novo (upgrade
+  in-place, mesmo padrão de skill/arma). `BotProfileGenerator` tinha o mesmo bug (o pool de pets
+  disponíveis era montado 1x fora do loop de level-up dos bots, nunca atualizado) — corrigido
+  junto, recalculado a cada nível igual skill/arma.
+- 2026-07-17: **Bug corrigido** — HP com 3 dígitos (>= 100) quebrava em 2 linhas nos badges de
+  `CharacterPanel` (01_MainMenu/02_SelectCharacter) e `SelectOpponentController`
+  (05_SelectOpponent). Causa raiz: `AttributePipBar.BuildIconWithValue` (o coração+número
+  introduzido em 2026-07-16) nunca setava `enableWordWrapping`, então herdava o `true` padrão do
+  TMP — "100" não cabia numa linha na caixa pequena do badge (34px/22px) no fontSize configurado
+  e quebrava em "10"/"0". Fix: `enableWordWrapping = false` (nunca quebra linha) +
+  `enableAutoSizing` com piso em 60% do fontSize pedido (3 dígitos encolhem pra caber em vez de
+  vazar da caixa; 1-2 dígitos continuam no tamanho cheio de sempre). Mesmo fix aplicado por
+  segurança na label de HP da barra de vida em combate (`CombatHUD.CreateBar`) — essa caixa é bem
+  mais larga e dificilmente quebrava na prática, mas também não desabilitava wrapping em lugar
+  nenhum.
+- 2026-07-16: Ícones novos do usuário — HP/STR/Speed (`Assets/Resources/UI/Attributes/{HP,Str,
+  Speed}.png`) substituídos por sobrescrita direta do arquivo (mesmo GUID, sem precisar rewireear
+  nada); AGI segue com o ícone antigo (usuário não forneceu substituto ainda). 3 ícones "de
+  skill" novos pros pets (Rato/Macaco/Javali, `Assets/Data/UI/Pets/<Nome>/<Nome>_Icon.png`) —
+  aproveitado pra corrigir uma pendência arquitetural: `PetData.icon` (existia desde a sub-fase A,
+  mas sempre null) agora é preenchido de verdade pelos 9 assets (3 pets × 3 tiers, mesmo ícone
+  nos 3 tiers do mesmo bicho) e pelo próprio `PetTierGenerator` (pra sobreviver a uma
+  regeneração futura). `SelectOpponentController` trocou os 3 campos fixos por tipo
+  (`mousePetIcon`/`monkeyPetIcon`/`boarPetIcon`, wireados manualmente no Inspector) por
+  `petData.icon` direto — mesmo padrão que `SkillData.icon`/`WeaponData.icon` já usavam,
+  eliminando a necessidade de rewireear ícone de pet em cada tela nova que precisar dele.
+- 2026-07-16: Sistema de tiers T1/T2/T3 pra pets (sub-fase A de 6, plano revisado pelo usuário
+  antes de codar) — `PetData : ScriptableObject` novo (`Assets/Scripts/Data/PetData.cs`, campos
+  nomeados em vez de `bonusValue1-7` de `SkillData` — pet precisa de mais valores distintos do
+  que os 7 slots comportam) + `PetTierGenerator.cs` (`Tools > AutoArms > Generate Pet Tiers`) com
+  a tabela real extraída manualmente da referência do My Brute e adaptada pro jogo (aprovada
+  pelo usuário). `PlayerProfile.pets` virou `List<PetData>` (era `List<PetType>`);
+  `PetState.Create(PetData)` (era `Create(PetType)` com switch hardcoded); `LevelUpOption.petType`
+  virou `petData`; `LevelUpEngine.PetPool` (array fixo de enum) removido, substituído por um pool
+  de assets passado por parâmetro (`AttackSequencer.petPool`/`SelectOpponentController.petPool`,
+  novos campos, mesmo padrão de `skillDatabase`/`allWeapons` — precisam ser wireados no Inspector
+  com os 3 T1 depois de rodar o gerador). Counter/Reversal do Macaco (mecânica antiga, fora da
+  tabela nova aprovada) removidos por completo, junto do método `SimulatePetRetaliation` (ficou
+  sem chamador). Save/load (local JSON + Firestore) também precisou de ajuste, achado ao seguir o
+  padrão já existente de `WeaponDatabase`/`SkillDatabase`: `PetDatabase.cs` novo (`Assets/
+  Resources/PetDatabase.asset`, populado automaticamente pelo próprio `PetTierGenerator`) +
+  `PetTierRef` novo em `CharacterDTO.cs` (mesma ideia de `WeaponTierRef`/`SkillTierRef` — tipo+tier
+  em vez de só `PetType.ToString()`) — sem isso, um pet salvo carregaria de volta sempre como T1
+  (tier perdido no round-trip). 2 bugs corrigidos de brinde: Disarm do Javali lia `Roll(0.15f)` fixo em vez de
+  `pet.disarmRate` (agora tier-escalável); popup de detalhe do pet (`CharacterPanel.ShowPetDetail`)
+  usava tier 3 hardcoded pra borda do ícone (não existia tier real ainda) — agora usa o tier de
+  verdade. Dano de pet virou valor único por tier (era range aleatório, seguindo a mesma
+  simplificação já aplicada a `WeaponData` antes). **Ainda faltam** (sub-fases D/E/F, mecânica de
+  combate nova, ver plano revisado em CLAUDE.md/Fase 3): evoluir em vez de duplicar pet no
+  level-up, Initiative, Accuracy do Javali, debuffs fixos de Combo/Block do Javali no oponente.
+- 2026-07-16: Manutenção de roadmap pedida pelo usuário — "Sistema de raridade de armas" marcado
+  `[x]` (coberto pelos Tiers T1/T2/T3 de arma, confirmado pelo usuário: "raridade de arma ja foi
+  feito, t1 t2 t3"); "Mapa de skills"/"Mapa de armas (árvore)" marcados `[x]` (cobertos pelo grid
+  de `03_Arsenal`, confirmado pelo usuário: "mapa de skill e arma é o botao arsenal"); "Criar cena
+  03_SelectWeapons" cancelado e removido do roadmap (`03_Arsenal` já cobre a necessidade — campo
+  `MainMenuController.selectWeapons` fica como resíduo morto, não removido do código). 2 itens
+  novos adicionados em Fase 3: **Pets T2/T3** (não pode repetir o mesmo `PetType` no profile — ao
+  escolher de novo, evolui o pet já possuído em vez de duplicar; ainda sem stats por tier nem
+  campo de tier em `PlayerProfile.pets` definidos) e **achar ícones de pet de verdade** (hoje usa
+  o frame `Idle_000` como provisório). Progresso recontado do zero: 146 tarefas, 47 concluídas.
+- 2026-07-16: Ajuste fino dos ícones de atributo (pedido do usuário, valores exatos) — ícones de
+  STR/AGI/SPD (`AttributePipBar.Build`) escalados 3x (`RectTransform.localScale`, em cima do
+  sprite já centralizado por `preserveAspect`, sem mexer em sizeDelta/anchors) e o coração de HP
+  (`AttributePipBar.BuildIconWithValue`) escalado 2.7x. HP realinhado em X com o ícone de STR
+  (mesmo inset de 14px que o ícone usa dentro da linha de STR) e movido pra cima da pilha de
+  STR/AGI/SPD (antes ficava ao lado de "Level X") — em `CharacterPanel.cs` (01_MainMenu/
+  02_SelectCharacter) e `SelectOpponentController.cs` (05_SelectOpponent).
+- 2026-07-16: 4 ícones novos do usuário (`Str.png`/`Agi.png`/`Speed.png`/`HP.png`, movidos de
+  `C:\Users\user\Desktop\Prototipo\Icones\` pra `Assets/Resources/UI/Attributes/`, carregados via
+  `Resources.Load` — `AttributePipBar` não é `MonoBehaviour`/não tem GameObject de cena pra
+  wireear um Sprite no Inspector) substituem o texto "STR"/"AGI"/"SPD" (`AttributePipBar.Build`,
+  `IconForLabel`) e "N HP" (novo `AttributePipBar.BuildIconWithValue` — ícone de coração com o
+  número em branco centralizado por cima, texto "HP" removido) nos 3 lugares que mostravam esses
+  textos: `CharacterPanel` (reaproveitado por `01_MainMenu` e `02_SelectCharacter`, mesmo
+  componente nos dois) e `SelectOpponentController` (`05_SelectOpponent`, "Level X" e o HP
+  viraram elementos irmãos flush-à-esquerda em vez de um texto combinado centralizado).
+- 2026-07-16: Ajuste de layout no card de `05_SelectOpponent`, pedido do usuário ("disposição
+  confusa"): (1) linha "Level X · HP Y" mudou de centralizada (flutuava sozinha na largura toda
+  do `RightPanel`) pra alinhada à esquerda — agora começa colada na borda direita do retrato,
+  lendo como parte do personagem em vez de solta no topo; (2) STR/AGI/SPD voltaram a ser 3 linhas
+  empilhadas (`MakeAttributeRow`, chamado 3x) com o mesmo espaçamento vertical entre elas, no
+  lugar da versão em 3 colunas lado a lado (`MakeAttributeRowsCompact`, removida) da rodada
+  anterior — essa versão espremia cada `AttributePipBar` num container estreito demais, fazendo
+  label/badge/pips renderizarem em posições relativas ligeiramente diferentes entre as 3 stats;
+  empilhadas, as 3 chamadas usam o mesmo container/código, então ficam idênticas em X por
+  construção. Nenhuma outra mudança (cores/fontes/ícones/popup de detalhe intocados).
+- 2026-07-16: Tooltip de hover (rodada anterior, só nome) trocado por popup de detalhe de verdade
+  nos ícones de skill/arma/pet de `05_SelectOpponent` — usuário apontou que era um retrocesso
+  comparado ao resto do jogo. Investigação confirmou o padrão já aprovado: `CharacterPanel.
+  ShowSkillDetail`/`ShowWeaponDetail` (`public`, popup no CLIQUE — nome, borda por tier,
+  descrição/efeito ou stats completos), já reaproveitado por `03_Arsenal` via
+  `ArsenalController.EnsureDetailPanel()` (instancia um `CharacterPanel` "de cabeça", só o popup,
+  sem o HUD). `SelectOpponentController` ganhou o mesmo `EnsureDetailPanel()`; cada ícone virou um
+  `Button` que abre o popup (não borbulha pro `PressableCard` do card). Pets não tinham
+  equivalente (sem `PetData`/asset próprio) — `CharacterPanel` ganhou `ShowPetDetail(PetType,
+  Sprite)`, novo método público que reaproveita a MESMA infraestrutura de popup (overlay/painel/
+  ícone com borda/medição de altura dinâmica), só trocando description/effectText por stats
+  formatados de `PetState.Create`/`DamageRange`. `IconTooltip.cs` (tooltip de hover) removido —
+  sem uso depois da troca.
+- 2026-07-16: Ajustes pedidos pelo usuário no card de `05_SelectOpponent`: (1) bots agora vêm de
+  `unlockedCharacters` filtrado por `rarity == Normal` (`SelectOpponentController.
+  GenerateBotOpponents`), substituindo a curadoria fixa por nome (`botTemplates`/
+  `BotTemplateSetup.cs`, obsoleta, deixada no projeto sem consumidor); (2) altura do card reduzida
+  à metade (820×320, era 820×640) — coube removendo o botão "Escolher" e o histórico de batalhas,
+  virando STR/AGI/SPD numa linha horizontal de 3 colunas (`MakeAttributeRowsCompact`, era 3 linhas
+  empilhadas) e skill+arma+pet numa única linha combinada (`MakeItemIconsRow`, era 2 linhas
+  separadas); (3) botão "Escolher" removido — o card inteiro ficou clicável (`PressableCard.cs`,
+  novo: escurece no toque, escolhe no `OnPointerClick` — não `OnPointerUp`, que dispararia mesmo
+  depois de um arraste de scroll); (4) pets agora aparecem no card — não era falta de ícone como o
+  usuário suspeitava, é que nunca existiu nenhuma linha pra eles; usa o frame `Idle_000` de cada
+  pet (`Assets/Data/UI/Pets/<Nome>/`), wireado via 3 campos novos (`mousePetIcon`/`monkeyPetIcon`/
+  `boarPetIcon`) direto no `.unity` (guids); (5) texto "X batalhas · Y vitórias" removido.
+- 2026-07-16: `05_SelectOpponent` — sessão anterior fechou sem salvar (Unity não autosalva) e
+  perdeu o wiring manual de `theme`/`skillDatabase`/`allWeapons` no `SelectOpponentController`
+  (causava `NullReferenceException` em `AttributePipBar.Build`) e todas as raridades de
+  `PlayerProfile` já setadas — re-wireado direto no `.unity`/`.asset` (guids lidos dos `.meta`,
+  sem precisar abrir o Editor pela VPN). As 72 raridades (`CharacterRarity`) foram preenchidas
+  pra valor final (lista dada pelo usuário); `isUnlockedForSelection`/`isPlayable` de todos os 72
+  `PlayerProfile` setados pra `true` temporariamente pra visualização, depois revertido — só
+  `Medieval Warrior` ficou `isPlayable: true`. Card de `05_SelectOpponent` redesenhado: grid
+  2 colunas × 3 linhas (`GridLayoutGroup.Constraint.FixedColumnCount`, antes sem constraint,
+  virava 1 linha × 6 colunas estreitas); card maior (820×640, era 260×620) com retrato grande
+  (300px, era 120px) fixo na coluna esquerda e todo o resto (nome/level/HP/atributos/skills/
+  armas/histórico/botão) numa coluna direita própria (`RightPanel`); ícones de skill/arma
+  aumentados de 36 pra 56px; tooltip de hover novo (`IconTooltip.cs`, painel único compartilhado
+  por card, mostra o nome ao passar o mouse no ícone de skill/arma).
+- 2026-07-15: 12 bots de matchmaking (`CharacterDatabase.botTemplates` + `BotProfileGenerator`,
+  stats/skill/arma escaláveis do level 1 ao pedido, mesmos pesos de level-up do jogador real via
+  `LevelUpEngine`, extraído de `CombatResultPanel`) como fallback intermediário em
+  `05_SelectOpponent`, entre a busca online (agora priorizada por `levelBucket`,
+  `OpponentSearchService`) e o pool antigo `opponentCharacters`. Falta rodar `Tools > AutoArms >
+  Setup Bot Templates` e wireear `SkillDatabase`/`allWeapons`/`UITheme` no `SelectOpponentController`
+  da cena (passos manuais, ver plano da sessão).
+- 2026-07-15: Ajustes pedidos pelo usuário depois do 1º teste dos bots — (1) `BotTemplateSetup`
+  agora usa 9 personagens "normais"/humanos + 3 "incomuns"/fantásticos (não existe ainda nenhum
+  `PlayerProfile.rarity` != Normal no projeto, então a curadoria é por nome, não pelo enum); (2)
+  card de `05_SelectOpponent` ganhou uma linha de ícones de SKILL (antes inexistente — nenhuma
+  skill aparecia pra nenhum oponente, bot ou real) via `LevelUpEngine.ResolveSkillIcon` (sobe
+  `previousTier` até achar ícone, T2/T3 nunca têm um próprio); ícone de arma também passou a subir
+  a mesma cadeia (`ResolveWeaponIcon`) em vez de só olhar o tier exato; (3) STR/AGI/SPD do card
+  trocaram a fill-bar simples pelo `AttributePipBar` (badge + 10 pips coloridos por tier), mesmo
+  componente do `CharacterPanel`/`01_MainMenu` — precisa de `UITheme` wireado no
+  `SelectOpponentController` (novo campo, obrigatório: sem ele o grid inteiro quebra).
 - 2026-07-15: Novo `LIMPEZA_BASE.md` — passo a passo pra zerar a base Firebase (Auth + Firestore) e
   o cache local (save.json, LevelDB do Firestore, `PlayerProfile.asset` contaminado por teste) —
   usuário zerou a base pela primeira vez seguindo este processo, antes de iniciar a próxima tarefa

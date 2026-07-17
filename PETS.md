@@ -6,18 +6,58 @@ Pets entram na luta desde o início, atacam separadamente com seus próprios atr
 no chão (não destruídos) quando nocauteados — preparação pra skill futura **Tamer**, que
 permitirá "comer" pets caídos. Referência: My Brute (Muxxu/eternaltwin), pets de combate.
 
-**3 tipos** (`PetType` enum em `PlayerProfile.cs`; `PetState.Create`/`DamageRange`/`HpCost`/
-`Scale`/`DisplayName` em `Assets/Scripts/Combat/PetState.cs` concentram os stats):
+**3 tipos** (`PetType` enum em `PlayerProfile.cs`). **Tiers T1/T2/T3 (2026-07-16)** — mesmo
+espírito de `SkillData`/`WeaponData`: `PetData : ScriptableObject` (`Assets/Scripts/Data/
+PetData.cs`, campos NOMEADOS em vez de `bonusValue1-7` — pet precisa de mais valores distintos
+do que os 7 slots genéricos comportam) com `tier`/`previousTier`/`nextTier`/`icon`, um asset por
+tier (`pet_mouse_t1/t2/t3.asset` em `Assets/ScriptableObjects/Pets/`, gerados por
+`Tools > AutoArms > Generate Pet Tiers (T1, T2 & T3)`, ver `Assets/Editor/PetTierGenerator.cs`).
+`PetState.Create(PetData)` (era `Create(PetType)` com switch hardcoded) lê os stats do asset.
+`PetDatabase` novo (`Assets/Resources/PetDatabase.asset`, populado automaticamente pelo próprio
+gerador — mesmo espírito de `WeaponDatabase`/`SkillDatabase`) resolve o `PetData` real a partir
+de tipo+tier no save/load (`PlayerProfileConverter`/`CharacterDTOMap`, novo `PetTierRef`).
+Tabela extraída manualmente da referência visual do My Brute e adaptada pro nosso jogo (aprovada
+pelo usuário 2026-07-16 — **substitui por completo** os valores antigos, incluindo a remoção do
+Counter/Reversal do Macaco, que não faz parte da tabela nova):
 
-| Pet | HP | Dano | Speed | AGI | ComboRate | DisarmRate | EvasionBase | Counter | Reversal | Custo HP do dono |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Rato (Mouse) | 25 | 4-6 | 10 | 8 | 20% | 0% | 10% | 0% | 0% | -12 |
-| Macaco (Monkey) | 50 | 9-12 | 20 | 25 | 40% | 0% | 35% | 15% | 20% | -36 |
-| Javali (Boar) | 110 | 18-27 | 3 | 2 | 0% | 15% | 2% | 0% | 0% | -48 |
+| Pet | Odds* | HP malus** | Initiative** | STR | AGI | SPD | HP | Dano | Especial |
+|---|---|---|---|---|---|---|---|---|---|
+| Rato (Mouse) T1/T2/T3 | 1.92% | 10% | 0 | 7/9/11 | 6/8/10 | 5/7/9 | 21/23/25 | 3/6/9 | Combo 20%/30%/40% |
+| Macaco (Monkey) T1/T2/T3 | 0.10% | 25% | 1 | 24/29/34 | 17/21/25 | 25/29/33 | 34/38/42 | 3/6/9 | Evasão 20%/25%/30% · Combo 70%/75%/80% |
+| Javali (Boar) T1/T2/T3 | 0.10% | 40% | 4 | 46/51/56 | 3/5/7 | 2/4/6 | 140/150/160 | 5/10/15 | Evasão 10%/15%/20% · Precisão 20%/30%/40% · Desarme 5%/10%/15% · Combo do oponente -20% (fixo) · Block do oponente -25% (fixo) |
 
-`PlayerProfile.pets` (`List<PetType>`) — sem restrição de duplicatas (3 Ratos geram 3
-instâncias independentes). `PlayerState.pets`/`PetState` (pure C#, mesmo padrão de
-`PlayerState`) guardam o estado de cada pet durante a simulação — `CombatSimulator.BuildState`
+\* **Odds** — chance deste pet aparecer como opção de level-up; campo existe em `PetData` mas
+**ainda não está conectado** no sorteio (`LevelUpEngine.DrawOption`) — aguardando o usuário
+passar os odds de skill/arma junto, pra conectar tudo de uma vez.
+\** **HP malus/Initiative são FIXOS por TIPO de pet, não escalam por tier** (confirmado pelo
+usuário) — só STR/AGI/SPD/HP/Dano e os bônus especiais escalam. HP malus agora é **% do HP
+máximo BASE do dono** (era valor fixo -12/-36/-48) e só é cobrado na 1ª aquisição (T1) — evoluir
+pra T2/T3 (mesmo tipo escolhido de novo no level-up) não cobra HP de novo.
+
+**Mecânica nova ainda NÃO implementada** (dado já existe em `PetData`, wiring de combate é uma
+sub-fase separada, ver CLAUDE.md/Fase 3): Initiative (ordem entre os próprios pets do mesmo
+dono), Accuracy do Javali (reduz esquiva do personagem contra os ataques dele), e os debuffs
+fixos de Combo/Block do Javali no oponente (aura passiva durante a luta inteira). Evasão/Combo/
+Desarme do próprio pet e Dano JÁ funcionam tier-a-tier desde esta sub-fase (BuildState/
+SimulatePetHit já leem os valores do `PetData`).
+
+**Decisão de design em aberto (2026-07-17, aguardando o usuário — NÃO implementada)**: dano do
+pet (`CombatSimulator.SimulatePetHit`, `int damage = pet.damage`) é hoje só o valor fixo da
+coluna "Dano" da tabela acima — STR do pet é independente, nunca somada ao próprio ataque
+(diferente do personagem principal, onde STR soma direto no dano da arma). STR do pet só
+alimenta a fórmula do Piledriver (`targetPet.str` como dano daquele golpe específico, quando o
+pet é agarrado) e o escalonamento por nível do dono (`ApplyLevelScaling`, Javali `+3 STR/tier`).
+Investigado a pedido do usuário (suspeita de bug — "Macaco causa só 3 de dano, ignora STR") e
+confirmado que NÃO é bug: tier-scaling do campo `damage` funciona corretamente (verificado nos
+assets em disco), a tabela aprovada trata STR e Dano como colunas separadas por design, e o
+sintoma reportado era de um save antigo com pet preso em T1 pelo bug de duplicação (já corrigido
+separadamente). Se STR vier a somar no dano do pet no futuro, os valores da coluna "Dano"
+precisam ser rebalanceados primeiro — somar direto (`damage + str`) infla o Javali de 5→51 (T1) e
+15→71 (T3), acima de qualquer arma T3 de personagem no jogo hoje.
+
+`PlayerProfile.pets` (`List<PetData>`, era `List<PetType>`) — sem restrição de duplicatas ainda
+(evoluir em vez de somar cópia é a próxima sub-fase). `PlayerState.pets`/`PetState` (pure C#,
+mesmo padrão de `PlayerState`) guardam o estado de cada pet durante a simulação — `CombatSimulator.BuildState`
 constrói a lista a partir de `profile.pets`.
 
 **Speed System dos pets** (`CombatSimulator.SimulatePetActions`) — não compara speed contra um

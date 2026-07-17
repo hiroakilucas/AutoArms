@@ -9,7 +9,6 @@ using UnityEngine;
 public class PetAnimationController : MonoBehaviour
 {
     private Animator _animator;
-    private bool _hasIdle, _hasRunning, _hasSlashing, _hasHurt, _hasJumping, _hasDying;
 
     // Net visual — rede caída sobre o pet, oscilando lateralmente (mesma lógica de
     // PlayerCombat.ShowNetEnsnared / NetOscillateLoop, mas sem loop de face).
@@ -55,50 +54,53 @@ public class PetAnimationController : MonoBehaviour
     {
         _animator = GetComponent<Animator>();
         if (_animator == null)
-        {
             Debug.LogError($"[PetAnimationController] Nenhum Animator encontrado em {name}.");
-            return;
-        }
-
-        // Confirma quais parâmetros existem de fato no controller antes de usá-los — evita
-        // warnings de "parameter does not exist" se o Setup Pet Animators ainda não tiver
-        // rodado, ou logar no Console qual clip/parâmetro está faltando.
-        foreach (var p in _animator.parameters)
-        {
-            switch (p.name)
-            {
-                case "Idle": _hasIdle = true; break;
-                case "Running": _hasRunning = true; break;
-                case "Slashing": _hasSlashing = true; break;
-                case "Hurt": _hasHurt = true; break;
-                case "Jumping": _hasJumping = true; break;
-                case "Dying": _hasDying = true; break;
-            }
-        }
-
-        if (!_hasIdle || !_hasRunning || !_hasSlashing || !_hasHurt || !_hasJumping || !_hasDying)
-            Debug.LogError($"[PetAnimationController] {name}: faltam parâmetros no Animator Controller — rode Tools/AutoArms/Setup Pet Animators.");
     }
 
+    // **Bug real corrigido (2026-07-17)**: até esta versão, `Awake()` enumerava
+    // `_animator.parameters` pra cachear quais dos 6 parâmetros existiam (`_hasIdle`/
+    // `_hasRunning`/etc.) e todo método abaixo só chamava `SetBool`/`SetTrigger` se a flag
+    // correspondente tivesse dado `true` — pensado pra evitar warnings de "parameter does not
+    // exist" caso `Tools/AutoArms/Setup Pet Animators` não tivesse rodado ainda. Só que esse
+    // `Awake()` roda SINCRONAMENTE dentro de `gameObject.AddComponent<PetAnimationController>()`,
+    // chamado por `PetCombatController.Awake()`, que por sua vez também roda sincronamente via
+    // `petObj.AddComponent<PetCombatController>()` em `CombatSceneLoader.SpawnPets` — tudo no
+    // MESMO frame do `Instantiate(prefab)` que criou o pet. `Animator.parameters`, lido tão cedo
+    // (antes do Animator ter feito seu próprio bind/init interno, que a Unity só garante a
+    // partir do primeiro `Update`/habilitação), pode devolver uma lista vazia mesmo com o
+    // Controller corretamente configurado — todas as 6 flags ficavam `false`, e TODA chamada de
+    // animação (`SetIdle`/`PlayRun`/`PlaySlash`/`PlayHurt`/`PlayJump`/`PlayDying`) virava no-op
+    // silencioso pelo resto da luta, enquanto movimento (`MovementController`, componente
+    // totalmente separado) e dano (`CombatSimulator`/`HealthSystem`) continuavam funcionando
+    // normalmente — exatamente o sintoma reportado pelo usuário ("pet fica estático se movendo
+    // até o oponente estático, ataca estático"). Não era específico do Macaco: a mesma cadeia de
+    // `AddComponent` acontece igual pros 3 pets, então o bug é sistêmico, só que o usuário só
+    // tinha testado o Macaco até então. `AnimationController.cs` (personagens principais, ver
+    // `Assets/Scripts/Handler/`) nunca teve esse gate — só chama `SetBool`/`SetTrigger` direto
+    // pelo nome, sem nenhuma checagem de existência prévia (Unity trata um nome de parâmetro
+    // inexistente como no-op silencioso na própria chamada, sem lançar exceção) — por isso os
+    // personagens principais nunca demonstraram esse bug. Fix: removida a checagem prévia por
+    // completo, mesmo padrão simples/direto do `AnimationController` dos personagens.
     public void SetIdle(bool idle)
     {
-        if (_hasIdle) _animator.SetBool("Idle", idle);
-        if (idle && _hasRunning) _animator.SetBool("Running", false);
+        if (_animator == null) return;
+        _animator.SetBool("Idle", idle);
+        if (idle) _animator.SetBool("Running", false);
     }
 
     public void PlayRun(bool running)
     {
-        if (_hasRunning) _animator.SetBool("Running", running);
+        if (_animator != null) _animator.SetBool("Running", running);
     }
 
     public void PlaySlash()
     {
-        if (_hasSlashing) _animator.SetTrigger("Slashing");
+        if (_animator != null) _animator.SetTrigger("Slashing");
     }
 
     public void PlayHurt()
     {
-        if (!_hasHurt) return;
+        if (_animator == null) return;
         _animator.ResetTrigger("Hurt");
         _animator.SetTrigger("Hurt");
     }
@@ -106,7 +108,7 @@ public class PetAnimationController : MonoBehaviour
     // Esquiva — usa o trigger "Jumping" (não "Jump_Loop"; ver nota no topo do arquivo).
     public void PlayJump()
     {
-        if (_hasJumping) _animator.SetTrigger("Jumping");
+        if (_animator != null) _animator.SetTrigger("Jumping");
     }
 
     // Morte — toca uma vez e trava no último frame (Loop Time=false no clipe, sem transição
@@ -114,7 +116,7 @@ public class PetAnimationController : MonoBehaviour
     // fica caído no chão, GameObject nunca destruído.
     public void PlayDying()
     {
-        if (_hasDying) _animator.SetTrigger("Dying");
+        if (_animator != null) _animator.SetTrigger("Dying");
     }
 
     // Desliga o Animator depois do clipe de Dying terminar de tocar (uma única passada, Loop

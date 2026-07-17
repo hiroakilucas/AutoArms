@@ -73,8 +73,8 @@ public class CharacterPanel : MonoBehaviour
     private InfoBlockRefs _compactInfo, _expandedInfo;
 
     // Skills/Armas — listas dinâmicas dentro do Expanded, reconstruídas a cada RefreshAll.
-    private Transform _skillsList, _armasList;
-    private TMP_Text _skillsEmpty, _armasEmpty;
+    private Transform _skillsList, _armasList, _petsList;
+    private TMP_Text _skillsEmpty, _armasEmpty, _petsEmpty;
 
     // Botão "Detalhes" + seção PASSIVAS (2026-07-07) — linhas fixas (o conjunto de passivas
     // não varia por personagem, só o valor), então são construídas uma vez e só o texto é
@@ -488,15 +488,29 @@ public class CharacterPanel : MonoBehaviour
         refs.winRate = AddLabel(badgeGo, "—%", 16, _theme.textOnLight);
         refs.winRate.fontStyle = FontStyles.Bold;
 
+        // Coração + número branco centralizado (2026-07-16, pedido do usuário — substitui o
+        // texto "N HP") — alinhado em X com o ícone de STR/AGI/SPD logo abaixo. Já ficava ACIMA
+        // de STR/AGI/SPD por causa da faixa Y (0.63-0.80, contra 0.44-0.60 do STR).
+        // **Bug real corrigido (2026-07-17)**: a 1ª tentativa (2026-07-16) só igualava a borda
+        // ESQUERDA dos dois ícones (mesmo offset de 14px), mas usava uma largura FIXA em pixels
+        // (34px) enquanto o ícone de STR/AGI/SPD (`AttributePipBar.Build`'s `lblGo`) usa uma
+        // largura PROPORCIONAL (20% da linha, que mede 0.90 da largura do container) — como
+        // `preserveAspect`+`localScale` centralizam e escalam o sprite em torno do CENTRO do
+        // próprio rect, bordas esquerdas iguais com larguras diferentes produzem CENTROS
+        // diferentes (o coração ficava ~16px à esquerda do centro real do ícone de STR, visível
+        // a olho mesmo com a borda "alinhada" no código). Fix: em vez de replicar só o offset de
+        // 14px, replicar a geometria PROPORCIONAL inteira de `lblGo` em espaço do `container`
+        // (rowGo do STR é um stretch 0.05-0.95 com offset zero, então suas frações internas
+        // mapeiam direto pra frações de `container`: anchorMin.x 0 vira 0.05, anchorMax.x 0.20
+        // vira 0.05 + 0.20×0.90 = 0.23) — mesma proporção, mesmo offset de 14px, logo mesmo
+        // centro renderizado do ícone, não importa a largura real do container em pixels.
         var hpGo = new GameObject("Hp");
         hpGo.transform.SetParent(container.transform, false);
         var hprt = hpGo.AddComponent<RectTransform>();
-        hprt.anchorMin = new Vector2(0.05f, 0.63f); hprt.anchorMax = new Vector2(0.95f, 0.80f);
-        hprt.offsetMin = hprt.offsetMax = Vector2.zero;
-        refs.hp = hpGo.AddComponent<TextMeshProUGUI>();
-        refs.hp.fontSize = 20; refs.hp.fontStyle = FontStyles.Bold;
-        refs.hp.color = TextColor;
-        refs.hp.alignment = TextAlignmentOptions.MidlineLeft;
+        hprt.anchorMin = new Vector2(0.05f, 0.63f); hprt.anchorMax = new Vector2(0.23f, 0.80f);
+        hprt.offsetMin = new Vector2(14f, 0f);
+        hprt.offsetMax = Vector2.zero;
+        refs.hp = AttributePipBar.BuildIconWithValue(hpGo, AttributePipBar.HpIcon, 15f);
 
         refs.str = BuildPipRow(container, 0.44f, 0.60f, "STR");
         refs.agi = BuildPipRow(container, 0.24f, 0.40f, "AGI");
@@ -536,6 +550,10 @@ public class CharacterPanel : MonoBehaviour
         MakeSectionTitle(content, "ARMAS");
         _armasList = MakeIconGrid(content);
         _armasEmpty = MakeMsg(content, "Sem armas equipadas");
+
+        MakeSectionTitle(content, "PETS");
+        _petsList = MakeIconGrid(content);
+        _petsEmpty = MakeMsg(content, "Nenhum pet ainda");
 
         BuildDetailsToggle(content);
     }
@@ -912,6 +930,70 @@ public class CharacterPanel : MonoBehaviour
         }
     }
 
+    // Popup mínimo pra pets (2026-07-16, pedido do usuário — "quero os 3 tipos [arma/skill/pet]
+    // com o mesmo nível de detalhe" na tela de oponentes) — reaproveita a MESMA infraestrutura de
+    // popup (overlay, painel, `BuildPopupIcon`, medição de altura dinâmica via
+    // `GetPreferredValues`, mesmas constantes `SkillPopup*`), só o corpo do texto muda pra stats
+    // formatados em vez de description/effectText, já que não existe `description`/`effectText`
+    // em `PetData` (pet não tem texto temático, só números). `icon` vem de quem chama
+    // (`SelectOpponentController` tem os sprites de pet, `CharacterPanel` não).
+    public void ShowPetDetail(PetData data, Sprite icon)
+    {
+        ClearPopupContent();
+        _popupOverlayGo.SetActive(true);
+
+        float contentWidthPx = SkillPopupWidth * SkillPopupContentWidthFraction;
+
+        // Tier de verdade agora (2026-07-16) — antes era hardcoded em 3 (só pra pegar a borda
+        // dourada), já que não existia tier real nenhum pra pet.
+        BuildPopupIcon(icon, data != null ? data.tier : 3);
+
+        var nameGo = new GameObject("Name");
+        nameGo.transform.SetParent(_popupContentRoot, false);
+        var nrt = nameGo.AddComponent<RectTransform>();
+        nrt.anchorMin = new Vector2(0f, 1f); nrt.anchorMax = new Vector2(1f, 1f);
+        nrt.pivot = new Vector2(0.5f, 1f);
+        nrt.anchoredPosition = new Vector2(0f, -100f);
+        nrt.sizeDelta = new Vector2(0f, 36f);
+        var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
+        nameTxt.text = data != null ? PetState.DisplayName(data.petType) : "?";
+        nameTxt.fontSize = 28; nameTxt.fontStyle = FontStyles.Bold;
+        nameTxt.color = _theme.currencyGold;
+        nameTxt.alignment = TextAlignmentOptions.Center;
+
+        string desc = data == null
+            ? "Sem dados disponíveis."
+            : $"HP {data.hp}   ·   STR {data.str:F0}   ·   AGI {data.agility}   ·   SPD {data.speed}\n\n" +
+              $"Dano por golpe: {data.damage}\n" +
+              $"Chance de combo: {data.comboRate:P0}   ·   Evasão: {data.evasionBase:P0}" +
+              (data.accuracyBonus > 0f ? $"   ·   Precisão: {data.accuracyBonus:P0}" : "") +
+              (data.disarmRate > 0f ? $"   ·   Desarme: {data.disarmRate:P0}" : "") +
+              (data.comboDebuff < 0f ? $"\nCombo do oponente: {data.comboDebuff:P0}" : "") +
+              (data.blockDebuff < 0f ? $"   ·   Block do oponente: {data.blockDebuff:P0}" : "");
+
+        var bodyGo = new GameObject("Body");
+        bodyGo.transform.SetParent(_popupContentRoot, false);
+        bodyGo.AddComponent<RectTransform>();
+        var bodyTxt = bodyGo.AddComponent<TextMeshProUGUI>();
+        bodyTxt.enableWordWrapping = true;
+        bodyTxt.fontSize = 20;
+        bodyTxt.color = TextColor;
+        bodyTxt.alignment = TextAlignmentOptions.TopLeft;
+        bodyTxt.text = desc;
+        float descHeight = bodyTxt.GetPreferredValues(contentWidthPx, 0f).y;
+
+        float contentHeight = SkillPopupHeaderHeight + descHeight + SkillPopupBottomPadding;
+        float panelHeight = Mathf.Max(contentHeight / SkillPopupContentHeightFraction, SkillPopupMinHeight);
+        _popupPanelRt.sizeDelta = new Vector2(SkillPopupWidth, panelHeight);
+        _popupPanelRt.anchoredPosition = Vector2.zero;
+
+        var brt = bodyGo.GetComponent<RectTransform>();
+        brt.anchorMin = new Vector2(0f, 1f); brt.anchorMax = new Vector2(1f, 1f);
+        brt.pivot = new Vector2(0.5f, 1f);
+        brt.anchoredPosition = new Vector2(0f, -SkillPopupHeaderHeight);
+        brt.sizeDelta = new Vector2(0f, descHeight);
+    }
+
     // Colore cada valor dentro de "[v1/v2/v3]" no effectText — o segmento do tier atualmente
     // equipado usa a mesma cor de destaque do popup de arma (primaryActionAlt), os outros dois
     // ficam num tom neutro (secondaryButtonAlt, igual a FormatTierTriplet). effectText é o
@@ -1214,7 +1296,7 @@ public class CharacterPanel : MonoBehaviour
         {
             refs.name.text = p.profileName;
             refs.winRate.text = winRateText;
-            refs.hp.text = $"{effHp} HP";
+            refs.hp.text = $"{effHp}";
             refs.str.SetValue(effStr);
             refs.agi.SetValue(effAgi);
             refs.spd.SetValue(effSpd);
@@ -1229,6 +1311,7 @@ public class CharacterPanel : MonoBehaviour
 
         RefreshSkills(p);
         RefreshArmas(p);
+        RefreshPets(p);
 
         SetPassive("Evasion", $"{effEvasion:P0}");
         SetPassive("Counter", $"{effCounter:P0}");
@@ -1291,6 +1374,24 @@ public class CharacterPanel : MonoBehaviour
             }
         }
         _armasEmpty.gameObject.SetActive(count == 0);
+    }
+
+    private void RefreshPets(PlayerProfile p)
+    {
+        foreach (Transform c in _petsList) Destroy(c.gameObject);
+        var pets = p.pets;
+        int count = 0;
+        if (pets != null)
+        {
+            foreach (var pet in pets)
+            {
+                if (pet == null) continue;
+                count++;
+                var data = pet; // captura por valor pro closure do onClick
+                BuildTierIconCell(_petsList, data.icon, data.tier, () => ShowPetDetail(data, data.icon));
+            }
+        }
+        _petsEmpty.gameObject.SetActive(count == 0);
     }
 
     // ── Layout Helpers ───────────────────────────────────────────────────────
