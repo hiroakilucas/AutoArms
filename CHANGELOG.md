@@ -3,6 +3,40 @@
 ### Progresso
 - Total: 143 tarefas | Concluídas: 43 (recontado em 2026-07-15 — ver nota em CLAUDE.md)
 
+- 2026-07-18: Ajustes de layout no card de `05_SelectOpponent` (`SelectOpponentController.cs`):
+  "Level X" movido do RightPanel pra cima do retrato do personagem (`LevelAbovePortrait`, nova
+  faixa dourada centralizada, mesma largura do Portrait); Portrait escalado 1.5x (`PortraitScale`,
+  cresce a partir do próprio pivot superior-esquerdo); ícones de STR/AGI/SPD reduzidos de 3x pra
+  2x e badge/pips puxados pra mais perto deles (`AttributePipBar.Build` ganhou os parâmetros
+  opcionais `iconScale`/`badgeAnchorX`/`pipsAnchorMinX`, default inalterado — `CharacterPanel`
+  continua igual); ícone de HP reduzido de 2.7x pra 1.8x (`AttributePipBar.BuildIconWithValue`
+  ganhou `iconScale` opcional, mesmo motivo).
+
+- 2026-07-18: Posicionamento fino no card de `05_SelectOpponent`, calibrado visualmente pelo
+  usuário no Editor — Portrait movido pra `anchoredPosition (-38, 22)` (substitui o cálculo
+  baseado em `CardPadding`/`LevelAbovePortraitHeight`); ícone de HP movido pra
+  `anchoredPosition (-68, -114)` e escalado de 1.8x pra 3x (`iconScale` do
+  `AttributePipBar.BuildIconWithValue`).
+
+- 2026-07-18: Mais um passe de calibração visual em `05_SelectOpponent`: ícone de HP reescalado
+  pra 2x (era 3x) e reposicionado pra `anchoredPosition (-100, -106)`; ícones de STR/AGI/SPD
+  reescalados pra 2.5x (era 2x); linha de ícones de skill/arma/pet (`ItemIcons`) reposicionada pra
+  `anchoredPosition (-42, -204)`, fixa em vez de seguir a pilha vertical de "y".
+
+- 2026-07-18: **Correção** — a mudança de escala do HP acima estava aplicada só no ícone
+  (`AttributePipBar.BuildIconWithValue`'s `iconScale`), deixando a caixa/número no tamanho
+  original; trocado pra `hpRt.localScale = (2.5, 2.5, 1)` no próprio container `Hp` (mesma técnica
+  do `Portrait`), escalando ícone+número juntos, como pedido.
+
+- 2026-07-18: HP reposicionado de novo em `05_SelectOpponent` — `anchoredPosition (-113, -106)`.
+
+- 2026-07-18: Mesmo ajuste de ícones de STR/AGI/SPD do `05_SelectOpponent` levado pro
+  `CharacterPanel` compartilhado (`BuildPipRow`, afeta `01_MainMenu` Compact/Expanded **e** o
+  painel deslizante de `02_SelectCharacter`, já que os dois reusam o mesmo componente) — iconScale
+  2.5x (era 3x) + badge/pips puxados pra mais perto do ícone (`badgeAnchorX: 0.19`,
+  `pipsAnchorMinX: 0.34`). HP não precisou de nenhum ajuste próprio — seu alinhamento em X com o
+  ícone de STR (`BuildInfoBlock`) só replica a caixa do ícone, que não mudou de posição/tamanho.
+
 - 2026-07-17: **Investigado, sem bug de código encontrado** — reportado que o Macaco causava
   sempre 3 de dano em combate "independente do tier/STR configurado". Verificação:
   `CombatSimulator.SimulatePetHit` (`int damage = pet.damage`) lê o campo `damage` direto do

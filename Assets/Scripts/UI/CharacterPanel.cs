@@ -526,7 +526,17 @@ public class CharacterPanel : MonoBehaviour
         var rt = rowGo.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.05f, yMin); rt.anchorMax = new Vector2(0.95f, yMax);
         rt.offsetMin = rt.offsetMax = Vector2.zero;
-        return AttributePipBar.Build(rowGo, _theme, label);
+        // iconScale 2.5x (era 3x padrão) + badge/pips puxados pra mais perto do ícone (2026-07-18,
+        // pedido do usuário — mesmo ajuste já feito em `05_SelectOpponent`/`MakeAttributeRow`,
+        // aplicado aqui pra ficar consistente em toda tela que usa este `CharacterPanel`
+        // compartilhado: `01_MainMenu` Compact/Expanded e o painel deslizante de
+        // `02_SelectCharacter`). O alinhamento em X do ícone de HP com este ícone (ver comentário
+        // longo em `BuildInfoBlock` acima do `hpGo`) não depende de `badgeAnchorX`/
+        // `pipsAnchorMinX` — só replica a caixa do próprio ícone (`lblGo`), que não mudou de
+        // posição/tamanho aqui, então o HP continua "encaixado" à esquerda do ícone sem precisar
+        // de nenhum ajuste próprio.
+        return AttributePipBar.Build(rowGo, _theme, label,
+            iconScale: 2.5f, badgeAnchorX: 0.19f, pipsAnchorMinX: 0.34f);
     }
 
     // ── Skills / Armas (Expanded) ───────────────────────────────────────────

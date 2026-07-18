@@ -47,17 +47,64 @@ public class AttributePipBar
         _prestigeText = prestigeText;
     }
 
-    public static AttributePipBar Build(GameObject rowContainer, UITheme theme, string label)
+    // Ícones de STR/AGI/SPD (2026-07-16, pedido do usuário — substituem o texto "STR"/"AGI"/
+    // "SPD" que ficava nessa mesma área) — carregados via Resources.Load (não dá pra wireary por
+    // Inspector: AttributePipBar não é MonoBehaviour, e é construído 100% via código em runtime,
+    // sem nenhum GameObject de cena pra arrastar um Sprite nele; mesmo padrão de
+    // CombatSceneLoader.RandomizeArenaBackground pros backgrounds de arena). PNGs originais do
+    // usuário em Assets/Resources/UI/Attributes/{Str,Agi,Speed}.png, movidos de
+    // C:\Users\user\Desktop\Prototipo\Icones\. `static readonly` — carregado uma vez só, no
+    // carregamento da classe, igual TierPalette abaixo.
+    private static readonly Sprite StrIcon = Resources.Load<Sprite>("UI/Attributes/Str");
+    private static readonly Sprite AgiIcon = Resources.Load<Sprite>("UI/Attributes/Agi");
+    private static readonly Sprite SpdIcon = Resources.Load<Sprite>("UI/Attributes/Speed");
+
+    private static Sprite IconForLabel(string label)
+    {
+        switch (label)
+        {
+            case "STR": return StrIcon;
+            case "AGI": return AgiIcon;
+            case "SPD": return SpdIcon;
+            default: return null;
+        }
+    }
+
+    // `iconScale`/`badgeAnchorX`/`pipsAnchorMinX` (2026-07-18, pedido do usuário — "05_SelectOpponent"
+    // com ícones maiores e mais próximos do badge/pips do que o `CharacterPanel` usa) — defaults
+    // preservam exatamente o comportamento original (todos os chamadores existentes, ex:
+    // `CharacterPanel.BuildInfoBlock`, continuam sem passar esses argumentos).
+    public static AttributePipBar Build(GameObject rowContainer, UITheme theme, string label,
+        float iconScale = 3f, float badgeAnchorX = 0.24f, float pipsAnchorMinX = 0.44f)
     {
         var lblGo = new GameObject("Lbl");
         lblGo.transform.SetParent(rowContainer.transform, false);
         var lrt = lblGo.AddComponent<RectTransform>();
-        lrt.anchorMin = new Vector2(0f, 0f); lrt.anchorMax = new Vector2(0.20f, 1f);
+        lrt.anchorMin = new Vector2(0f, 0.1f); lrt.anchorMax = new Vector2(0.20f, 0.9f);
         lrt.offsetMin = new Vector2(14f, 0f); lrt.offsetMax = Vector2.zero;
-        var lbl = lblGo.AddComponent<TextMeshProUGUI>();
-        lbl.text = label; lbl.fontSize = 18; lbl.fontStyle = FontStyles.Bold;
-        lbl.color = theme.currencyGold;
-        lbl.alignment = TextAlignmentOptions.MidlineLeft;
+        var labelIcon = IconForLabel(label);
+        if (labelIcon != null)
+        {
+            var lblImg = lblGo.AddComponent<Image>();
+            lblImg.sprite = labelIcon;
+            lblImg.preserveAspect = true;
+            // Scale 3x (2026-07-16, pedido do usuário) — o ícone original é bem menor que a
+            // área reservada pro antigo texto "STR"/"AGI"/"SPD"; escala em cima do RectTransform
+            // (em vez de aumentar o próprio rect/sizeDelta) porque `preserveAspect` já centraliza
+            // o sprite dentro do rect base — isso só faz o resultado final crescer a partir do
+            // centro, sem precisar recalcular anchors/offsets.
+            lrt.localScale = new Vector3(iconScale, iconScale, 1f);
+        }
+        else
+        {
+            // Fallback de texto — nenhum dos 2 chamadores hoje (CharacterPanel/
+            // SelectOpponentController) passa um label fora de STR/AGI/SPD, mas mantém o
+            // comportamento antigo em vez de deixar a área vazia se isso mudar no futuro.
+            var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+            lbl.text = label; lbl.fontSize = 18; lbl.fontStyle = FontStyles.Bold;
+            lbl.color = theme.currencyGold;
+            lbl.alignment = TextAlignmentOptions.MidlineLeft;
+        }
 
         // Borda de prestígio (2026-07-07) — anel metálico/dourado pulsante atrás do badge,
         // visível só quando prestigeLevel >= 1 (valor > 400). Criada ANTES do badge (sibling
@@ -67,7 +114,7 @@ public class AttributePipBar
         var prestigeBorderGo = new GameObject("PrestigeBorder");
         prestigeBorderGo.transform.SetParent(rowContainer.transform, false);
         var pbRt = prestigeBorderGo.AddComponent<RectTransform>();
-        pbRt.anchorMin = new Vector2(0.24f, 0.5f); pbRt.anchorMax = new Vector2(0.24f, 0.5f);
+        pbRt.anchorMin = new Vector2(badgeAnchorX, 0.5f); pbRt.anchorMax = new Vector2(badgeAnchorX, 0.5f);
         pbRt.pivot = new Vector2(0.5f, 0.5f);
         pbRt.anchoredPosition = new Vector2(18f, 0f);
         pbRt.sizeDelta = new Vector2(44f, 44f);
@@ -82,7 +129,7 @@ public class AttributePipBar
         var badgeGo = new GameObject("Badge");
         badgeGo.transform.SetParent(rowContainer.transform, false);
         var brt = badgeGo.AddComponent<RectTransform>();
-        brt.anchorMin = new Vector2(0.24f, 0.5f); brt.anchorMax = new Vector2(0.24f, 0.5f);
+        brt.anchorMin = new Vector2(badgeAnchorX, 0.5f); brt.anchorMax = new Vector2(badgeAnchorX, 0.5f);
         brt.pivot = new Vector2(0f, 0.5f);
         brt.sizeDelta = new Vector2(36f, 36f);
         var badgeImg = badgeGo.AddComponent<Image>();
@@ -94,7 +141,7 @@ public class AttributePipBar
         var prestigeTextGo = new GameObject("PrestigeText");
         prestigeTextGo.transform.SetParent(rowContainer.transform, false);
         var ptRt = prestigeTextGo.AddComponent<RectTransform>();
-        ptRt.anchorMin = new Vector2(0.24f, 0.5f); ptRt.anchorMax = new Vector2(0.24f, 0.5f);
+        ptRt.anchorMin = new Vector2(badgeAnchorX, 0.5f); ptRt.anchorMax = new Vector2(badgeAnchorX, 0.5f);
         ptRt.pivot = new Vector2(0f, 0f);
         ptRt.anchoredPosition = new Vector2(28f, 14f);
         ptRt.sizeDelta = new Vector2(32f, 16f);
@@ -107,7 +154,7 @@ public class AttributePipBar
         var pipsGo = new GameObject("Pips");
         pipsGo.transform.SetParent(rowContainer.transform, false);
         var prt = pipsGo.AddComponent<RectTransform>();
-        prt.anchorMin = new Vector2(0.44f, 0.18f); prt.anchorMax = new Vector2(1f, 0.82f);
+        prt.anchorMin = new Vector2(pipsAnchorMinX, 0.18f); prt.anchorMax = new Vector2(1f, 0.82f);
         prt.offsetMin = Vector2.zero; prt.offsetMax = new Vector2(-8f, 0f);
         var hlg = pipsGo.AddComponent<HorizontalLayoutGroup>();
         hlg.spacing = 4f;
@@ -127,6 +174,56 @@ public class AttributePipBar
         }
 
         return new AttributePipBar(badgeImg, badgeText, pips, prestigeBorderGo, prestigeText);
+    }
+
+    // Ícone de HP (coração) — mesmo motivo de Resources.Load acima. PNG original do usuário em
+    // Assets/Resources/UI/Attributes/HP.png.
+    public static readonly Sprite HpIcon = Resources.Load<Sprite>("UI/Attributes/HP");
+
+    // Ícone com um número branco centralizado por cima dele (2026-07-16, pedido do usuário —
+    // "removemos [o texto] HP, deixamos um coração com uma string branca centralizada nele") —
+    // usado nos 3 lugares que mostravam "N HP" como texto puro (CharacterPanel, reaproveitado
+    // por 01_MainMenu/02_SelectCharacter, e SelectOpponentController). `parent` já vem
+    // posicionado/dimensionado pelo chamador (mesmo padrão do resto da classe); devolve o
+    // TMP_Text do número pra quem chama poder atualizar o valor depois (ex: RefreshAll), já que
+    // o valor muda em runtime mas o ícone não.
+    // `iconScale` (2026-07-18, pedido do usuário — coração menor em `05_SelectOpponent`, 1.8x em
+    // vez do 2.7x padrão) — default preserva o comportamento original de todo chamador existente.
+    public static TMP_Text BuildIconWithValue(GameObject parent, Sprite icon, float fontSize, float iconScale = 2.7f)
+    {
+        var iconGo = new GameObject("Icon");
+        iconGo.transform.SetParent(parent.transform, false);
+        var iconRt = iconGo.AddComponent<RectTransform>();
+        iconRt.anchorMin = Vector2.zero; iconRt.anchorMax = Vector2.one;
+        iconRt.offsetMin = iconRt.offsetMax = Vector2.zero;
+        var img = iconGo.AddComponent<Image>();
+        img.sprite = icon;
+        img.preserveAspect = true;
+        // Scale 2.7x por padrão (2026-07-16, pedido do usuário — mesmo motivo do 3x em Build acima,
+        // mas um pouco menor pro coração de HP não dominar visualmente sobre STR/AGI/SPD).
+        iconRt.localScale = new Vector3(iconScale, iconScale, 1f);
+
+        var valGo = new GameObject("Value");
+        valGo.transform.SetParent(parent.transform, false);
+        var vrt = valGo.AddComponent<RectTransform>();
+        vrt.anchorMin = Vector2.zero; vrt.anchorMax = Vector2.one;
+        vrt.offsetMin = vrt.offsetMax = Vector2.zero;
+        var txt = valGo.AddComponent<TextMeshProUGUI>();
+        // Bug real (2026-07-17, reportado pelo usuário): HP >= 100 (3 dígitos) quebrava em 2
+        // linhas dentro desta caixa pequena (34px em CharacterPanel, 22px em
+        // SelectOpponentController) — TMP tem `enableWordWrapping = true` por padrão, e "100"
+        // não cabia numa linha só no fontSize configurado. `enableWordWrapping = false` corta o
+        // problema pela raiz (nunca quebra linha); `enableAutoSizing` com piso em 60% do
+        // `fontSize` pedido garante que 3 dígitos ainda encolhem pra caber em vez de vazar pra
+        // fora da caixa (1-2 dígitos continuam no tamanho cheio, que é o caso comum).
+        txt.enableWordWrapping = false;
+        txt.enableAutoSizing = true;
+        txt.fontSizeMin = fontSize * 0.6f;
+        txt.fontSizeMax = fontSize;
+        txt.fontStyle = FontStyles.Bold;
+        txt.color = Color.white;
+        txt.alignment = TextAlignmentOptions.Center;
+        return txt;
     }
 
     public void SetValue(int value)

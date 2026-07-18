@@ -59,6 +59,13 @@ public class SelectOpponentController : MonoBehaviour
     private const float PortraitSize = 260f;
     private const float RightPanelWidth = CardWidth - PortraitSize - CardPadding * 3f;
 
+    // Personagem escalado 1.5x (2026-07-18, pedido do usuário — deixa o retrato mais chamativo);
+    // "Level X" movido pra cima do retrato (2026-07-18, era empilhado no RightPanel, junto do
+    // resto do texto) — largura igual à do Portrait, empurrando-o pra baixo pra abrir espaço.
+    private const float PortraitScale = 1.5f;
+    private const float LevelAbovePortraitHeight = 26f;
+    private const float LevelAbovePortraitGap = 4f;
+
     // Ícones de skill/arma/pet aumentados de 36 pra 56px (2026-07-15→16: "não está legível").
     private const float IconSize = 56f;
     private const float IconRowHeight = 68f;
@@ -321,14 +328,35 @@ public class SelectOpponentController : MonoBehaviour
         pressable.pressedColor = CardBgPressed;
         pressable.onChosen = () => OnOpponentChosen(profile);
 
-        // Retrato grande na coluna ESQUERDA — fixo no canto superior esquerdo do card; todo o
-        // resto do conteúdo vive numa coluna direita própria (`RightPanel` abaixo), lado a lado.
+        // "Level X" acima do personagem (2026-07-18) — mesma largura do Portrait, ancorado no
+        // mesmo canto superior esquerdo que ele ocupava antes; o Portrait desce pra abrir espaço.
+        var levelAboveGo = new GameObject("LevelAbovePortrait");
+        levelAboveGo.transform.SetParent(card.transform, false);
+        var levelAboveRt = levelAboveGo.AddComponent<RectTransform>();
+        levelAboveRt.anchorMin = levelAboveRt.anchorMax = levelAboveRt.pivot = new Vector2(0f, 1f);
+        levelAboveRt.sizeDelta = new Vector2(PortraitSize, LevelAbovePortraitHeight);
+        levelAboveRt.anchoredPosition = new Vector2(CardPadding, -CardPadding);
+        var levelAboveTxt = levelAboveGo.AddComponent<TextMeshProUGUI>();
+        levelAboveTxt.text = $"Level {profile.level}";
+        levelAboveTxt.fontSize = 18;
+        levelAboveTxt.color = Gold;
+        levelAboveTxt.fontStyle = FontStyles.Bold;
+        levelAboveTxt.alignment = TextAlignmentOptions.Center;
+
+        // Retrato grande na coluna ESQUERDA — fixo no canto superior esquerdo do card (abaixo do
+        // "Level X" acima); todo o resto do conteúdo vive numa coluna direita própria
+        // (`RightPanel` abaixo), lado a lado. Escalado 1.5x (`PortraitScale`) a partir do próprio
+        // pivot (0,1) — cresce pra baixo/direita sem deslocar o canto superior esquerdo.
         var portraitGo = new GameObject("Portrait");
         portraitGo.transform.SetParent(card.transform, false);
         var portraitRt = portraitGo.AddComponent<RectTransform>();
         portraitRt.anchorMin = portraitRt.anchorMax = portraitRt.pivot = new Vector2(0f, 1f);
         portraitRt.sizeDelta = new Vector2(PortraitSize, PortraitSize);
-        portraitRt.anchoredPosition = new Vector2(CardPadding, -CardPadding);
+        // Posição calibrada visualmente pelo usuário no Editor (2026-07-18) — substitui o cálculo
+        // baseado em CardPadding/LevelAbovePortraitHeight de cima (o personagem, já escalado
+        // 1.5x, precisava de um ajuste fino pra ficar bem posicionado dentro do card).
+        portraitRt.anchoredPosition = new Vector2(-38f, 22f);
+        portraitRt.localScale = new Vector3(PortraitScale, PortraitScale, 1f);
         var portraitImg = portraitGo.AddComponent<Image>();
         if (profile.previewIcon != null)
         {
@@ -358,23 +386,9 @@ public class SelectOpponentController : MonoBehaviour
         nameTxt.alignment = TextAlignmentOptions.Center;
         y -= 26f;
 
-        // "Level X" sozinho, flush à esquerda (2026-07-16) — ancorado no canto superior esquerdo
-        // do RightPanel (não centralizado como MakeLabel faria) pra começar colado na borda
-        // direita do retrato.
+        // "Level X" saiu daqui (2026-07-18) — mora acima do Portrait agora (ver `levelAboveGo`
+        // acima), não mais empilhado no RightPanel.
         var eff = profile.GetEffectiveStats();
-
-        var levelGo = new GameObject("Level");
-        levelGo.transform.SetParent(rightPanelGo.transform, false);
-        var levelRt = levelGo.AddComponent<RectTransform>();
-        levelRt.anchorMin = levelRt.anchorMax = levelRt.pivot = new Vector2(0f, 1f);
-        levelRt.sizeDelta = new Vector2(150f, 22f);
-        levelRt.anchoredPosition = new Vector2(0f, y);
-        var levelTxt = levelGo.AddComponent<TextMeshProUGUI>();
-        levelTxt.text = $"Level {profile.level}";
-        levelTxt.fontSize = 15;
-        levelTxt.color = new Color(0.85f, 0.85f, 0.85f);
-        levelTxt.alignment = TextAlignmentOptions.MidlineLeft;
-        y -= 22f;
 
         // HP (coração + número branco centralizado, ver AttributePipBar.BuildIconWithValue)
         // alinhado em X com o ícone de STR logo abaixo (2026-07-16, pedido do usuário — "alinhe
@@ -394,7 +408,13 @@ public class SelectOpponentController : MonoBehaviour
         var hpRt = hpGo.AddComponent<RectTransform>();
         hpRt.anchorMin = hpRt.anchorMax = hpRt.pivot = new Vector2(0f, 1f);
         hpRt.sizeDelta = new Vector2(RightPanelWidth * 0.20f - 14f, 22f);
-        hpRt.anchoredPosition = new Vector2(14f, y);
+        // Posição/escala calibradas visualmente pelo usuário no Editor (2026-07-18) — substitui o
+        // alinhamento automático com o ícone de STR de cima (comentário do bug de 2026-07-17
+        // documenta a fórmula original, mantida só como referência histórica). Escala aplicada no
+        // próprio container `Hp` (ícone + número juntos), não só no ícone via `iconScale` —
+        // `iconScale` só cresce o coração sozinho, mantendo a caixa/número no tamanho original.
+        hpRt.anchoredPosition = new Vector2(-113f, -106f);
+        hpRt.localScale = new Vector3(2.5f, 2.5f, 1f);
         AttributePipBar.BuildIconWithValue(hpGo, AttributePipBar.HpIcon, 13f).text = eff.hp.ToString();
         y -= 34f;
 
@@ -429,7 +449,11 @@ public class SelectOpponentController : MonoBehaviour
         rt.sizeDelta = new Vector2(RightPanelWidth, AttributeRowHeight);
         rt.anchoredPosition = new Vector2(0f, y);
 
-        var pipBar = AttributePipBar.Build(rowGo, theme, label);
+        // iconScale 2.5x (era 3x padrão, depois 2x — 2026-07-18), badge/pips puxados pra mais
+        // perto do ícone (2026-07-18, pedido do usuário) — só nesta tela; `AttributePipBar.Build`
+        // mantém os defaults antigos pro `CharacterPanel`.
+        var pipBar = AttributePipBar.Build(rowGo, theme, label,
+            iconScale: 2.5f, badgeAnchorX: 0.19f, pipsAnchorMinX: 0.34f);
         pipBar.SetValue(value);
 
         return y - AttributeRowHeight - 6f;
@@ -449,7 +473,10 @@ public class SelectOpponentController : MonoBehaviour
         var rt = row.AddComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 1f);
         rt.sizeDelta = new Vector2(RightPanelWidth, IconRowHeight);
-        rt.anchoredPosition = new Vector2(0f, y);
+        // Posição calibrada visualmente pelo usuário no Editor (2026-07-18) — substitui o "y" da
+        // pilha vertical (`y` segue recebido/retornado por compatibilidade com o chamador, mas
+        // não é mais usado pro posicionamento em si).
+        rt.anchoredPosition = new Vector2(-42f, -204f);
         var hlg = row.AddComponent<HorizontalLayoutGroup>();
         hlg.spacing = 8f;
         hlg.childAlignment = TextAnchor.MiddleLeft;
