@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -30,6 +31,18 @@ public class CharacterPanel : MonoBehaviour
     private SelectedProfileHolder _holder;
     private UITheme _theme;
 
+    // Wireado via Setup (2026-07-18, botão REPLAYS) — só usado pra resolver o characterPrefab/
+    // attackSettings/etc do adversário de um replay (ReplaySnapshotConverter.ToRuntimeProfile);
+    // null = botão REPLAYS ainda funciona (lista), mas clicar num replay loga erro em vez de
+    // travar, já que não há como reconstruir os personagens sem o catálogo.
+    private CharacterDatabase _characterDatabase;
+
+    // Lista de replays aberta no popup (2026-07-18) — token evita que dois cliques rápidos no
+    // botão REPLAYS façam a resposta do primeiro Firestore.ListReplaysAsync popular a lista do
+    // segundo clique (ver LoadAndShowReplaysAsync).
+    private Transform _replayListContent;
+    private int _replayLoadToken;
+
     // Override explícito (2026-07-08) — quando não-nulo, RefreshAll mostra ESTE profile em vez
     // de `_holder.currentProfile`. 01_MainMenu nunca chama SetProfile (mostra sempre o
     // equipado, via _holder); 02_SelectCharacter chama a cada clique num card do grid, senão o
@@ -50,6 +63,38 @@ public class CharacterPanel : MonoBehaviour
     private float _anchorBottom = RootAnchorBottom;
     private float _anchorTop = RootAnchorTop;
 
+    // Gaveta mobile ancorada embaixo (2026-07-20, redesenho do HUD principal — ver CLAUDE.md
+    // "Redesenho Mobile do HUD Principal") — Root vira uma janela de largura FIXA (PanelWidth,
+    // igual de sempre) centralizada horizontalmente e ancorada no rodapé, em vez do painel
+    // vertical do lado direito. Reaproveita 100% da lógica de Compact/Expanded/Skills/Armas/
+    // Pets/Passivas já existente (só a geometria de ancoragem muda) — ver os `if (_bottomAnchored)`
+    // em BuildUI/BuildCompact/BuildExpanded. Cresce PRA CIMA (Compact fica na base do Root,
+    // Expanded's InfoBlock também na base, com o ScrollArea de Skills/Armas/Pets ACIMA dele —
+    // o oposto do modo painel-lateral, onde tudo fica ancorado no TOPO do Root).
+    private bool _bottomAnchored;
+    private const float BottomDrawerMaxHeight = 820f; // CompactHeight + folga generosa pro ScrollArea
+    // Largura real da gaveta (2026-07-20, "ajustes finos" pedidos pelo usuário) — igual à largura
+    // final que o "Compact" já tinha (450 de PanelWidth + 206.857 à esquerda + 208.846 à direita,
+    // ver BuildCompact) — Root passou a usar ESSA largura diretamente (em vez de PanelWidth) pra
+    // Expanded (que sempre preenche 100% do Root) parar de ficar mais ESTREITO que o Compact.
+    private const float BottomDrawerWidth = 865.7f;
+    // Distância entre a base do Root (= base do botão Jogar, ver BuildUI) e a base VISÍVEL do
+    // painel (o fundo arredondado do Compact/Expanded) — 2026-07-20, bug real corrigido: o
+    // Expanded usava offsetMin.y=0 (colado na base do Root), enquanto o Compact sempre usou 28px
+    // (ver BuildCompact) — ao expandir, o fundo visível "descia" 28px porque os dois estados não
+    // compartilhavam a mesma base. Root em si NUNCA muda de tamanho (fixo em BottomDrawerMaxHeight,
+    // ancorado na base) — só o CONTEÚDO visível (Compact vs Expanded) preenchia frações diferentes
+    // dele; agora os dois começam exatamente na mesma linha, só o TOPO do Expanded sobe (até o
+    // topo do Root, que já é alto o bastante pra sobrepor a fileira de energia se precisar).
+    private const float BottomDrawerFloorGap = 28f;
+    // Quanto o TOPO do Expanded ultrapassa o topo do Root (2026-07-20, pedido do usuário — ponto
+    // 2 do requisito: "no estado expandido, o painel deve poder crescer até sobrepor a fileira de
+    // energia no topo da tela"). Valor lido pelo usuário direto no Editor (campo "Top" da
+    // Inspector com o Expanded stretched em Y = -348.4799, ou seja offsetMax.y = +348.4799) — só
+    // o Expanded cresce além do Root; o Compact continua do tamanho de sempre, e a base dos dois
+    // permanece a mesma (BottomDrawerFloorGap).
+    private const float BottomDrawerExpandedTopOverflow = 348.4799f;
+
     // Level+XP dentro do painel (2026-07-08, opt-in via Setup) — usado quando o painel é
     // reaproveitado fora do 01_MainMenu (ali o XP já fica acima da cabeça do personagem via
     // MainMenuCharacterPreview.BuildLevelXpHud, não duplicado aqui).
@@ -65,6 +110,8 @@ public class CharacterPanel : MonoBehaviour
     // exatamente o mesmo layout relativo, por isso os dois conjuntos de referências.
     private class InfoBlockRefs
     {
+        // hp: ícone+número sobreposto (BuildIconWithValue) — usado nos DOIS modos (2026-07-20,
+        // 4ª rodada: HP na gaveta mobile voltou a este estilo, sem pips; ver BuildInfoBlock).
         public TMP_Text name, winRate, hp;
         public AttributePipBar str, agi, spd;
         public TMP_Text level, xpValue; // só preenchidos quando _showLevelXp
@@ -136,13 +183,16 @@ public class CharacterPanel : MonoBehaviour
     // encolher o Root e casar com a altura da moldura dourada ao redor dele. `null` (default,
     // usado pelo 01_MainMenu) preserva a janela vertical calibrada de sempre.
     public void Setup(SelectedProfileHolder holder, UITheme theme, bool showLevelXp = false,
-        bool startHidden = false, float? anchorBottomOverride = null, float? anchorTopOverride = null)
+        bool startHidden = false, float? anchorBottomOverride = null, float? anchorTopOverride = null,
+        CharacterDatabase characterDatabase = null, bool bottomAnchored = false)
     {
         _holder = holder;
         _theme = theme;
         _showLevelXp = showLevelXp;
         _anchorBottom = anchorBottomOverride ?? RootAnchorBottom;
         _anchorTop = anchorTopOverride ?? RootAnchorTop;
+        _characterDatabase = characterDatabase;
+        _bottomAnchored = bottomAnchored;
         BuildUI();
         RefreshAll();
 
@@ -290,13 +340,46 @@ public class CharacterPanel : MonoBehaviour
         scaler.referenceResolution = new Vector2(1920, 1080);
         _canvasGo.AddComponent<GraphicRaycaster>();
 
+        // SafeArea (2026-07-20, ver Assets/Scripts/UI/SafeArea.cs) — só no modo gaveta-inferior:
+        // o rodapé é exatamente onde a barra de gestos/home indicator de um celular real
+        // atrapalharia. O painel lateral (modo de sempre) não precisa disso por enquanto.
+        Transform rootParent = _canvasGo.transform;
+        if (_bottomAnchored)
+        {
+            var safeAreaGo = new GameObject("SafeArea");
+            safeAreaGo.transform.SetParent(_canvasGo.transform, false);
+            var safeRt = safeAreaGo.AddComponent<RectTransform>();
+            safeRt.anchorMin = Vector2.zero; safeRt.anchorMax = Vector2.one;
+            safeRt.offsetMin = safeRt.offsetMax = Vector2.zero;
+            safeAreaGo.AddComponent<SafeArea>();
+            rootParent = safeAreaGo.transform;
+        }
+
         var rootGo = new GameObject("Root");
-        rootGo.transform.SetParent(_canvasGo.transform, false);
+        rootGo.transform.SetParent(rootParent, false);
         _rootRt = rootGo.AddComponent<RectTransform>();
-        _rootRt.anchorMax = new Vector2(1f, _anchorTop);
-        _rootRt.anchorMin = new Vector2(1f, _anchorBottom);
-        _rootRt.offsetMin = new Vector2(-(PanelWidth + EdgeMargin), 0f);
-        _rootRt.offsetMax = new Vector2(-EdgeMargin, 0f);
+        if (_bottomAnchored)
+        {
+            // Largura fixa BottomDrawerWidth, centralizada horizontalmente, ancorada no rodapé —
+            // pedido do usuário: não ocupar a tela inteira (encaixa no vão entre a coluna
+            // Chibers/Arsenal/Replays e o botão Jogar, que ficam nas bordas esquerda/direita).
+            // Usa BottomDrawerWidth (não PanelWidth) pra bater exatamente com a largura real do
+            // "Compact" (2026-07-20) — Expanded preenche 100% do Root, então precisa da MESMA
+            // largura, senão fica mais estreito que o Compact ao expandir (bug reportado pelo
+            // usuário).
+            _rootRt.anchorMin = new Vector2(0.5f, 0f);
+            _rootRt.anchorMax = new Vector2(0.5f, 0f);
+            _rootRt.pivot = new Vector2(0.5f, 0f);
+            _rootRt.sizeDelta = new Vector2(BottomDrawerWidth, BottomDrawerMaxHeight);
+            _rootRt.anchoredPosition = Vector2.zero;
+        }
+        else
+        {
+            _rootRt.anchorMax = new Vector2(1f, _anchorTop);
+            _rootRt.anchorMin = new Vector2(1f, _anchorBottom);
+            _rootRt.offsetMin = new Vector2(-(PanelWidth + EdgeMargin), 0f);
+            _rootRt.offsetMax = new Vector2(-EdgeMargin, 0f);
+        }
 
         BuildCompact(rootGo);
         BuildExpanded(rootGo);
@@ -318,9 +401,28 @@ public class CharacterPanel : MonoBehaviour
         _compactGo = new GameObject("Compact");
         _compactGo.transform.SetParent(root.transform, false);
         var rt = _compactGo.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 1f); rt.anchorMax = new Vector2(1f, 1f);
-        rt.pivot     = new Vector2(0.5f, 1f);
-        rt.offsetMin = new Vector2(0f, -(CompactHeight + LevelXpExtra)); rt.offsetMax = Vector2.zero;
+        if (_bottomAnchored)
+        {
+            // Colado na BASE do Root (não no topo) — é daqui que a gaveta "cresce pra cima".
+            // X preenche 100% do Root (2026-07-20, corrigido — Root já usa BottomDrawerWidth,
+            // a mesma largura real que esta faixa tinha antes por offsets manuais; simplificado
+            // pra só "encostar nas bordas" em vez de extrapolar o Root, senão Expanded — que
+            // sempre preenche 100% do Root — ficava mais ESTREITO que o Compact ao expandir,
+            // bug reportado pelo usuário). Y mantém o offset exato pedido (28px do chão, 230px
+            // de altura) — só a largura mudou. BottomDrawerFloorGap (não mais o literal 28)
+            // compartilhado com BuildExpanded — os dois precisam da MESMA base (ver comentário
+            // da constante).
+            rt.anchorMin = new Vector2(0f, 0f); rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot     = new Vector2(0.5f, 0f);
+            rt.offsetMin = new Vector2(0f, BottomDrawerFloorGap);
+            rt.offsetMax = new Vector2(0f, BottomDrawerFloorGap + CompactHeight);
+        }
+        else
+        {
+            rt.anchorMin = new Vector2(0f, 1f); rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot     = new Vector2(0.5f, 1f);
+            rt.offsetMin = new Vector2(0f, -(CompactHeight + LevelXpExtra)); rt.offsetMax = Vector2.zero;
+        }
         _compactCg = _compactGo.AddComponent<CanvasGroup>();
 
         var bg = _compactGo.AddComponent<Image>();
@@ -338,9 +440,18 @@ public class CharacterPanel : MonoBehaviour
         var infoInnerGo = new GameObject("InfoInner");
         infoInnerGo.transform.SetParent(_compactGo.transform, false);
         var iirt = infoInnerGo.AddComponent<RectTransform>();
-        iirt.anchorMin = new Vector2(0f, 1f); iirt.anchorMax = new Vector2(1f, 1f);
-        iirt.pivot     = new Vector2(0.5f, 1f);
-        iirt.offsetMin = new Vector2(0f, -CompactHeight); iirt.offsetMax = Vector2.zero;
+        if (_bottomAnchored)
+        {
+            iirt.anchorMin = new Vector2(0f, 0f); iirt.anchorMax = new Vector2(1f, 0f);
+            iirt.pivot     = new Vector2(0.5f, 0f);
+            iirt.offsetMin = Vector2.zero; iirt.offsetMax = new Vector2(0f, CompactHeight);
+        }
+        else
+        {
+            iirt.anchorMin = new Vector2(0f, 1f); iirt.anchorMax = new Vector2(1f, 1f);
+            iirt.pivot     = new Vector2(0.5f, 1f);
+            iirt.offsetMin = new Vector2(0f, -CompactHeight); iirt.offsetMax = Vector2.zero;
+        }
         _compactInfo = BuildInfoBlock(infoInnerGo);
 
         if (_showLevelXp) BuildLevelXpBox(_compactGo, CompactHeight, _compactInfo);
@@ -356,7 +467,22 @@ public class CharacterPanel : MonoBehaviour
         _expandedGo.transform.SetParent(root.transform, false);
         var rt = _expandedGo.AddComponent<RectTransform>();
         rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        if (_bottomAnchored)
+        {
+            // **Bug real corrigido (2026-07-20)**: antes usava offsetMin.y=0 (colado na base do
+            // Root), enquanto o Compact sempre usou BottomDrawerFloorGap (28px) — a base VISÍVEL
+            // do painel "descia" 28px ao expandir porque os dois estados não compartilhavam a
+            // mesma linha de base. Root em si nunca muda de tamanho (ver BuildUI/BottomDrawerMaxHeight,
+            // ancorado fixo na base) — a base do Expanded fica igual à do Compact, e o TOPO agora
+            // ultrapassa o topo do Root em BottomDrawerExpandedTopOverflow (pedido do usuário —
+            // ver comentário da constante), sobrepondo a fileira de energia quando expandido.
+            rt.offsetMin = new Vector2(0f, BottomDrawerFloorGap);
+            rt.offsetMax = new Vector2(0f, BottomDrawerExpandedTopOverflow);
+        }
+        else
+        {
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+        }
         _expandedCg = _expandedGo.AddComponent<CanvasGroup>();
 
         var bg = _expandedGo.AddComponent<Image>();
@@ -370,31 +496,62 @@ public class CharacterPanel : MonoBehaviour
         var infoGo = new GameObject("InfoBlock");
         infoGo.transform.SetParent(_expandedGo.transform, false);
         var irt = infoGo.AddComponent<RectTransform>();
-        irt.anchorMin = new Vector2(0f, 1f); irt.anchorMax = new Vector2(1f, 1f);
-        irt.pivot     = new Vector2(0.5f, 1f);
-        irt.offsetMin = new Vector2(0f, -CompactHeight); irt.offsetMax = Vector2.zero;
+        if (_bottomAnchored)
+        {
+            // Na base do Expanded (= base do Root) — mesmo lugar de sempre onde o Compact fica,
+            // já que os dois representam o "mesmo" bloco de info, só um por cima do outro.
+            irt.anchorMin = new Vector2(0f, 0f); irt.anchorMax = new Vector2(1f, 0f);
+            irt.pivot     = new Vector2(0.5f, 0f);
+            irt.offsetMin = Vector2.zero; irt.offsetMax = new Vector2(0f, CompactHeight);
+        }
+        else
+        {
+            irt.anchorMin = new Vector2(0f, 1f); irt.anchorMax = new Vector2(1f, 1f);
+            irt.pivot     = new Vector2(0.5f, 1f);
+            irt.offsetMin = new Vector2(0f, -CompactHeight); irt.offsetMax = Vector2.zero;
+        }
         _expandedInfo = BuildInfoBlock(infoGo);
 
         if (_showLevelXp) BuildLevelXpBox(_expandedGo, CompactHeight, _expandedInfo);
 
-        // Divider/ScrollArea deslocados pra baixo pelo espaço extra do LevelXp (0 quando
-        // showLevelXp=false — comportamento idêntico ao de sempre no 01_MainMenu).
+        // Divider/ScrollArea deslocados pelo espaço extra do LevelXp (0 quando showLevelXp=false
+        // — comportamento idêntico ao de sempre no 01_MainMenu/02_SelectCharacter).
         float belowInfo = CompactHeight + LevelXpExtra;
 
         var lineGo = new GameObject("Divider");
         lineGo.transform.SetParent(_expandedGo.transform, false);
         var lrt = lineGo.AddComponent<RectTransform>();
-        lrt.anchorMin = new Vector2(0f, 1f); lrt.anchorMax = new Vector2(1f, 1f);
-        lrt.pivot     = new Vector2(0.5f, 1f);
-        lrt.offsetMin = new Vector2(20f, -(belowInfo + 3f));
-        lrt.offsetMax = new Vector2(-20f, -belowInfo);
+        if (_bottomAnchored)
+        {
+            // Logo ACIMA do InfoBlock (que fica na base) — no modo painel-lateral o Divider fica
+            // abaixo do InfoBlock (que fica no topo); aqui é o espelho vertical disso.
+            lrt.anchorMin = new Vector2(0f, 0f); lrt.anchorMax = new Vector2(1f, 0f);
+            lrt.pivot     = new Vector2(0.5f, 0f);
+            lrt.offsetMin = new Vector2(20f, belowInfo); lrt.offsetMax = new Vector2(-20f, belowInfo + 3f);
+        }
+        else
+        {
+            lrt.anchorMin = new Vector2(0f, 1f); lrt.anchorMax = new Vector2(1f, 1f);
+            lrt.pivot     = new Vector2(0.5f, 1f);
+            lrt.offsetMin = new Vector2(20f, -(belowInfo + 3f));
+            lrt.offsetMax = new Vector2(-20f, -belowInfo);
+        }
         lineGo.AddComponent<Image>().color = _theme.currencyGold;
 
         var scrollAreaGo = new GameObject("ScrollArea");
         scrollAreaGo.transform.SetParent(_expandedGo.transform, false);
         var srt = scrollAreaGo.AddComponent<RectTransform>();
         srt.anchorMin = Vector2.zero; srt.anchorMax = Vector2.one;
-        srt.offsetMin = Vector2.zero; srt.offsetMax = new Vector2(0f, -(belowInfo + 6f));
+        if (_bottomAnchored)
+        {
+            // Preenche de ABAIXO do topo do Expanded até logo acima do InfoBlock (que fica na
+            // base) — Skills/Armas/Pets ficam ACIMA do nome/HP/STR/AGI/SPD, crescendo pra cima.
+            srt.offsetMin = new Vector2(0f, belowInfo + 6f); srt.offsetMax = Vector2.zero;
+        }
+        else
+        {
+            srt.offsetMin = Vector2.zero; srt.offsetMax = new Vector2(0f, -(belowInfo + 6f));
+        }
         BuildSkillsAndWeapons(scrollAreaGo);
     }
 
@@ -460,6 +617,56 @@ public class CharacterPanel : MonoBehaviour
     {
         var refs = new InfoBlockRefs();
 
+        if (_bottomAnchored)
+        {
+            // Gaveta mobile (2026-07-20, "ajustes finos" pedidos pelo usuário) — 4ª rodada: HP
+            // voltou a NÃO usar pips (usuário pediu de volta o estilo ícone+número sobreposto,
+            // BuildIconWithValue — mesmo componente do modo painel-lateral) — só 3 fileiras de
+            // pips agora (STR/AGI/SPD, "os atributos" de verdade), dividindo o container INTEIRO
+            // (0-1, sem faixa reservada pro header removido). HP é um quadrado pequeno
+            // posicionado à ESQUERDA do ícone de AGI (pedido explícito), na MESMA faixa vertical
+            // da fileira de AGI.
+            // 2026-07-20 (2ª rodada): usuário reportou as 3 fileiras com alturas/larguras
+            // aparentemente diferentes. Causa real: só a fileira de AGI tinha xMin empurrado pra
+            // 0.16 (pra abrir espaço pro quadrado do HP), enquanto STR/SPD ficavam no xMin padrão
+            // (0.05) — larguras diferentes, então os ícones/pips internos (que são frações da
+            // largura da própria fileira) renderizavam em tamanhos diferentes entre si. Fix:
+            // TODAS as 3 fileiras agora usam o mesmo xMin (attrXMin), ficando geometricamente
+            // idênticas; o HP continua só na faixa vertical do AGI, ocupando a margem que sobra
+            // à esquerda (0.01-0.14) sem sobrepor nenhuma das 3.
+            const float attrIconScale = 2.5f;
+            const float attrBadgeFontSize = 35f;
+            // "diminua os badge em width 61.425 height 64.675" (pedido do usuário) — valores
+            // exatos, não mais derivados de attrBadgeFontSize (que geraria um badge quadrado).
+            const float attrBadgeWidth = 61.425f;
+            const float attrBadgeHeight = 64.675f;
+            const float attrXMin = 0.16f;
+
+            refs.str = BuildPipRow(container, 0.68f, 0.96f, "STR", iconScale: attrIconScale,
+                badgeFontSize: attrBadgeFontSize, badgeWidthOverride: attrBadgeWidth, badgeHeightOverride: attrBadgeHeight,
+                xMin: attrXMin);
+            refs.agi = BuildPipRow(container, 0.36f, 0.64f, "AGI", iconScale: attrIconScale,
+                badgeFontSize: attrBadgeFontSize, badgeWidthOverride: attrBadgeWidth, badgeHeightOverride: attrBadgeHeight,
+                xMin: attrXMin);
+            refs.spd = BuildPipRow(container, 0.04f, 0.32f, "SPD", iconScale: attrIconScale,
+                badgeFontSize: attrBadgeFontSize, badgeWidthOverride: attrBadgeWidth, badgeHeightOverride: attrBadgeHeight,
+                xMin: attrXMin);
+
+            // Nomes prefixados com "mobile" (2026-07-20) — C# não permite reusar `hpGo`/`hprt`
+            // aqui: mesmo dentro deste `if`, um bloco ANINHADO não pode declarar um nome já usado
+            // em QUALQUER lugar do bloco que o envolve (o método inteiro), mesmo que a outra
+            // declaração (do modo painel-lateral, mais abaixo) venha depois textualmente — regra
+            // de escopo do C#, não bug (CS0136).
+            var mobileHpGo = new GameObject("Hp");
+            mobileHpGo.transform.SetParent(container.transform, false);
+            var mobileHpRt = mobileHpGo.AddComponent<RectTransform>();
+            mobileHpRt.anchorMin = new Vector2(0.01f, 0.36f); mobileHpRt.anchorMax = new Vector2(0.14f, 0.64f);
+            mobileHpRt.offsetMin = mobileHpRt.offsetMax = Vector2.zero;
+            refs.hp = AttributePipBar.BuildIconWithValue(mobileHpGo, AttributePipBar.HpIcon, 32f, iconScale: 3.2f);
+
+            return refs;
+        }
+
         var headerGo = new GameObject("Header");
         headerGo.transform.SetParent(container.transform, false);
         var hrt = headerGo.AddComponent<RectTransform>();
@@ -519,24 +726,30 @@ public class CharacterPanel : MonoBehaviour
         return refs;
     }
 
-    private AttributePipBar BuildPipRow(GameObject container, float yMin, float yMax, string label)
+    private AttributePipBar BuildPipRow(GameObject container, float yMin, float yMax, string label,
+        float iconScale = 2.5f, float badgeFontSize = 16f, float xMin = 0.05f,
+        float? badgeWidthOverride = null, float? badgeHeightOverride = null)
     {
         var rowGo = new GameObject(label + "Row");
         rowGo.transform.SetParent(container.transform, false);
         var rt = rowGo.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.05f, yMin); rt.anchorMax = new Vector2(0.95f, yMax);
+        rt.anchorMin = new Vector2(xMin, yMin); rt.anchorMax = new Vector2(0.95f, yMax);
         rt.offsetMin = rt.offsetMax = Vector2.zero;
         // iconScale 2.5x (era 3x padrão) + badge/pips puxados pra mais perto do ícone (2026-07-18,
         // pedido do usuário — mesmo ajuste já feito em `05_SelectOpponent`/`MakeAttributeRow`,
         // aplicado aqui pra ficar consistente em toda tela que usa este `CharacterPanel`
         // compartilhado: `01_MainMenu` Compact/Expanded e o painel deslizante de
-        // `02_SelectCharacter`). O alinhamento em X do ícone de HP com este ícone (ver comentário
-        // longo em `BuildInfoBlock` acima do `hpGo`) não depende de `badgeAnchorX`/
-        // `pipsAnchorMinX` — só replica a caixa do próprio ícone (`lblGo`), que não mudou de
-        // posição/tamanho aqui, então o HP continua "encaixado" à esquerda do ícone sem precisar
-        // de nenhum ajuste próprio.
+        // `02_SelectCharacter`). `iconScale`/`badgeFontSize`/`xMin` parametrizados (2026-07-20) —
+        // a gaveta mobile passa valores próprios por linha, sem afetar
+        // 02_SelectCharacter/05_SelectOpponent. `badgeWidth`/`badgeHeight` crescem com
+        // `badgeFontSize` por padrão (proporção fixa), mas `badgeWidthOverride`/
+        // `badgeHeightOverride` (2026-07-20, pedido explícito do usuário: "width 61.425 height
+        // 64.675") tomam precedência quando informados, pra valores não-proporcionais exatos.
+        float badgeWidth = badgeWidthOverride ?? 36f * (badgeFontSize / 16f);
+        float badgeHeight = badgeHeightOverride ?? 36f * (badgeFontSize / 16f);
         return AttributePipBar.Build(rowGo, _theme, label,
-            iconScale: 2.5f, badgeAnchorX: 0.19f, pipsAnchorMinX: 0.34f);
+            iconScale: iconScale, badgeAnchorX: 0.19f, pipsAnchorMinX: 0.34f,
+            badgeWidth: badgeWidth, badgeHeight: badgeHeight, badgeFontSize: badgeFontSize);
     }
 
     // ── Skills / Armas (Expanded) ───────────────────────────────────────────
@@ -568,6 +781,371 @@ public class CharacterPanel : MonoBehaviour
         BuildDetailsToggle(content);
     }
 
+    // Botão "REPLAYS" (2026-07-18, movido pro menu principal — MainMenuController.
+    // BuildReplaysMenuButton, na mesma coluna de atalhos de "Chibers"/"Arsenal" — pedido do
+    // usuário) chama isto de fora do painel. Abre o MESMO popup de detalhe de skill/arma
+    // (_popupOverlayGo/_popupContentRoot/_popupPanelRt), só que com uma lista rolável dos últimos
+    // replays salvos em vez de ícone+nome+descrição — funciona independente do painel estar
+    // Compact ou Expanded (o popup é sibling de _canvasGo, não filho do Expanded).
+    public void ShowReplays() => OnReplaysButtonClicked();
+
+    // Aumentado (2026-07-18, pedido do usuário — "pegar mais da tela do main menu") de 480×520
+    // pra ocupar bem mais da tela (canvas 1920×1080): dá espaço de sobra pros cartões maiores
+    // abaixo (avatar/botão de play/fontes também aumentados), em vez de ficar apertado.
+    private const float ReplayPopupWidth = 820f;
+    private const float ReplayPopupHeight = 760f;
+
+    private void OnReplaysButtonClicked()
+    {
+        int token = ++_replayLoadToken;
+        ShowReplayListLoading();
+        _ = LoadAndShowReplaysAsync(token);
+    }
+
+    // Monta o esqueleto do popup (título + área rolável com "Carregando...") — reaproveita
+    // _popupOverlayGo/_popupContentRoot/_popupPanelRt (mesmo popup de ShowSkillDetail/
+    // ShowWeaponDetail), só com um layout diferente (lista, não ícone+texto).
+    private void ShowReplayListLoading()
+    {
+        ClearPopupContent();
+        _popupOverlayGo.SetActive(true);
+        _popupPanelRt.anchoredPosition = Vector2.zero;
+        _popupPanelRt.sizeDelta = new Vector2(ReplayPopupWidth, ReplayPopupHeight);
+
+        var titleGo = new GameObject("Title");
+        titleGo.transform.SetParent(_popupContentRoot, false);
+        var trt = titleGo.AddComponent<RectTransform>();
+        trt.anchorMin = new Vector2(0f, 1f); trt.anchorMax = new Vector2(1f, 1f);
+        trt.pivot = new Vector2(0.5f, 1f);
+        trt.anchoredPosition = Vector2.zero;
+        trt.sizeDelta = new Vector2(0f, 40f);
+        var titleTxt = titleGo.AddComponent<TextMeshProUGUI>();
+        titleTxt.text = "REPLAYS";
+        titleTxt.fontSize = 32; titleTxt.fontStyle = FontStyles.Bold;
+        titleTxt.color = _theme.currencyGold;
+        titleTxt.alignment = TextAlignmentOptions.Center;
+
+        // Subtítulo (2026-07-19, pedido do usuário) — nome do personagem DONO deste histórico,
+        // já que este mesmo popup é reaberto pra qualquer personagem selecionado no momento
+        // (_overrideProfile em 02_SelectCharacter, ou _holder.currentProfile em 01_MainMenu —
+        // mesma resolução de profile que LoadAndShowReplaysAsync usa pra montar a query).
+        var ownerProfile = _overrideProfile != null ? _overrideProfile : _holder?.currentProfile;
+        var subtitleGo = new GameObject("Subtitle");
+        subtitleGo.transform.SetParent(_popupContentRoot, false);
+        var subRt = subtitleGo.AddComponent<RectTransform>();
+        subRt.anchorMin = new Vector2(0f, 1f); subRt.anchorMax = new Vector2(1f, 1f);
+        subRt.pivot = new Vector2(0.5f, 1f);
+        subRt.anchoredPosition = new Vector2(0f, -42f);
+        subRt.sizeDelta = new Vector2(0f, 26f);
+        var subTxt = subtitleGo.AddComponent<TextMeshProUGUI>();
+        subTxt.text = ownerProfile != null ? ownerProfile.profileName : "";
+        subTxt.fontSize = 18;
+        subTxt.color = new Color(0.75f, 0.75f, 0.75f, 0.85f);
+        subTxt.alignment = TextAlignmentOptions.Center;
+
+        var areaGo = new GameObject("ReplayListArea");
+        areaGo.transform.SetParent(_popupContentRoot, false);
+        var art = areaGo.AddComponent<RectTransform>();
+        art.anchorMin = Vector2.zero; art.anchorMax = Vector2.one;
+        art.offsetMin = Vector2.zero;
+        art.offsetMax = new Vector2(0f, -76f); // espaço reservado pro título + subtítulo acima
+
+        MakeScroll(areaGo.transform, out Transform listContent);
+        var vlg = listContent.gameObject.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = 8f;
+        vlg.childControlWidth = true; vlg.childControlHeight = true;
+        vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
+        var csf = listContent.gameObject.AddComponent<ContentSizeFitter>();
+        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        _replayListContent = listContent;
+        MakeMsg(_replayListContent, "Carregando...");
+    }
+
+    private async Task LoadAndShowReplaysAsync(int token)
+    {
+        var profile = _overrideProfile != null ? _overrideProfile : _holder?.currentProfile;
+        if (profile == null) { RenderReplayMessage(token, "Nenhum personagem selecionado."); return; }
+        if (!AuthService.IsSignedIn) { RenderReplayMessage(token, "Faça login pra ver seus replays."); return; }
+
+        var replays = await FirestoreService.ListReplaysAsync(AuthService.CurrentUser.UserId, profile.OpponentId());
+
+        // O popup pode ter sido fechado/reaberto (outro clique em REPLAYS, ou um ícone de skill/
+        // arma) enquanto o await rodava — token muda a cada abertura e ClearPopupContent destrói
+        // o _replayListContent antigo (comparação `== null` do Unity detecta objeto destruído).
+        if (token != _replayLoadToken || _replayListContent == null) return;
+
+        if (replays == null || replays.Count == 0)
+        {
+            RenderReplayMessage(token, "Nenhum replay salvo ainda.");
+            return;
+        }
+
+        ClearReplayList();
+        foreach (var (_, dto) in replays)
+            BuildReplayRow(dto);
+        BuildReplayFooter(replays.Count);
+    }
+
+    private void RenderReplayMessage(int token, string msg)
+    {
+        if (token != _replayLoadToken || _replayListContent == null) return;
+        ClearReplayList();
+        MakeMsg(_replayListContent, msg);
+    }
+
+    private void ClearReplayList()
+    {
+        for (int i = _replayListContent.childCount - 1; i >= 0; i--)
+            Destroy(_replayListContent.GetChild(i).gameObject);
+    }
+
+    // Aumentados de novo (2026-07-18, pedido do usuário — "deixe visualizar 3 e meio de card no
+    // primeiro momento"). Área visível da lista = ReplayPopupHeight×0.86 (frações do content root
+    // em BuildPopup) − 56 (título) ≈ 597.6px com ReplayPopupHeight=760 — resolvendo
+    // 3.5×H + 3×spacing(8) = 597.6 dá H≈164, que é o valor usado abaixo (3 cartões inteiros +
+    // metade do 4º visíveis sem rolar). Eram 84/38/44 na rodada anterior.
+    private const float ReplayCardHeight = 164f;
+    private const float ReplayAvatarSize = 96f;
+    private const float ReplayPlayButtonSize = 72f;
+
+    // Cartão estilo "battle log" (2026-07-18, pedido do usuário — antes era 1 linha de texto cru)
+    // — borda esquerda colorida por resultado, avatar circular do oponente, 2 linhas de texto e um
+    // botão de play circular SEPARADO do cartão (sibling na Row, não filho dele, pra não competir
+    // pelo mesmo fundo arredondado). Tudo posicionado manualmente (sem VerticalLayoutGroup
+    // aninhado dentro do cartão) — mesma cautela de ShowSkillDetail/ShowWeaponDetail neste
+    // arquivo, que já teve um bug real de espaçamento gigante com `childControlHeight=false` numa
+    // VerticalLayoutGroup aninhada.
+    private void BuildReplayRow(ReplayDTO dto)
+    {
+        bool won = dto.result == "win";
+        Color accentColor = won ? _theme.success : _theme.danger;
+        string dateLabel = new System.DateTime(dto.createdAtTicks).ToLocalTime().ToString("dd/MM HH:mm");
+        // Duração em rounds REAIS (CombatSimulator.RoundCount, ver ReplayDTO.roundCount) — nunca
+        // estimado. Replays salvos antes desta mudança não têm o campo (vem 0) — cai pra
+        // eventCount, rotulado como "eventos" (não "rounds"), pra nunca fingir ser um round de
+        // verdade.
+        string durationLabel = dto.roundCount > 0 ? $"{dto.roundCount} rounds"
+            : (dto.eventCount > 0 ? $"{dto.eventCount} eventos" : null);
+        // Colorida (verde/vermelho, 2026-07-19, pedido do usuário — acessibilidade pra
+        // daltonismo, não depender só da cor da faixa lateral como indicador de resultado). Só a
+        // palavra em si — resto da linha (data/duração) continua no cinza neutro de sempre.
+        string resultLabel = $"<color=#{ColorUtility.ToHtmlStringRGB(accentColor)}>{(won ? "Vitória" : "Derrota")}</color>";
+        // Separador "|" (ASCII), não "·"/"—" — este mesmo arquivo já teve um bug real
+        // (FormatTierTriplet) de caractere fora do ASCII básico virando glyph quebrado na fonte
+        // TMP deste popup.
+        string line2 = durationLabel == null
+            ? $"{resultLabel} | {dateLabel}"
+            : $"{resultLabel} | {dateLabel} | {durationLabel}";
+
+        var rowGo = new GameObject("ReplayRow");
+        rowGo.transform.SetParent(_replayListContent, false);
+        rowGo.AddComponent<RectTransform>();
+        var rowLe = rowGo.AddComponent<LayoutElement>();
+        rowLe.preferredHeight = ReplayCardHeight; rowLe.flexibleWidth = 1f;
+
+        // Cartão — ocupa a largura toda menos o espaço reservado pro botão de play à direita.
+        var cardGo = new GameObject("Card");
+        cardGo.transform.SetParent(rowGo.transform, false);
+        var cardRt = cardGo.AddComponent<RectTransform>();
+        cardRt.anchorMin = Vector2.zero; cardRt.anchorMax = Vector2.one;
+        cardRt.offsetMin = Vector2.zero;
+        cardRt.offsetMax = new Vector2(-(ReplayPlayButtonSize + 12f), 0f);
+        var cardBg = cardGo.AddComponent<Image>();
+        // Levemente mais claro que o fundo do próprio popup (panelBackgroundAlt) — mesmo truque
+        // de tint em runtime já usado em CharacterCardButtonStyle (Color.Lerp com Color.white),
+        // em vez de inventar um tom fixo novo no UITheme.
+        cardBg.sprite = UIShapeUtil.RoundedRect(Color.Lerp(_theme.panelBackgroundAlt, Color.white, 0.12f), 8f);
+        cardBg.type = Image.Type.Sliced;
+
+        // Borda esquerda colorida — 3px, altura inteira do cartão.
+        var borderGo = new GameObject("LeftBorder");
+        borderGo.transform.SetParent(cardGo.transform, false);
+        var borderRt = borderGo.AddComponent<RectTransform>();
+        borderRt.anchorMin = new Vector2(0f, 0f); borderRt.anchorMax = new Vector2(0f, 1f);
+        borderRt.pivot = new Vector2(0f, 0.5f);
+        borderRt.sizeDelta = new Vector2(3f, 0f);
+        borderRt.anchoredPosition = Vector2.zero;
+        borderGo.AddComponent<Image>().color = accentColor;
+
+        // Avatar circular — mesmo truque de círculo via UIShapeUtil.RoundedRect(raio = metade do
+        // lado) já usado no badge de AttributePipBar; Mask recorta o ícone do oponente (se
+        // resolvido) pro formato circular.
+        var avatarGo = new GameObject("Avatar");
+        avatarGo.transform.SetParent(cardGo.transform, false);
+        var avatarRt = avatarGo.AddComponent<RectTransform>();
+        avatarRt.anchorMin = avatarRt.anchorMax = new Vector2(0f, 0.5f);
+        avatarRt.pivot = new Vector2(0f, 0.5f);
+        avatarRt.sizeDelta = new Vector2(ReplayAvatarSize, ReplayAvatarSize);
+        avatarRt.anchoredPosition = new Vector2(22f, 0f);
+
+        Sprite opponentIcon = ResolveOpponentIcon(dto);
+        var avatarBg = avatarGo.AddComponent<Image>();
+        avatarBg.sprite = UIShapeUtil.RoundedRect(opponentIcon != null ? _theme.panelBackground : accentColor, ReplayAvatarSize / 2f);
+        avatarBg.type = Image.Type.Sliced;
+        var mask = avatarGo.AddComponent<Mask>();
+        mask.showMaskGraphic = true;
+
+        if (opponentIcon != null)
+        {
+            var iconGo = new GameObject("Icon");
+            iconGo.transform.SetParent(avatarGo.transform, false);
+            var iconRt = iconGo.AddComponent<RectTransform>();
+            iconRt.anchorMin = iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+            iconRt.pivot = new Vector2(0.5f, 0.5f);
+            // "Cover" (preenche o círculo inteiro, cortando o excesso via Mask do pai acima) —
+            // Image.preserveAspect sozinho só faz "contain" (cabe dentro, podendo sobrar vão
+            // vazio); calculado manualmente pra sempre cobrir os 38x38 inteiros, sem depender da
+            // proporção real de cada previewIcon (varia por personagem).
+            float spriteAspect = opponentIcon.rect.width / opponentIcon.rect.height;
+            iconRt.sizeDelta = spriteAspect >= 1f
+                ? new Vector2(ReplayAvatarSize * spriteAspect, ReplayAvatarSize)
+                : new Vector2(ReplayAvatarSize, ReplayAvatarSize / spriteAspect);
+            var iconImg = iconGo.AddComponent<Image>();
+            iconImg.sprite = opponentIcon;
+            iconImg.type = Image.Type.Simple;
+        }
+        else
+        {
+            // Fallback temporário (personagem removido/renomeado desde o replay, ou
+            // CharacterDatabase não wireado) — letra V/D em vez de ícone de coroa/caveira: glyphs
+            // Unicode de coroa/caveira não são seguros nesta fonte TMP (mesmo problema já
+            // documentado com "—" em CharacterPanel.FormatTierTriplet — caractere fora do ASCII
+            // básico virava "tofu" quebrado no popup).
+            var letterGo = new GameObject("FallbackLetter");
+            letterGo.transform.SetParent(avatarGo.transform, false);
+            var letterRt = letterGo.AddComponent<RectTransform>();
+            letterRt.anchorMin = Vector2.zero; letterRt.anchorMax = Vector2.one;
+            letterRt.offsetMin = letterRt.offsetMax = Vector2.zero;
+            var letterTxt = letterGo.AddComponent<TextMeshProUGUI>();
+            letterTxt.text = won ? "V" : "D";
+            letterTxt.fontSize = 40;
+            letterTxt.fontStyle = FontStyles.Bold;
+            letterTxt.color = _theme.textOnDark;
+            letterTxt.alignment = TextAlignmentOptions.Center;
+        }
+
+        // Textos — 2 linhas empilhadas manualmente a partir do fim do avatar.
+        float textLeft = 22f + ReplayAvatarSize + 20f;
+
+        var nameGo = new GameObject("Name");
+        nameGo.transform.SetParent(cardGo.transform, false);
+        var nameRt = nameGo.AddComponent<RectTransform>();
+        nameRt.anchorMin = new Vector2(0f, 0.5f); nameRt.anchorMax = new Vector2(1f, 0.5f);
+        nameRt.pivot = new Vector2(0f, 0f);
+        nameRt.offsetMin = new Vector2(textLeft, 14f); nameRt.offsetMax = new Vector2(-16f, 14f);
+        nameRt.sizeDelta = new Vector2(0f, 40f);
+        var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
+        nameTxt.text = $"vs {dto.opponentName}";
+        nameTxt.fontSize = 30;
+        nameTxt.fontStyle = FontStyles.Bold;
+        nameTxt.color = _theme.textOnDark;
+        nameTxt.alignment = TextAlignmentOptions.BottomLeft;
+
+        var line2Go = new GameObject("Line2");
+        line2Go.transform.SetParent(cardGo.transform, false);
+        var line2Rt = line2Go.AddComponent<RectTransform>();
+        line2Rt.anchorMin = new Vector2(0f, 0.5f); line2Rt.anchorMax = new Vector2(1f, 0.5f);
+        line2Rt.pivot = new Vector2(0f, 1f);
+        line2Rt.offsetMin = new Vector2(textLeft, -14f); line2Rt.offsetMax = new Vector2(-16f, -14f);
+        line2Rt.sizeDelta = new Vector2(0f, 30f);
+        var line2Txt = line2Go.AddComponent<TextMeshProUGUI>();
+        line2Txt.richText = true; // pra <color> de resultLabel acima renderizar de verdade
+        line2Txt.text = line2;
+        line2Txt.fontSize = 22;
+        line2Txt.color = new Color(0.78f, 0.78f, 0.78f, 0.9f);
+        line2Txt.alignment = TextAlignmentOptions.TopLeft;
+
+        // Botão de play circular — sibling do Card dentro da Row (não filho dele), pinado na
+        // borda direita: visualmente separado, mesmo pedido do usuário. Cor `secondaryButtonAlt`
+        // (cinza-azulado) de propósito (2026-07-19, pedido do usuário) — não `primaryAction`/
+        // `danger` (vermelhos), que já são os CTAs do X de fechar deste mesmo popup e do botão
+        // JOGAR do menu; um 2º botão vermelho aqui competiria visualmente com esses.
+        var playGo = new GameObject("PlayButton");
+        playGo.transform.SetParent(rowGo.transform, false);
+        var playRt = playGo.AddComponent<RectTransform>();
+        playRt.anchorMin = playRt.anchorMax = new Vector2(1f, 0.5f);
+        playRt.pivot = new Vector2(1f, 0.5f);
+        playRt.sizeDelta = new Vector2(ReplayPlayButtonSize, ReplayPlayButtonSize);
+        playRt.anchoredPosition = Vector2.zero;
+        var playBg = playGo.AddComponent<Image>();
+        playBg.sprite = UIShapeUtil.RoundedRect(_theme.secondaryButtonAlt, ReplayPlayButtonSize / 2f);
+        playBg.type = Image.Type.Sliced;
+        var playBtn = playGo.AddComponent<Button>();
+        playBtn.targetGraphic = playBg;
+        playBtn.onClick.AddListener(() => PlayReplay(dto));
+
+        // Ícone de play triangular REAL (▶), rasterizado via UIShapeUtil.PlayTriangle — não um
+        // glifo Unicode "▶" na fonte TMP (não seguro nesta fonte, mesmo risco já documentado com
+        // "★"/"☆"/"—" neste projeto), nem o ">" ASCII usado antes (fácil de confundir com o "X"
+        // de fechar do mesmo popup — pedido do usuário pra diferenciar melhor).
+        var arrowGo = new GameObject("PlayIcon");
+        arrowGo.transform.SetParent(playGo.transform, false);
+        var arrowRt = arrowGo.AddComponent<RectTransform>();
+        arrowRt.anchorMin = arrowRt.anchorMax = new Vector2(0.5f, 0.5f);
+        float iconSize = ReplayPlayButtonSize * 0.55f;
+        arrowRt.sizeDelta = new Vector2(iconSize, iconSize);
+        var arrowImg = arrowGo.AddComponent<Image>();
+        arrowImg.sprite = UIShapeUtil.PlayTriangle(_theme.textOnDark);
+        arrowImg.type = Image.Type.Simple;
+    }
+
+    // Ícone do OPONENTE daquela luta — mesmo previewIcon já usado em 02_SelectCharacter/
+    // MainMenuCharacterPreview para o mesmo personagem, casado por profileName no
+    // CharacterDatabase (mesmo critério de ReplaySnapshotConverter.ToRuntimeProfile). null se o
+    // personagem foi removido/renomeado desde o replay, ou se CharacterDatabase não foi wireado —
+    // BuildReplayRow cai pro fallback de letra V/D nesse caso.
+    private Sprite ResolveOpponentIcon(ReplayDTO dto)
+    {
+        if (_characterDatabase?.unlockedCharacters == null || dto?.p2Snapshot == null) return null;
+        string name = dto.p2Snapshot.profileName;
+        if (string.IsNullOrEmpty(name)) return null;
+        foreach (var t in _characterDatabase.unlockedCharacters)
+            if (t != null && t.profileName == name) return t.previewIcon;
+        return null;
+    }
+
+    // Rodapé "X de N replays salvos" — N vem de FirestoreService.MaxReplaysPerCharacter (mesmo
+    // teto que a rotação client-side já mantém), não um número fixo solto aqui.
+    private void BuildReplayFooter(int count)
+    {
+        var go = new GameObject("Footer");
+        go.transform.SetParent(_replayListContent, false);
+        go.AddComponent<RectTransform>();
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = 32f; le.flexibleWidth = 1f;
+        var txt = go.AddComponent<TextMeshProUGUI>();
+        txt.text = $"{count} de {FirestoreService.MaxReplaysPerCharacter} replays salvos";
+        txt.fontSize = 16;
+        txt.color = new Color(0.7f, 0.7f, 0.7f, 0.8f);
+        txt.alignment = TextAlignmentOptions.Center;
+    }
+
+    // Reconstrói os dois PlayerProfile (ReplaySnapshotConverter) a partir do snapshot congelado,
+    // seta o canal cross-scene dedicado (ReplayPlaybackState — NÃO SelectedProfileHolder/
+    // SelectedOpponentHolder, que ficam intocados) e carrega 04_CombatScenePVP, que detecta
+    // ReplayPlaybackState.IsActive e reproduz os eventos em vez de rodar CombatSimulator.
+    private void PlayReplay(ReplayDTO dto)
+    {
+        if (_characterDatabase == null)
+        {
+            Debug.LogError("[CharacterPanel] CharacterDatabase não wireado — não é possível reproduzir replays (ver MainMenuController.characterDatabase).");
+            return;
+        }
+
+        var p1 = ReplaySnapshotConverter.ToRuntimeProfile(dto.p1Snapshot, _characterDatabase);
+        var p2 = ReplaySnapshotConverter.ToRuntimeProfile(dto.p2Snapshot, _characterDatabase);
+        if (p1 == null || p2 == null)
+        {
+            Debug.LogError("[CharacterPanel] Não foi possível reconstruir os personagens deste replay (removido/renomeado desde que foi gravado?).");
+            return;
+        }
+
+        var events = CombatEventReplayConverter.FromDTOList(dto.events);
+        ReplayPlaybackState.Set(p1, p2, events);
+        UnityEngine.SceneManagement.SceneManager.LoadScene("04_CombatScenePVP");
+    }
+
     // Botão "Detalhes" — revela/esconde a seção PASSIVAS (label + valor, sem ícone/barra)
     // abaixo dela. Fica escondida por padrão; só constrói as linhas uma vez (RefreshPassives
     // só atualiza o texto depois).
@@ -577,14 +1155,16 @@ public class CharacterPanel : MonoBehaviour
         btnGo.transform.SetParent(content, false);
         btnGo.AddComponent<RectTransform>();
         var le = btnGo.AddComponent<LayoutElement>();
-        le.preferredHeight = 44f; le.flexibleWidth = 1f;
+        // Fonte 40pt na gaveta mobile (2026-07-20, pedido do usuário — era 18pt) — altura do
+        // botão cresce junto (44→64px) pra não cortar o texto maior.
+        le.preferredHeight = _bottomAnchored ? 64f : 44f; le.flexibleWidth = 1f;
         var btnImg = btnGo.AddComponent<Image>();
         btnImg.sprite = UIShapeUtil.RoundedRect(_theme.secondaryButton, 10f);
         btnImg.type = Image.Type.Sliced;
         var btn = btnGo.AddComponent<Button>();
         btn.targetGraphic = btnImg;
         btn.onClick.AddListener(ToggleDetails);
-        _detailsButtonLabel = AddLabel(btnGo, "VER DETALHES", 18, TextColor);
+        _detailsButtonLabel = AddLabel(btnGo, "VER DETALHES", _bottomAnchored ? 40 : 18, TextColor);
         _detailsButtonLabel.fontStyle = FontStyles.Bold;
 
         _passivesSection = new GameObject("PassivesSection");
@@ -624,9 +1204,11 @@ public class CharacterPanel : MonoBehaviour
         go.transform.SetParent(parent, false);
         go.AddComponent<RectTransform>();
         var le = go.AddComponent<LayoutElement>();
-        le.preferredHeight = 26f; le.flexibleWidth = 1f;
+        // Fonte 35pt na gaveta mobile (2026-07-20, pedido do usuário — "aumente a fonte dos
+        // detalhes evasion counter etc", era 17pt) — altura da linha cresce junto (26→54px).
+        le.preferredHeight = _bottomAnchored ? 54f : 26f; le.flexibleWidth = 1f;
         var txt = go.AddComponent<TextMeshProUGUI>();
-        txt.fontSize = 17;
+        txt.fontSize = _bottomAnchored ? 35 : 17;
         txt.color = TextColor;
         txt.alignment = TextAlignmentOptions.MidlineLeft;
         return txt;
@@ -659,19 +1241,28 @@ public class CharacterPanel : MonoBehaviour
 
     // Grade de células quadradas (ícone + borda de tier) — substitui a lista vertical de
     // ícone+nome (2026-07-07: nome removido, só o ícone com a cor de borda importa agora).
-    private static Transform MakeIconGrid(Transform parent)
+    private Transform MakeIconGrid(Transform parent)
     {
+        // Célula maior na gaveta mobile (2026-07-20, pedido do usuário — ícones pequenos demais
+        // na lista de Habilidades/Armas): 70→110px, só quando _bottomAnchored (painel bem mais
+        // largo agora, ver BottomDrawerWidth) — 02_SelectCharacter/03_Arsenal continuam em 70px.
+        // 2026-07-20 (2ª rodada): dobrado de novo (110→220) e espaçamento reduzido para agrupar
+        // os ícones. Em 220px, 5 colunas não cabem na largura do painel (BottomDrawerWidth), então
+        // constraintCount cai para 3 só no modo mobile — 02_SelectCharacter mantém 5 colunas de 70px.
+        float cellSize = _bottomAnchored ? 220f : 70f;
+        float spacing = _bottomAnchored ? 6f : 8f;
+
         var go = new GameObject("Grid");
         go.transform.SetParent(parent, false);
         go.AddComponent<RectTransform>();
         var le = go.AddComponent<LayoutElement>();
         le.flexibleWidth = 1f;
         var glg = go.AddComponent<GridLayoutGroup>();
-        glg.cellSize = new Vector2(70f, 70f);
-        glg.spacing = new Vector2(8f, 8f);
+        glg.cellSize = new Vector2(cellSize, cellSize);
+        glg.spacing = new Vector2(spacing, spacing);
         glg.childAlignment = TextAnchor.UpperLeft;
         glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        glg.constraintCount = 5;
+        glg.constraintCount = _bottomAnchored ? 3 : 5;
         var csf = go.AddComponent<ContentSizeFitter>();
         csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         return go.transform;
@@ -730,6 +1321,11 @@ public class CharacterPanel : MonoBehaviour
 
     // Ícone com borda de tier ancorado no topo-centro do popup (96×96) — só posiciona o
     // GameObject que BuildTierIconCell já constrói, sem duplicar nada da lógica de borda/tier.
+    // 2026-07-20, pedido do usuário: ícone do popup de detalhe proporcional ao resto do
+    // conteúdo na gaveta mobile (antes ficava pequeno perto do título/descrição maiores) —
+    // 96→170px só quando _bottomAnchored; 02_SelectCharacter/03_Arsenal mantêm 96px.
+    private float PopupIconSize => _bottomAnchored ? 170f : 96f;
+
     private void BuildPopupIcon(Sprite icon, int tier)
     {
         var cellGo = BuildTierIconCell(_popupContentRoot, icon, tier, null);
@@ -737,7 +1333,7 @@ public class CharacterPanel : MonoBehaviour
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
         rt.pivot = new Vector2(0.5f, 1f);
         rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = new Vector2(96f, 96f);
+        rt.sizeDelta = new Vector2(PopupIconSize, PopupIconSize);
     }
 
     // ── Popup de descrição (Skills/Armas) ───────────────────────────────────
@@ -806,18 +1402,30 @@ public class CharacterPanel : MonoBehaviour
         _popupOverlayGo.SetActive(false);
     }
 
-    private const float SkillPopupWidth = 420f;
-    private const float SkillPopupMinHeight = 300f;
+    // 2026-07-20, pedido do usuário: popup de detalhe (skill/arma/pet) maior no geral, gaveta
+    // mobile — deixaram de ser `const` pra poder variar por `_bottomAnchored` sem afetar
+    // 02_SelectCharacter/03_Arsenal (painel-lateral continua nos valores originais).
+    // 2ª rodada (2026-07-20): painel aumentado de novo (620→780) pra caber o ícone/fontes
+    // maiores sem apertar o texto.
+    private float SkillPopupWidth => _bottomAnchored ? 780f : 420f;
+    private float SkillPopupMinHeight => _bottomAnchored ? 520f : 300f;
     // Frações reais de _popupContentRoot dentro do painel (ver anchors em BuildPopup:
     // 0.06-0.94 horizontal, 0.04-0.90 vertical) — usadas pra converter altura de CONTEÚDO
     // (onde o texto é medido/posicionado) em altura de PAINEL (`_popupPanelRt.sizeDelta`).
     private const float SkillPopupContentWidthFraction  = 0.88f;
     private const float SkillPopupContentHeightFraction = 0.86f;
-    private const float SkillPopupHeaderHeight        = 144f; // espaço reservado pro ícone+nome no topo
+    // Espaço reservado pro ícone+nome no topo. Não-const: na gaveta mobile o ícone (PopupIconSize)
+    // e o nome (fonte 40, ver ShowSkillDetail/ShowPetDetail) são maiores, então a área reservada
+    // cresce junto — 96(ícone)+4+36(nome)+8 = 144 no desktop; 170+14+54+12 = 250 no mobile.
+    private float SkillPopupHeaderHeight => _bottomAnchored ? 250f : 144f;
     private const float SkillPopupDescEffectGap       = 14f;  // espaço entre a descrição e o bloco "Efeito"
-    private const float SkillPopupEffectLabelHeight   = 22f;
+    private float SkillPopupEffectLabelHeight => _bottomAnchored ? 28f : 22f; // acompanha a fonte maior do label "Efeito" na gaveta mobile
     private const float SkillPopupEffectLabelValueGap = 4f;
     private const float SkillPopupBottomPadding       = 20f;
+    // Offset/altura do bloco de nome — cresce junto com PopupIconSize e a fonte maior (40) na
+    // gaveta mobile (ver ShowSkillDetail/ShowPetDetail).
+    private float SkillPopupNameOffsetY => _bottomAnchored ? -(PopupIconSize + 14f) : -100f;
+    private float SkillPopupNameHeight => _bottomAnchored ? 54f : 36f;
 
     // Layout: ícone (com borda de tier, reaproveitando BuildTierIconCell — 2026-07-07,
     // substitui o antigo sufixo de texto "(T{tier})" no título) + nome + descrição corrida
@@ -860,23 +1468,26 @@ public class CharacterPanel : MonoBehaviour
         var nrt = nameGo.AddComponent<RectTransform>();
         nrt.anchorMin = new Vector2(0f, 1f); nrt.anchorMax = new Vector2(1f, 1f);
         nrt.pivot = new Vector2(0.5f, 1f);
-        nrt.anchoredPosition = new Vector2(0f, -100f);
-        nrt.sizeDelta = new Vector2(0f, 36f);
+        nrt.anchoredPosition = new Vector2(0f, SkillPopupNameOffsetY);
+        nrt.sizeDelta = new Vector2(0f, SkillPopupNameHeight);
         var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
-        nameTxt.text = skill.skillName; nameTxt.fontSize = 28; nameTxt.fontStyle = FontStyles.Bold;
+        nameTxt.text = skill.skillName; nameTxt.fontSize = _bottomAnchored ? 40 : 28; nameTxt.fontStyle = FontStyles.Bold;
         nameTxt.color = _theme.currencyGold;
         nameTxt.alignment = TextAlignmentOptions.Center;
         nameTxt.richText = true;
 
         // Descrição — cria o texto e mede a altura real que ele vai ocupar (com quebra de
-        // linha) na largura disponível, antes de decidir o tamanho do painel.
+        // linha) na largura disponível, antes de decidir o tamanho do painel. Fonte maior na
+        // gaveta mobile (2026-07-20, pedido do usuário — "aumentar a fonte do texto de
+        // descrição, hoje pequena demais pra ler confortavelmente no mobile"; 2ª rodada:
+        // 28→35).
         string desc = string.IsNullOrEmpty(skill.description) ? "Sem descrição disponível." : skill.description;
         var bodyGo = new GameObject("Body");
         bodyGo.transform.SetParent(_popupContentRoot, false);
         bodyGo.AddComponent<RectTransform>();
         var bodyTxt = bodyGo.AddComponent<TextMeshProUGUI>();
         bodyTxt.enableWordWrapping = true;
-        bodyTxt.fontSize = 20;
+        bodyTxt.fontSize = _bottomAnchored ? 35 : 20;
         bodyTxt.color = TextColor;
         bodyTxt.alignment = TextAlignmentOptions.TopLeft;
         bodyTxt.text = desc;
@@ -894,7 +1505,7 @@ public class CharacterPanel : MonoBehaviour
             effectValueTxt = valueGo.AddComponent<TextMeshProUGUI>();
             effectValueTxt.richText = true;
             effectValueTxt.enableWordWrapping = true;
-            effectValueTxt.fontSize = 18;
+            effectValueTxt.fontSize = _bottomAnchored ? 24 : 18;
             effectValueTxt.color = TextColor;
             effectValueTxt.alignment = TextAlignmentOptions.TopLeft;
             effectValueTxt.text = HighlightEffectTiers(skill.effectText, skill.tier);
@@ -927,7 +1538,7 @@ public class CharacterPanel : MonoBehaviour
             lrt.anchoredPosition = new Vector2(0f, -labelY);
             lrt.sizeDelta = new Vector2(0f, SkillPopupEffectLabelHeight);
             var labelTxt = labelGo.AddComponent<TextMeshProUGUI>();
-            labelTxt.text = "Efeito"; labelTxt.fontSize = 18; labelTxt.fontStyle = FontStyles.Bold;
+            labelTxt.text = "Efeito"; labelTxt.fontSize = _bottomAnchored ? 22 : 18; labelTxt.fontStyle = FontStyles.Bold;
             labelTxt.color = _theme.currencyGold;
             labelTxt.alignment = TextAlignmentOptions.TopLeft;
 
@@ -963,11 +1574,11 @@ public class CharacterPanel : MonoBehaviour
         var nrt = nameGo.AddComponent<RectTransform>();
         nrt.anchorMin = new Vector2(0f, 1f); nrt.anchorMax = new Vector2(1f, 1f);
         nrt.pivot = new Vector2(0.5f, 1f);
-        nrt.anchoredPosition = new Vector2(0f, -100f);
-        nrt.sizeDelta = new Vector2(0f, 36f);
+        nrt.anchoredPosition = new Vector2(0f, SkillPopupNameOffsetY);
+        nrt.sizeDelta = new Vector2(0f, SkillPopupNameHeight);
         var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
         nameTxt.text = data != null ? PetState.DisplayName(data.petType) : "?";
-        nameTxt.fontSize = 28; nameTxt.fontStyle = FontStyles.Bold;
+        nameTxt.fontSize = _bottomAnchored ? 40 : 28; nameTxt.fontStyle = FontStyles.Bold;
         nameTxt.color = _theme.currencyGold;
         nameTxt.alignment = TextAlignmentOptions.Center;
 
@@ -986,7 +1597,7 @@ public class CharacterPanel : MonoBehaviour
         bodyGo.AddComponent<RectTransform>();
         var bodyTxt = bodyGo.AddComponent<TextMeshProUGUI>();
         bodyTxt.enableWordWrapping = true;
-        bodyTxt.fontSize = 20;
+        bodyTxt.fontSize = _bottomAnchored ? 35 : 20;
         bodyTxt.color = TextColor;
         bodyTxt.alignment = TextAlignmentOptions.TopLeft;
         bodyTxt.text = desc;
@@ -1031,13 +1642,17 @@ public class CharacterPanel : MonoBehaviour
         });
     }
 
-    // Altura fixa reservada pro bloco ícone+nome no topo do popup de arma (mesmo valor usado
-    // no cálculo de altura dinâmica abaixo e no offset da área de stats).
-    private const float WeaponPopupHeaderHeight = 148f;
-    private const float WeaponPopupStatRowHeight = 24f;
+    // Altura reservada pro bloco ícone+nome no topo do popup de arma (mesmo valor usado no
+    // cálculo de altura dinâmica abaixo e no offset da área de stats). Não-const (2026-07-20,
+    // 2ª rodada) — cresce junto com PopupIconSize/fonte do nome na gaveta mobile, mesma ideia
+    // de SkillPopupHeaderHeight.
+    private float WeaponPopupHeaderHeight => _bottomAnchored ? 250f : 148f;
+    // Não-const (2026-07-20, mesmo motivo do Skill/PetPopup acima) — linha de stat mais alta na
+    // gaveta mobile pra caber fonte maior sem cortar (ver AddPopupStatRow).
+    private float WeaponPopupStatRowHeight => _bottomAnchored ? 32f : 24f;
     private const float WeaponPopupStatRowSpacing = 3f;
-    private const float WeaponPopupMinHeight = 380f;
-    private const float WeaponPopupWidth = 500f;
+    private float WeaponPopupMinHeight => _bottomAnchored ? 560f : 380f;
+    private float WeaponPopupWidth => _bottomAnchored ? 780f : 500f;
 
     // Layout estilo My Brute: ícone (com borda de tier, ver BuildPopupIcon) + nome (sem sufixo
     // de tier — a indicação vem só da borda do ícone) + status, todos visíveis de uma vez, sem
@@ -1078,10 +1693,10 @@ public class CharacterPanel : MonoBehaviour
         var nrt = nameGo.AddComponent<RectTransform>();
         nrt.anchorMin = new Vector2(0f, 1f); nrt.anchorMax = new Vector2(1f, 1f);
         nrt.pivot = new Vector2(0.5f, 1f);
-        nrt.anchoredPosition = new Vector2(0f, -104f);
-        nrt.sizeDelta = new Vector2(0f, 36f);
+        nrt.anchoredPosition = new Vector2(0f, _bottomAnchored ? SkillPopupNameOffsetY : -104f);
+        nrt.sizeDelta = new Vector2(0f, SkillPopupNameHeight);
         var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
-        nameTxt.text = StripTierSuffix(w.weaponName); nameTxt.fontSize = 28; nameTxt.fontStyle = FontStyles.Bold;
+        nameTxt.text = StripTierSuffix(w.weaponName); nameTxt.fontSize = _bottomAnchored ? 40 : 28; nameTxt.fontStyle = FontStyles.Bold;
         nameTxt.color = _theme.currencyGold;
         nameTxt.alignment = TextAlignmentOptions.Center;
         nameTxt.richText = true;
@@ -1266,7 +1881,7 @@ public class CharacterPanel : MonoBehaviour
         lrt.anchorMin = new Vector2(0f, 0f); lrt.anchorMax = new Vector2(0.42f, 1f);
         lrt.offsetMin = lrt.offsetMax = Vector2.zero;
         var lblTxt = lblGo.AddComponent<TextMeshProUGUI>();
-        lblTxt.text = label; lblTxt.fontSize = 20; lblTxt.fontStyle = FontStyles.Bold;
+        lblTxt.text = label; lblTxt.fontSize = _bottomAnchored ? 26 : 20; lblTxt.fontStyle = FontStyles.Bold;
         lblTxt.color = _theme.currencyGold;
         lblTxt.alignment = TextAlignmentOptions.MidlineLeft;
 
@@ -1276,7 +1891,7 @@ public class CharacterPanel : MonoBehaviour
         vrt.anchorMin = new Vector2(0.42f, 0f); vrt.anchorMax = new Vector2(1f, 1f);
         vrt.offsetMin = vrt.offsetMax = Vector2.zero;
         var valTxt = valGo.AddComponent<TextMeshProUGUI>();
-        valTxt.text = richValue; valTxt.fontSize = 20;
+        valTxt.text = richValue; valTxt.fontSize = _bottomAnchored ? 26 : 20;
         valTxt.color = TextColor;
         valTxt.alignment = TextAlignmentOptions.MidlineLeft;
         valTxt.richText = true;
@@ -1304,8 +1919,14 @@ public class CharacterPanel : MonoBehaviour
 
         foreach (var refs in new[] { _compactInfo, _expandedInfo })
         {
-            refs.name.text = p.profileName;
-            refs.winRate.text = winRateText;
+            // Gaveta mobile (2026-07-20): sem nome/winrate (refs.name/winRate ficam null nesse
+            // modo, ver BuildInfoBlock) — HP usa o mesmo refs.hp (texto sobreposto) nos dois
+            // modos agora (4ª rodada: HP voltou a não usar pips).
+            if (!_bottomAnchored)
+            {
+                refs.name.text = p.profileName;
+                refs.winRate.text = winRateText;
+            }
             refs.hp.text = $"{effHp}";
             refs.str.SetValue(effStr);
             refs.agi.SetValue(effAgi);
@@ -1425,9 +2046,11 @@ public class CharacterPanel : MonoBehaviour
         go.transform.SetParent(parent, false);
         go.AddComponent<RectTransform>();
         var le = go.AddComponent<LayoutElement>();
-        le.preferredHeight = 30f; le.flexibleWidth = 1f;
+        // Fonte 40pt na gaveta mobile (2026-07-20, pedido do usuário — era 20pt) — altura da
+        // linha (LayoutElement) cresce junto (30→56px) pra não cortar o texto maior.
+        le.preferredHeight = _bottomAnchored ? 56f : 30f; le.flexibleWidth = 1f;
         var txt = go.AddComponent<TextMeshProUGUI>();
-        txt.text = text; txt.fontSize = 20; txt.fontStyle = FontStyles.Bold;
+        txt.text = text; txt.fontSize = _bottomAnchored ? 40 : 20; txt.fontStyle = FontStyles.Bold;
         txt.color = _theme.currencyGold;
         txt.alignment = TextAlignmentOptions.MidlineLeft;
     }

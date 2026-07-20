@@ -3,6 +3,614 @@
 ### Progresso
 - Total: 143 tarefas | Concluídas: 43 (recontado em 2026-07-15 — ver nota em CLAUDE.md)
 
+- 2026-07-20: Botão REPLAY do menu principal (`MainMenuController.BuildReplaysMenuButton`):
+  - Texto "REPLAYS"→**"REPLAY"** (singular, pedido do usuário).
+  - **Bug real corrigido** — o texto renderizava mais fino e com contorno menos visível que
+    CHIBERS/ARSENAL mesmo com `fontStyle`/cor/`outlineWidth` idênticos no código. Causa real:
+    `AddComponent<TextMeshProUGUI>()` cria o texto com a fonte PADRÃO do TMP (LiberationSans SDF),
+    enquanto os labels de CHIBERS/ARSENAL (pré-colocados na cena) usam um `TMP_FontAsset`
+    customizado ("LuckiestGuy-Regular SDF", mais grosso) — `outlineWidth` é normalizado por
+    fonte, então o mesmo valor numérico produz um contorno bem mais fino em fontes diferentes.
+  - **2ª rodada — regressão real corrigida**: a 1ª tentativa do fix acima (só `labelTxt.font = ...`,
+    aplicado DEPOIS de já ter setado `.text` e o resto) quebrou de vez — texto virou "um monte de
+    rabisco" (glifos errados/embaralhados), reportado pelo usuário. Causa: `fontSharedMaterial`
+    continuou apontando pro material/atlas da fonte ANTIGA enquanto os glifos passaram a ser
+    buscados na fonte NOVA — atlas e UVs incompatíveis. Fix de verdade: copia `font` **e**
+    `fontSharedMaterial` do label de ARSENAL já existente na cena (`arsenalGo.
+    GetComponentInChildren<TMP_Text>()`), **antes** de setar `.text`/qualquer outra propriedade
+    (fonte/material precisam estar corretos antes do texto ser gerado, não depois), seguido de um
+    `ForceMeshUpdate()` explícito.
+
+- 2026-07-20: Toque fora do painel fecha o popup (`MainMenuController.BuildPopup`, pedido do
+  usuário testando o popup de energia) — novo `Button` no `Overlay` (o fundo escurecido atrás do
+  painel), mesmo efeito de Cancelar (só fecha, nunca invoca `onConfirm`). Vale pra TODOS os popups
+  que passam por `BuildPopup` (energia, refill de diamante, mensagens genéricas), não só o de
+  energia — cliques DENTRO do painel continuam não fazendo nada, já que o painel (sem Button
+  próprio) bloqueia o raycast antes de chegar no Overlay por trás dele.
+
+- 2026-07-20: Ajustes no popup "Tempo até a próxima energia:" (`MainMenuController.BuildPopup`,
+  `PlayerEconomyState.FormatEnergyCountdown`), pedido do usuário:
+  - **Prefixo removido**: `FormatEnergyCountdown` retornava "Próxima energia em H:MM:SS" —
+    redundante com o título do popup, que já diz a mesma coisa. Agora retorna só o valor
+    (ex: "0:28:43"). Único chamador restante é `ShowEnergyStatusPopup`.
+  - **Fonte do valor bem maior**: 20→**64pt** (é o elemento central do popup agora). Painel do
+    popup ficou mais alto só nesse modo (300→420px) e a faixa reservada pro valor cresceu de 10%
+    pra 32% da altura do painel, com a faixa da mensagem/título reposicionada acima pra não
+    colidir — nenhuma mudança no popup padrão (sem countdown, ex: "Crie uma conta pra jogar").
+
+- 2026-07-20: **Bug real corrigido** — o tooltip de energia (mostra "Próxima energia em MM:SS" ao
+  tocar a fileira, ver rodada anterior) abria ancorado ACIMA da própria fileira e, por estar perto
+  do topo da tela, ficava cortado/inacessível (reportado pelo usuário). Fix: trocado por um popup
+  modal CENTRALIZADO na tela — novo `MainMenuController.ShowEnergyStatusPopup` (público), que
+  reaproveita o MESMO `BuildPopup` já usado pelos outros popups do projeto (overlay escurecido +
+  painel centralizado + botão "OK" que fecha, mesmo padrão do popup de energia esgotada/REPLAYS)
+  em vez de um tooltip próprio ancorado relativo à fileira. `MainMenuCharacterPreview.
+  OnEnergyRowTapped` agora só decide SE deve abrir (guard de energia cheia inalterado) e chama o
+  popup via `FindObjectOfType`. O `CanvasGroup`/tooltip inline antigo (`BuildEnergyTooltip`) foi
+  removido; o `CountdownLabel` que dispara o re-sync automático em zero (bug de rodada anterior)
+  ganhou um novo lar sempre-ativo e sem parte visual (`BuildEnergyResyncWatcher`), independente do
+  popup estar aberto ou fechado.
+
+- 2026-07-20: Reorganização do HUD superior (`MainMenuCharacterPreview`), pedido do usuário:
+  - **Texto "Próxima energia em H:MM:SS" deixou de ser permanente** — virou um tooltip pequeno
+    (novo `BuildEnergyTooltip`, substitui o antigo `BuildEnergyTimer`) que só aparece ao TOCAR a
+    fileira de ícones de energia (novo botão invisível "TapArea" cobrindo a fileira inteira,
+    mesmo espírito mobile-first "toque pra ver detalhe" que o Arsenal já usa pra skill/arma —
+    `OnEnergyRowTapped` alterna um `CanvasGroup` em vez de abrir um popup cheio, já que é só uma
+    linha de texto). Com energia no MÁXIMO (10/10), tocar não faz nada (nada regenerando, pedido
+    explícito do usuário) — sem esse guard, mostraria "Energia cheia" à toa.
+  - O `CountdownLabel` do tooltip continua num GameObject sempre ATIVO (só o `CanvasGroup` alterna
+    visibilidade) — importante pro re-sync automático quando o countdown chega em zero
+    (`isDoneCheck`/`onDone`, bug corrigido numa rodada anterior) continuar funcionando em segundo
+    plano mesmo com o tooltip escondido.
+  - **Fileira de energia alinhada na MESMA altura de moeda/diamante** (novo
+    `EnergyHudTopAlignmentOffset`, calculado a partir dos valores exatos de
+    `MainMenuController.BuildCurrencyHud`) — antes ficava centralizada sozinha mais acima, agora
+    todos os três ficam na mesma linha horizontal no topo da tela.
+  - Chip de fundo da fileira (`BuildEnergyChipBackground`) simplificado — não reserva mais espaço
+    extra em cima pro texto do timer (que não é mais permanente), só um padding mínimo ao redor
+    dos ícones.
+
+- 2026-07-20: **Bug real corrigido** — coluna de atalhos CHIBERS/ARSENAL/REPLAYS não ficava
+  "colada no chão" de forma estável (reportado pelo usuário — "no chão não está funcionando
+  ainda", depois do ajuste anterior de alinhamento com o Jogar). Causa raiz: `Btn_SelectCharacter`/
+  `Btn_Arsenal` (pré-colocados em `01_MainMenu.unity`) usavam âncora CENTRAL
+  (`anchorMin=anchorMax=(0.5,0.5)`) com offset fixo em pixels, diferente da âncora de PONTO ÚNICO
+  num canto real que o `BtnJogar` usa (`(1,0)`). O offset em X a partir do centro já era estável
+  (CanvasScaler trava a escala pela LARGURA, então a largura do Canvas em unidades locais é
+  sempre 1920 — por isso "colado na borda esquerda" já funcionava), mas o offset em Y a partir do
+  CENTRO não: a ALTURA do Canvas varia com o aspect ratio (só a largura é travada), então "tantos
+  pixels acima/abaixo do centro" aponta pra uma distância diferente do chão conforme a tela fica
+  mais larga/estreita — o ajuste anterior (`AlignLeftColumnWithJogar`) só corrigia um snapshot
+  pontual no `Start`, não o problema estrutural de fundo. Fix: novo
+  `ReanchorLeftColumnToBottomLeft` (chamado ANTES de `BuildReplaysMenuButton`, já que Replays
+  copia a âncora de Arsenal) reancora os dois pro canto inferior-ESQUERDO
+  (`anchorMin=anchorMax=pivot=(0,0)`, espelho do BtnJogar) preservando a posição visual atual —
+  lida via `GetWorldCorners` antes de trocar a âncora, convertida de volta pro espaço local do pai
+  via `RectTransform.rect` (que já resolve o pivot do próprio pai automaticamente, sem precisar
+  assumir nenhuma altura fixa de Canvas). `AlignLeftColumnWithJogar` continua rodando depois, pra
+  fechar o alinhamento fino com a base do Jogar.
+
+- 2026-07-20: **Bug real corrigido** — chip de energia (ícones + timer "Próxima energia") se
+  desalinhava ao mudar o aspect ratio da tela (Free Aspect/mais largo no Editor), enquanto
+  BtnJogar ficava fixo corretamente (reportado pelo usuário). Investigação confirmou: moeda e
+  diamante (`MainMenuController.BuildCurrencyHud`) JÁ usavam o padrão correto — âncora de PONTO
+  ÚNICO num canto real da tela (`anchorMin=anchorMax=(1,1)`, igual ao canto (1,0) do BtnJogar),
+  sizeDelta e anchoredPosition fixos — não precisaram de nenhuma mudança. O problema real estava
+  só em `MainMenuCharacterPreview.BuildEnergyHud`: a posição Y do chip vinha de
+  `ComputeHudFractions` (o mesmo ponto usado pelo LevelXpHud pra seguir o personagem), que soma um
+  offset em PIXELS dividido por 1080 (`.../1080f`) pra virar fração — presumindo que o Canvas
+  sempre mede exatamente 1080 de altura. Com `CanvasScaler` em `ScaleWithScreenSize` +
+  `matchWidthOrHeight` travado na LARGURA, a altura REAL do Canvas varia com o aspect ratio (fica
+  menor que 1080 numa tela mais larga), então essa fração calculada parava de bater com a altura
+  verdadeira e o chip "flutuava" pra fora do lugar. Fix: o chip de energia passou a usar uma
+  âncora FIXA de ponto único no topo-centro da tela (`anchorMin=anchorMax=(0.5, 1)`, mesmo
+  princípio do BtnJogar/moeda-diamante) em vez do ponto fracionário calculado a partir da posição
+  do personagem — não segue mais o personagem (o LevelXpHud continua seguindo normalmente, não
+  fazia parte do pedido), mas fica estável em qualquer resolução/aspect ratio. Novas constantes
+  `EnergyTimerHeight`/`EnergyTimerGap`/`EnergyHudTopMargin` substituem os números soltos
+  (4f/56f) que antes apareciam duplicados em `BuildEnergyTimer`/`BuildEnergyChipBackground`.
+
+- 2026-07-20: Dois ajustes no HUD principal (`MainMenuController`):
+  - **Fundo atrás do valor de moeda/diamante** (`BuildCurrencyEntry`): novo "ValueBg" — retângulo
+    arredondado preto semi-opaco (alpha 0.55) atrás do número de cada label, melhora a
+    legibilidade sobre o fundo variável da cena (mesmo espírito do chip da energia).
+  - **Coluna CHIBERS/ARSENAL/REPLAYS alinhada com o Jogar** (`AlignLeftColumnWithJogar`, novo,
+    chamado no `Start` logo depois de `BuildReplaysMenuButton`) — a coluna terminava mais acima
+    que o `BtnJogar`/painel de detalhe do personagem. Comparação feita em espaço de MUNDO
+    (`RectTransform.GetWorldCorners`), não derivada dos valores brutos de `anchoredPosition` no
+    arquivo de cena: `BtnJogar` é ancorado no canto inferior-direito do seu pai enquanto
+    Chibers/Arsenal/Replays são center-anchored, então comparar em espaço local exigiria saber a
+    altura REAL renderizada do Canvas (varia com a resolução/aspect ratio de tela real, não
+    necessariamente 1920×1080 mesmo com CanvasScaler assim configurado) — espaço de mundo já dá a
+    distância certa, convertida de volta pra unidades locais via `lossyScale.y` (os 4 botões
+    compartilham o mesmo Canvas/pai "Panel", escala idêntica).
+
+- 2026-07-20: Gaveta mobile do `CharacterPanel` — Expanded agora cresce ACIMA do topo do Root
+  (novo `BottomDrawerExpandedTopOverflow = 348.4799f`, `offsetMax.y` do `_expandedGo`, valor lido
+  pelo usuário direto no Editor: campo "Top" da Inspector = -348.4799) — satisfaz o ponto 2 do
+  pedido anterior ("no estado expandido, o painel deve poder crescer até sobrepor a fileira de
+  energia"). Só o Expanded cresce; Root e Compact continuam do tamanho de sempre, e a base dos
+  dois estados continua a mesma (`BottomDrawerFloorGap`).
+
+- 2026-07-20: **Bug real corrigido** — base do painel de detalhe do personagem (gaveta mobile,
+  `CharacterPanel._bottomAnchored`) descia ~28px ao expandir, em vez de ficar fixa alinhada com a
+  base do botão Jogar (reportado pelo usuário). Causa: `Root` sempre foi uma janela de altura FIXA
+  (`BottomDrawerMaxHeight`, ancorada na base, nunca anima — comentário de topo do arquivo já
+  documentava isso), mas os DOIS estados internos que alternam por cima dele (`_compactGo`/
+  `_expandedGo`, via CanvasGroup) usavam bases diferentes: `_compactGo` sempre flutuou 28px acima
+  da base do Root (offsetMin.y=28), enquanto `_expandedGo` ficava colado exatamente na base do
+  Root (offsetMin.y=0, stretch total) — ao trocar de um pro outro, o fundo arredondado visível
+  "pulava" 28px pra baixo. Fix: nova constante `BottomDrawerFloorGap` (28px, extraída do valor que
+  já existia hardcoded em `BuildCompact`) usada nos DOIS lugares — `_expandedGo` (só quando
+  `_bottomAnchored`) agora usa `offsetMin.y = BottomDrawerFloorGap` (era 0) mantendo
+  `offsetMax.y = 0` (topo continua subindo até o topo do Root). Como todo o conteúdo interno do
+  Expanded (InfoBlock/Divider/ScrollArea) já era posicionado em frações RELATIVAS ao próprio
+  `_expandedGo` (não ao Root diretamente), nada mais precisou mudar — o layout inteiro só
+  "encolheu" 28px por baixo, mantendo a mesma base do Compact. `02_SelectCharacter` (painel-lateral,
+  `_bottomAnchored=false`) não foi afetado — mantém `offsetMin=offsetMax=Vector2.zero` de sempre.
+
+- 2026-07-20: **Bug real corrigido** — countdown de energia travava em "0:00:00" e a energia
+  nunca incrementava sozinha (reportado pelo usuário). Causa: `PlayerEconomyState.EnergyCurrent`/
+  `LastEnergyTimestampUtc` só avançam via `EnergyService.GetOrRegenAsync`, chamado só em pontos
+  específicos (login, abertura do menu, clique em Jogar) — nada disparava um novo re-sync
+  enquanto o jogador só ficava olhando o timer no menu, e `FormatEnergyCountdown` sempre clampa
+  `remaining` em zero, então o texto congelava ali pra sempre mesmo com o tempo real já tendo
+  passado do próximo tick. Fix:
+  - `PlayerEconomyState.EnergyCountdownAtZero()` (novo) — verdadeiro quando o relógio local já
+    passou do instante da próxima energia mas o cache ainda não foi atualizado.
+  - `CountdownLabel.Init` ganhou `isDoneCheck`/`onDone` opcionais — dispara `onDone` só UMA vez
+    por ciclo (borda de subida, com debounce via `_donePending`) quando `isDoneCheck()` fica
+    verdadeiro, evitando martelar o Firestore a cada tick (1s) enquanto ficasse travado.
+  - `MainMenuController.RefreshEconomyOnMenuLoad` virou público (era só chamado no `Start`) —
+    `MainMenuCharacterPreview.BuildEnergyTimer` agora passa `onDone` chamando esse mesmo método
+    via `FindObjectOfType`, forçando um re-sync completo (Firestore) assim que o countdown local
+    zera, exatamente como se o menu tivesse acabado de abrir. `RefreshEconomyHuds` (já chamado
+    dentro dele) atualiza a fileira de ícones automaticamente; o próprio texto do timer se
+    recalcula sozinho no tick seguinte (`FormatEnergyCountdown` lê o estado atualizado).
+
+- 2026-07-20: Ajuste fino no HUD de moeda/diamante (`MainMenuController.BuildCurrencyHud`) —
+  posições exatas lidas pelo usuário direto no RectTransform em Play mode: `Row` sizeDelta
+  (670, 146.346), anchoredPosition (-6.099976, -6.099976); ícone de moeda (0, 0), valor da moeda
+  (142, 4.827); ícone de diamante (322, 4.827), valor do diamante (475, 4.827). A fórmula antiga
+  (`x + iconSize + gap`) não reproduzia esses valores — não são uniformes entre os dois blocos —
+  então `BuildCurrencyEntry` passou a receber `iconPos`/`valuePos` já prontos em vez de derivá-los
+  de `x`/`gap`. Escala (156px/54pt) mantida.
+
+- 2026-07-20: Ajustes finos no HUD superior (3ª rodada) — energia, fora da gaveta do
+  `CharacterPanel`:
+  - **Fileira de energia do mesmo tamanho do texto do timer** (pedido do usuário): `MainMenuCharacterPreview.EnergyIconSpacing` deixou de ser uma constante fixa — `BuildEnergyHud` agora mede a largura real do texto "Próxima energia em H:MM:SS" (`MeasureTimerTextWidth`, novo — TMP temporário invisível, medido via `GetPreferredValues`, destruído em seguida) e calcula o espaçamento negativo necessário pra fileira de 10 ícones somar essa mesma largura. Clamp em -60px por espaço (`EnergyIconSpacingMin`) evita que os ícones se sobreponham a ponto de virar uma mancha ilegível se o texto for muito estreito.
+  - **Máscara do timer**: `PlayerEconomyState.FormatEnergyCountdown` — horas sem zero à esquerda,
+    "00:00:00"→**"0:00:00"** (era `{totalHours:D2}`, agora `{totalHours}`).
+  - Nenhuma mudança afeta a gaveta do `CharacterPanel`.
+
+- 2026-07-20: Ajustes finos no HUD superior (2ª rodada), fora da gaveta do `CharacterPanel`:
+  - **Fundo da energia mais justo** (`BuildEnergyChipBackground`): padding lateral/vertical
+    reduzido de 24/14px pra **8px** nos três lados — o chip agora "abraça" a fileira de
+    ícones+timer em vez de sobrar espaço morto nas laterais.
+  - **Fundo da energia semi-transparente**: alpha de `theme.panelBackgroundAlt` reduzido pra
+    **0.6** (era opaco, alpha 1) — se integra melhor com o brilho variável da cena atrás,
+    mantendo contraste pro texto/ícones.
+  - **Ícones de energia ainda mais agrupados**: `EnergyIconSpacing` 0→**-10px** — como já não
+    havia espaço entre as bordas dos ícones (0px), "agrupar mais" só é possível com espaçamento
+    negativo (leve sobreposição das margens transparentes dos sprites).
+  - **Moeda/diamante revertidos pra lado a lado**: a rodada anterior tinha empilhado
+    verticalmente (moeda em cima, diamante embaixo); usuário pediu de volta a disposição
+    horizontal original (moeda esquerda, diamante direita) — escala 1.5x (156px/54pt) mantida.
+  - Nenhuma mudança afeta a gaveta do `CharacterPanel`.
+
+- 2026-07-20: Ajustes no HUD superior (moeda/diamante e energia), fora da gaveta do
+  `CharacterPanel`:
+  - **Moeda/diamante** (`MainMenuController.BuildCurrencyHud`): ícone/fonte escalados em x1.5
+    (104px/36pt → 156px/54pt); os dois blocos, que ficavam lado a lado, agora ficam **empilhados
+    verticalmente** (moeda em cima, diamante embaixo) — mesma âncora de canto superior direito
+    (dentro do `SafeArea`), só a orientação do empilhamento muda. `BuildCurrencyEntry` trocou o
+    parâmetro de offset horizontal (`x`) por vertical (`y`).
+  - **Chip de fundo atrás da energia** (`MainMenuCharacterPreview.BuildEnergyChipBackground`,
+    novo): fundo arredondado sólido (`theme.panelBackgroundAlt`, mesmo tom do painel de detalhe
+    do personagem) atrás da fileira de ícones de energia + texto "Próxima energia em MM:SS" —
+    antes ficavam soltos direto sobre o fundo da cena, com contraste baixo. Filho do `rootGo` da
+    fileira, criado antes dos ícones/timer (fica atrás por ordem de sibling), com stretch+offsets
+    calculados pra cobrir tanto a fileira quanto o timer acima dela.
+  - Fonte do timer "Próxima energia em MM:SS": 32→**40pt** (altura da caixa 48→56px junto).
+  - Espaçamento dos ícones de energia mantido agrupado (já reduzido numa rodada anterior).
+
+- 2026-07-20: 5ª rodada de ajustes finos na gaveta mobile do `CharacterPanel`:
+  - **Grid de Habilidades/Armas/Pets** (`MakeIconGrid`): célula 110→**220px** (dobrada de novo),
+    espaçamento 12→**6px** (ícones mais agrupados). Em 220px, 5 colunas não cabem mais na largura
+    do painel (`BottomDrawerWidth`), então `constraintCount` cai de 5→**3** só quando
+    `_bottomAnchored` — `02_SelectCharacter`/`03_Arsenal` continuam em 70px/5 colunas.
+  - **Bug real corrigido — fileiras de STR/AGI/SPD com tamanhos diferentes**: só a fileira de AGI
+    tinha `xMin` empurrado pra 0.16 (pra abrir espaço pro quadrado do HP ao lado), enquanto
+    STR/SPD ficavam no `xMin` padrão (0.05) — larguras diferentes entre as 3 fileiras faziam os
+    ícones/pips internos (frações da largura da própria fileira) renderizarem em tamanhos
+    visivelmente diferentes. Fix: as 3 fileiras agora usam o mesmo `xMin` (0.16), ficando
+    geometricamente idênticas; o HP continua na mesma faixa vertical do AGI, na margem que sobra
+    à esquerda.
+  - **Popup de detalhe de skill/arma/pet aumentado de novo**: largura (skill/pet 620→**780px**,
+    arma 650→**780px**), altura mínima (skill/pet 420→**520px**, arma 480→**560px**), ícone
+    (`BuildPopupIcon`, antes fixo em 96px pros dois modos) agora **170px** só quando
+    `_bottomAnchored` — proporcional ao resto do conteúdo maior. Área reservada pro bloco
+    ícone+nome (`SkillPopupHeaderHeight`/`WeaponPopupHeaderHeight`) virou propriedade computada a
+    partir do tamanho do ícone/fonte do nome, em vez de constante fixa. Fonte do título/nome:
+    34→**40pt**. Fonte da descrição (skill/pet): 28→**35pt**.
+  - Nenhuma mudança afeta `02_SelectCharacter`/`05_SelectOpponent`/`03_Arsenal`.
+
+- 2026-07-20: 4ª rodada de ajustes finos na gaveta mobile do `CharacterPanel`:
+  - **HP voltou a não usar pips** (pedido do usuário) — de volta ao estilo ícone+número
+    sobreposto (`BuildIconWithValue`, mesmo do modo painel-lateral) em vez do ícone+badge+pips
+    das rodadas anteriores. `InfoBlockRefs.hpPips` (campo temporário das rodadas anteriores)
+    removido — `refs.hp` agora serve os dois modos.
+  - **HP reposicionado**: quadrado pequeno à ESQUERDA do ícone de AGI, na mesma faixa vertical da
+    fileira de AGI — a fileira de AGI teve o início em X empurrado (0.05→0.16) pra abrir espaço
+    sem sobrepor. STR/AGI/SPD voltaram a ser só 3 fileiras (não mais 4 com HP), dividindo o
+    container inteiro.
+  - **Badge de STR/AGI/SPD não-quadrado**: `AttributePipBar.Build` trocou o parâmetro único
+    `badgeSize` por `badgeWidth`/`badgeHeight` separados (default 36×36, preserva todo chamador
+    existente) — gaveta mobile usa os valores exatos pedidos (width 61.425, height 64.675); a
+    borda de prestígio e o raio do RoundedRect acompanham proporcionalmente (`Mathf.Min` dos
+    dois lados).
+  - Fonte das linhas de PASSIVAS (Evasion/Counter/Reverse/etc, dentro de "VER DETALHES"):
+    17→**35pt** (só `_bottomAnchored`).
+  - Nenhuma mudança afeta `02_SelectCharacter`/`05_SelectOpponent`/`03_Arsenal`.
+
+- 2026-07-20: 3ª rodada de ajustes finos na gaveta mobile do `CharacterPanel`:
+  - `iconScale` de STR/AGI/SPD ("os atributos") voltou pro 2.5 original (HP continua em 3.75, o
+    meio-termo definido na rodada anterior — só STR/AGI/SPD foram pedidos de volta ao tamanho
+    de sempre).
+  - Fonte do número dentro do badge circular de STR/AGI/SPD: 16→**35pt** — `AttributePipBar.Build`
+    ganhou parâmetros `badgeSize`/`badgeFontSize` (novos, default preserva 36px/16pt pra todo
+    outro chamador — `05_SelectOpponent`/painel-lateral); o círculo do badge e a borda/texto de
+    prestígio crescem proporcionalmente ao `badgeFontSize` em vez de ficarem hardcoded em 36/44px,
+    pra o número sempre caber dentro do círculo.
+  - `MakeSectionTitle` ("HABILIDADES"/"ARMAS"/"PETS"/"PASSIVAS"): fonte 20→**40pt** (só
+    `_bottomAnchored`).
+  - Label do botão "VER DETALHES"/"OCULTAR DETALHES": fonte 18→**40pt** (só `_bottomAnchored`).
+  - Nenhuma mudança afeta `02_SelectCharacter`/`05_SelectOpponent`/`03_Arsenal`.
+
+- 2026-07-20: Mais ajustes finos na gaveta mobile do `CharacterPanel` (`_bottomAnchored` —
+  usuário ainda a chama de "MobileCharacterDrawer.cs", nome do componente já removido):
+  - Ícones de HP/STR/AGI/SPD reduzidos (`iconScale` 5→**3.75**) — usuário reportou grandes
+    demais na rodada anterior, mas pediu explicitamente pra NÃO voltar ao 2.5 original; 3.75 é o
+    meio-termo.
+  - **Bug real corrigido**: o painel Expandido (Habilidades/Armas/Pets) ficava mais ESTREITO que
+    o painel Compacto fechado, porque só o "Compact" tinha sido alargado (via offsets manuais)
+    na rodada anterior, enquanto o `Root` (que o Expanded sempre preenche 100%) continuou no
+    `PanelWidth` de 450px antigo. Fix: `Root` passou a usar uma constante própria
+    (`BottomDrawerWidth=865.7f`, a mesma largura real que o Compact já tinha) em vez de
+    `PanelWidth`; o "Compact" foi simplificado pra só preencher 100% do Root em X (offsets 0/0)
+    em vez de extrapolar as bordas manualmente — os dois ficam sempre com a MESMA largura agora,
+    por construção, sem risco de divergir de novo.
+  - Ícones de Habilidades/Armas/Pets na lista expandida aumentados (célula 70→110px, espaçamento
+    8→12px) — só quando `_bottomAnchored` (`MakeIconGrid`, que deixou de ser `static` pra ler
+    `_bottomAnchored`).
+  - Popup de detalhe de skill/arma/pet (o que abre ao clicar num ícone) aumentado no geral:
+    largura (skill 420→620px, arma 500→650px), altura mínima (skill 300→420px, arma 380→480px),
+    fonte da descrição (skill/pet 20→28pt), fonte do bloco "Efeito" (18→24pt valor, label
+    18→22pt), fonte do nome (28→34pt), fonte das linhas de stat da arma (20→26pt, com a altura de
+    linha ajustada de 24→32px junto pra não cortar). Todos os consts viraram propriedades que
+    variam por `_bottomAnchored` — `02_SelectCharacter`/`03_Arsenal` continuam exatamente nos
+    valores originais.
+
+- 2026-07-20: Ajustes finos no painel de detalhe do personagem (gaveta mobile do
+  `CharacterPanel`, modo `bottomAnchored` — usuário ainda se referia a ele como
+  "MobileCharacterDrawer.cs", nome do componente removido na rodada anterior; a funcionalidade
+  agora mora inteiramente em `CharacterPanel.cs`):
+  - RectTransform do "Compact" (faixa visível do estado fechado) ajustado pros valores exatos
+    lidos pelo usuário no Inspector em Play Mode: Left -206.857 / Pos Y 28 / Right -208.846 /
+    Height 230 — a faixa fica mais larga que o `Root` (450px) por design, sem problema (nada
+    corta, não há Mask no Root).
+  - Removidos do estado fechado: texto do nome do personagem e o badge/pill verde de Win Rate —
+    `BuildInfoBlock` agora pula esse header por completo quando `_bottomAnchored`.
+  - HP passou a usar o MESMO estilo ícone+badge+pips de STR/AGI/SPD (`AttributePipBar.Build`,
+    novo case `"HP"` em `AttributePipBar.IconForLabel` reaproveitando `HpIcon`) — antes usava um
+    coração+número sobreposto (`BuildIconWithValue`), estilo diferente dos outros 3. HP entra
+    como uma 4ª fileira à esquerda/acima da coluna STR/AGI/SPD. `iconScale` dobrado (2.5→5) nas 4
+    fileiras, e elas passaram a dividir o container INTEIRO (0-1, sem faixa reservada pro header
+    removido) em vez de ~56% da altura — preenche bem mais o espaço do painel.
+  - Nada disso afeta `02_SelectCharacter` (painel-lateral, `_bottomAnchored=false`) — todo ajuste
+    ficou dentro de `if (_bottomAnchored)`, o caminho antigo (header + HP-coração + 3 pips em
+    56% da altura) continua idêntico.
+
+- 2026-07-20: Redesenho mobile do HUD principal, 2ª rodada (usuário reportou que a 1ª ficou ruim
+  visualmente). Ver seção **Redesenho Mobile do HUD Principal** no CLAUDE.md pro detalhe completo.
+  Resumo:
+  - **Gaveta do personagem refeita do zero** — `MobileCharacterDrawer.cs` (componente novo da 1ª
+    rodada, reimplementava nome/HP/STR/AGI/SPD do zero e não mostrava skills/armas/pets)
+    **removido por completo**. `CharacterPanel` ganhou um modo `Setup(..., bottomAnchored: true)`
+    que reaproveita 100% da lógica já existente e testada (`BuildInfoBlock` com `AttributePipBar`
+    de verdade — ícone+badge+pips, nunca barras esticadas — `BuildSkillsAndWeapons` com Skills/
+    Armas/Pets em grade + o botão "VER DETALHES"/PASSIVAS já existente cobrindo o pedido de
+    "nível 2 de expansão" de graça), só espelhando a geometria de ancoragem: painel de largura
+    fixa (450px, igual de sempre) **centralizado horizontalmente** (não mais tela inteira) e
+    ancorado no RODAPÉ (era o topo, num painel lateral) — cabe no vão entre a coluna Chibers/
+    Arsenal/Replays e o botão Jogar. Compact/InfoBlock ficam colados na base (cresce pra cima);
+    Skills/Armas/Pets/Passivas ficam acima dele. `MainMenuController.Start()` não precisa mais de
+    `HideRootPermanently()` nem de um segundo componente — só um `Setup` com o parâmetro novo.
+  - Level/XP: barra reduzida de novo (era 320×130 grosso demais) pra 320×90 fina; "Level X" e
+    "10/16" viraram uma linha só lado a lado (Level esquerda, fração direita) em vez de "Level X"
+    sozinho + texto sobreposto na barra.
+  - Energia: espaçamento entre ícones reduzido de novo (2px → 0px, colados) — usuário pediu mais
+    agrupamento ainda.
+
+- 2026-07-20: Redesenho mobile do HUD principal de `01_MainMenu` (pedido do usuário — elementos
+  pequenos demais pra leitura confortável em celular). Ver seção própria **Redesenho Mobile do
+  HUD Principal** no CLAUDE.md pro detalhe completo. Resumo:
+  - Checagem prévia (pedida pelo usuário antes de travar pixels): `CanvasScaler` de TODAS as
+    Canvas do projeto usa `referenceResolution=1920×1080`/`matchWidthOrHeight=0`, e
+    `ProjectSettings` está em Auto Rotation — nenhuma Canvas trata Safe Area. Decisão do usuário:
+    manter esse sistema por enquanto (não migrar pra retrato), só ajustar os 4 elementos deste
+    HUD dentro dele; dívida técnica registrada em ROADMAP_FUTURO.md (Fase 7) pra decisão futura.
+  - `SafeArea.cs` novo (`Assets/Scripts/UI/`) — primeiro tratamento de safe area do projeto,
+    aplicado nos elementos ancorados em canto/borda deste HUD (moeda/diamante, gaveta do
+    personagem).
+  - Moeda/diamante: saiu do `CharacterPanel` (canto superior esquerdo do painel) e virou HUD
+    próprio no canto superior DIREITO da tela (`MainMenuController.BuildCurrencyHud`), ícone
+    52→104px, fonte 18→36pt.
+  - Energia: ícones 44→88px, espaçamento 6→2px (agrupar mais, sem alargar a fileira de 10), timer
+    16→32pt.
+  - Level/XP: caixa 280×76→320×130, fonte Level 18→32pt, fonte XP 14→24pt.
+  - Painel de detalhes do personagem → gaveta expansível no rodapé (`MobileCharacterDrawer.cs`,
+    novo componente): fechada mostra só nome+HP (não cobre o personagem), toque expande revelando
+    STR/AGI/SPD numa área acima (`iconScale` bem maior, 2.5→4.2), mesma técnica de crossfade por
+    `CanvasGroup` que o `CharacterPanel` já usava. `CharacterPanel` continua vivo em
+    `01_MainMenu` só pela infra de popup (replays/detalhe de skill-arma), agora escondido via
+    `HideRootPermanently()` — mesmo truque do `ArsenalController` em `03_Arsenal`.
+
+- 2026-07-20: Bug real corrigido — o timer de "próxima energia" no menu ficava sempre em branco.
+  `PlayerEconomyState` (coins/diamonds/energyCurrent/LastEnergyTimestampUtc) só era populado por
+  `LoginController.LoadEconomyRoutine` (roda só em `00_Login`) ou ao clicar Jogar
+  (`OnPlayButton`) — abrir/testar `01_MainMenu` direto (sem passar pela cena de login, fluxo comum
+  no Editor) deixava tudo no valor default de fábrica, então `FormatEnergyCountdown` sempre
+  retornava `null` e o texto nunca era escrito. Fix: `MainMenuController.Start()` agora dispara
+  `RefreshEconomyOnMenuLoad()` (busca wallet+energia de uma vez, `Task.WhenAll`) toda vez que o
+  menu carrega, não só nesses dois pontos. Reposicionado também a pedido do usuário: o timer
+  agora fica ACIMA da fileira de ícones de energia (era abaixo).
+
+- 2026-07-20: Timer de "próxima energia" (pedido do usuário) — texto ao vivo (`HH:MM:SS`) abaixo
+  da fileira de 10 ícones no menu, e o mesmo texto dentro do popup que abre ao clicar Jogar com
+  energia zerada (tanto o de confirmar gasto de diamante quanto o de saldo insuficiente). Novo
+  componente genérico `CountdownLabel` (chama um `Func<string>` a cada 1s) reaproveitado nos dois
+  lugares via `PlayerEconomyState.FormatEnergyCountdown`. `PlayerEconomyState` ganhou
+  `LastEnergyTimestampUtc`/`RegenIntervalHours` (espelhados por `EnergyService.GetOrRegenAsync`) —
+  o countdown entre uma sincronização e outra usa o relógio local só pra decoração; o valor real
+  gasto/creditado continua sempre revalidado contra o servidor, então isso não reabre a brecha de
+  trapaça do relógio do device que o resto do sistema já fecha.
+
+- 2026-07-20: Bug real corrigido (regra do Firestore, não código) — `[FirestoreService] Falha ao
+  salvar replay... Missing or insufficient permissions` a cada luta. A regra de
+  `replays/{replayId}` usava um único `allow write` (create+update+**delete**) exigindo
+  `request.resource.data.result in [...]`/`events is list`/etc. — mas numa operação de DELETE,
+  `request.resource` é `null` (não existe "dado novo" pra validar), então TODO delete era
+  rejeitado. `FirestoreService.TrimOldReplaysAsync` (apaga replays além do teto de 10) sempre
+  falhava nesse delete — o replay NOVO salvava normal (create passa na validação), só a limpeza
+  dos antigos nunca funcionava, e o erro (dentro do mesmo try/catch do save) aparentava "falha ao
+  salvar" por inteiro. Fix: regra separada em `allow create, update` (validação de dados) +
+  `allow delete` (só checagem de dono) — aplicado também em `opponents_index` por precaução (nada
+  apaga esse doc hoje, mesma armadilha existiria se algo passar a apagar no futuro). Regra
+  completa atualizada em ARQUITETURA.md — precisa ser colada de novo no Firebase Console.
+
+- 2026-07-20: Bug real corrigido — energia sempre voltava pro mesmo número (ex: sempre 9) depois
+  de jogar, não importa quantas vezes (reportado pelo usuário). Causa: `FirestoreService.
+  SaveCharacterAsync` gravava o documento do personagem com `SetAsync(map)` **sem merge** — uma
+  sobrescrita TOTAL do documento com só os campos do `CharacterDTO` (level/str/weapons/skills/
+  etc.), que nunca incluíram `energyCurrent`/`lastEnergyTimestamp` (de propósito, ver
+  `EnergyService.cs`). Esse save dispara a cada luta (XP ganho) — então toda vez que uma batalha
+  terminava, os campos de energia gravados minutos antes eram apagados do documento, e a próxima
+  leitura (`EnergyService.GetOrRegenAsync`) achava "documento sem os campos ainda" e reinicializava
+  pra cheio, consumindo 1 de novo — sempre no mesmo número. Diagnosticado com logs temporários
+  `[EnergyDebug]` (adicionados e depois removidos nesta sessão) confirmando `hasCurrent=False
+  hasTimestamp=False` em toda chamada, mesmo o documento existindo. Fix: `SaveCharacterAsync` agora
+  usa `SetAsync(map, SetOptions.MergeAll)` — os campos do DTO continuam sendo sobrescritos
+  normalmente (todos presentes no payload a cada save), só os campos de FORA do DTO (energia)
+  deixam de ser apagados.
+  **Achados secundários no mesmo log** (pré-existentes, fora do escopo desta correção): (1)
+  `[FirestoreService] Falha ao salvar replay... Missing or insufficient permissions` — regra de
+  segurança do Firestore rejeitando o save de replay, precisa investigar separadamente; (2)
+  `[OpponentSearchService] Falha ao buscar adversários: The query requires an index` — falta um
+  índice composto no Firestore pra query de `opponents_index`; o próprio log já traz um link do
+  Console pra criar o índice com 1 clique.
+
+- 2026-07-20: Ícones de moeda/diamante (`CharacterPanel.BuildWalletBar`) e de energia
+  (`MainMenuCharacterPreview.BuildEnergyHud`) dobrados de tamanho (x2/y2), pedido do usuário —
+  26→52px e 22→44px respectivamente. `WalletBarHeight` (34→60px) cresceu junto pra caber o ícone
+  maior sem vazar da faixa; a fileira de energia não precisou de nenhum ajuste extra (largura/
+  altura/posição acima do Level-XP já são derivadas de `EnergyIconSize`).
+
+- 2026-07-19: Sistema de energia/moeda (HUD de moeda geral, diamante e energia, pedido do
+  usuário) — ver seção própria **Sistema de Energia/Moeda** no CLAUDE.md pro detalhe completo.
+  Resumo:
+  - `EnergySettings.asset` (`Assets/Resources/`) — balanceamento (10 energia, +1/2h,
+    `diamondCostToRefill` placeholder 20) editável no Inspector sem código novo.
+  - Moeda/diamante POR CONTA (`users/{uid}.coins/diamonds`, `WalletService.cs`, incremento
+    atômico via `FieldValue.Increment`); energia POR PERSONAGEM
+    (`users/{uid}/characters/{characterId}.energyCurrent/lastEnergyTimestamp`,
+    `EnergyService.cs`). Regeneração nunca lê o relógio do device — usa um probe com
+    `FieldValue.ServerTimestamp` + leitura forçada em `Source.Server` pra obter a hora real do
+    Firestore sem precisar de Cloud Function só pra isso; timestamp reancora em "agora" ao bater
+    o teto (evita reencher instantaneamente depois de ficar muito tempo parado no máximo) e
+    avança pelo tempo exato consumido enquanto abaixo do teto (preserva progresso parcial).
+  - `MainMenuController.OnPlayButton()` agora exige `AuthService.IsSignedIn` (decisão do usuário:
+    conta vira obrigatória pra jogar) e, com energia em 0, abre popup de confirmação pra gastar
+    diamante e reabastecer 1 energia — sem diamante suficiente, mensagem clara sem batalha.
+  - **TODO de segurança**: gasto de diamante (`WalletService.SpendDiamondsAsync`) é placeholder
+    client-writable — o projeto ainda não tem Cloud Functions implantadas. Decisão explícita do
+    usuário registrada em ARQUITETURA.md ("Moeda premium"), pra trocar por uma Function de
+    verdade na Fase 4/Monetização sem mudar a assinatura pro chamador.
+  - HUD: `CharacterPanel.BuildWalletBar` (ícone+número, canto superior esquerdo do Root, sempre
+    visível independente de Compact/Expanded) e
+    `MainMenuCharacterPreview.BuildEnergyHud` (10 ícones acima do Level/XP, esvazia/reenche da
+    direita pra esquerda). Ícones novos em `Assets/Resources/UI/Economy/{Coin,Diamond,Energy}.png`
+    (fornecidos pelo usuário), mesmo padrão `Resources.Load<Sprite>` já usado por
+    `AttributePipBar`.
+  - Limpeza tentada e **revertida**: apagar os 8 `SpriteRenderer` órfãos de `01_MainMenu.unity`
+    (`imgDiamond`/`imgBlackDiamond`/`imgPlusDiamond`/`imgEnergy`/`imgBlackEnergy`/`imgPlusEnergy`/
+    `imgQuest`/`imgPass`, GUIDs de sprite quebrados) por edição direta do `.unity` corrompeu a cena
+    (Unity acusou "Broken text PPtr"/"Transform child can't be loaded" ao reabrir) — um objeto
+    real ("Panel", com Animator + filhos como "Text (TMP)") estava intercalado no meio do
+    intervalo de linhas apagado, sem checagem individual antes da exclusão em massa. Cena
+    restaurada de um backup feito antes da edição; usuário decidiu deixar os 8 órfãos como estão
+    (inofensivos) em vez de arriscar nova edição de texto — ver CLAUDE.md.
+  - Bugs de compilação corrigidos: `EnergyService.GetOrRegenAsync` usava `out var` dentro de um
+    `&&` curto-circuitado (CS0165, unassigned local `storedCurrent`/`storedTimestamp` — o
+    compilador não correlaciona a bool resultante com o out-var em statements separados); e o
+    campo `MainMenuController.selectWeapons` (morto desde o cancelamento de `03_SelectWeapons`
+    em 2026-07-16, CS0414) foi removido, já que esta sessão mexeu em `MainMenuController` por
+    outro motivo mesmo (CLAUDE.md já pedia essa limpeza "se for mexer por outro motivo").
+
+- 2026-07-19: 3 ajustes no popup de REPLAYS (`CharacterPanel`), pedidos do usuário depois de
+  testar:
+  1. Ícone de play do cartão trocado de ">" (ASCII) pra um triângulo real rasterizado em runtime
+     (`UIShapeUtil.PlayTriangle`, mesmo espírito de `Star` já existente — não um glifo Unicode
+     "▶", que não é seguro nesta fonte TMP, mesmo risco já documentado com "★"/"☆"/"—" neste
+     projeto). Cor do botão trocada de `primaryAction` (vermelho) pra `secondaryButtonAlt`
+     (cinza-azulado) — não competir com o X de fechar do mesmo popup nem com o botão JOGAR do
+     menu, ambos vermelhos.
+  2. Palavra "Vitória"/"Derrota" na 2ª linha do cartão agora colorida (verde/vermelho, via
+     `<color>` rich text + `ColorUtility.ToHtmlStringRGB`), não só a faixa lateral — acessibilidade
+     pra daltonismo, pedido explícito do usuário.
+  3. Subtítulo novo abaixo do título "REPLAYS" mostrando o nome do personagem dono daquele
+     histórico (mesma resolução de profile — `_overrideProfile` ou `_holder.currentProfile` — que
+     `LoadAndShowReplaysAsync` já usa pra montar a query), já que o popup é reaberto pra qualquer
+     personagem selecionado no momento. Área da lista abaixo ajustada (56→76px reservados) pra
+     abrir espaço pro subtítulo.
+
+- 2026-07-18: Cartões do popup de REPLAYS aumentados de novo (pedido do usuário — "deixe
+  visualizar 3 e meio de card no primeiro momento"). `ReplayCardHeight` 84→**164px**, calculado a
+  partir da altura real da área rolável (`ReplayPopupHeight×0.86 − 56 ≈ 597.6px` com o popup
+  820×760 da rodada anterior) resolvendo `3.5×H + 3×spacing(8) = 597.6` — 3 cartões inteiros +
+  metade do 4º ficam visíveis sem rolar, o resto (até 10) acessível rolando. `ReplayAvatarSize`
+  52→96px, `ReplayPlayButtonSize` 58→72px; nome 22→30pt, linha de resultado 17→22pt, letra de
+  fallback 28→40pt, seta do play 28→34pt. Só constantes — mesma lógica/estrutura de antes.
+
+- 2026-07-18: Popup de REPLAYS aumentado (pedido do usuário — "pegar mais da tela do main menu
+  pode preencher bem") — painel de 480×520 pra 820×760 (canvas 1920×1080), título 26→32pt.
+  Cartões (`ReplayCardHeight`/`ReplayAvatarSize`/`ReplayPlayButtonSize`) de 64/38/44 pra 84/52/58,
+  nome 18→22pt, linha de resultado/data/duração 14→17pt, letra de fallback e seta do play 22→28pt,
+  rodapé 14→16pt — espaçamento de 8px entre cartões mantido intacto (`VerticalLayoutGroup.
+  spacing`, requisito explícito do pedido anterior). Só constantes/tamanhos — nenhuma mudança de
+  lógica.
+
+- 2026-07-18: Popup de REPLAYS redesenhado — cartões estilo "battle log" (Clash Royale) no lugar
+  de 1 linha de texto cru (`CharacterPanel.BuildReplayRow`): borda esquerda colorida por resultado
+  (verde/vermelho, 3px, altura inteira), avatar circular do OPONENTE (`ResolveOpponentIcon` — casa
+  `p2Snapshot.profileName` no `CharacterDatabase` e reaproveita o mesmo `PlayerProfile.previewIcon`
+  já usado em 02_SelectCharacter, recortado em círculo via `Mask` + `UIShapeUtil.RoundedRect(raio =
+  metade do lado)`, mesmo truque do badge de `AttributePipBar`; ajuste "cover" manual — calcula o
+  tamanho a partir da proporção real do sprite pra sempre cobrir os 38×38 inteiros, já que
+  `Image.preserveAspect` sozinho só faz "contain"), nome do oponente + linha de resultado/data/
+  duração, e um botão de play circular SEPARADO do cartão (sibling, não filho — só ele dispara
+  `PlayReplay`, cartão em si não é mais clicável). Fundo do cartão levemente mais claro que o
+  painel do popup (`Color.Lerp` com `Color.white`, mesmo truque de tint em runtime de
+  `CharacterCardButtonStyle`), cantos 8px, 8px de espaço entre cartões (já cobertos pelo
+  `VerticalLayoutGroup.spacing` existente). Rodapé novo "X de N replays salvos" (N =
+  `FirestoreService.MaxReplaysPerCharacter`).
+  **Duração em rounds reais, não estimada** (pedido explícito do usuário) — `CombatSimulator`
+  ganhou `RoundCount` (nº real de rounds simulados, lido no fim de `Simulate()`), propagado por
+  `CombatSceneLoader` → `AttackSequencer.lastCombatRoundCount` → `ReplayRecorder.Save` →
+  `ReplayDTO.roundCount` (persistido, mesmo padrão do `seed`). Replays salvos ANTES desta mudança
+  não têm o campo (lido como 0) — o cartão cai pra `eventCount` nesse caso, rotulado como "eventos"
+  (não "rounds"), pra nunca fabricar um número como se fosse round de verdade.
+  **Fallback sem ícone** (personagem removido/renomeado, ou sem sprite resolvido): letra "V"/"D"
+  no círculo, não um glyph de coroa/caveira — Unicode fora do ASCII básico já teve um bug real
+  documentado neste mesmo popup (`FormatTierTriplet`, travessão "—" virando glyph quebrado);
+  separador da 2ª linha também é "|" (ASCII), não "·"/"—", pelo mesmo motivo.
+  Não mexe em `ListReplaysAsync`/no fluxo de `PlayReplay` — só troca o item renderizado dentro da
+  lista já existente.
+
+- 2026-07-18: Botão "REPLAYS" movido de dentro do `CharacterPanel` (Expanded, abaixo de "VER
+  DETALHES") pra virar um botão próprio de `01_MainMenu` (pedido do usuário) — mesma coluna de
+  atalhos de "Chibers" (`Btn_SelectCharacter`)/"Arsenal" (`Btn_Arsenal`), logo abaixo deste último.
+  `MainMenuController.BuildReplaysMenuButton` posiciona o novo `Btn_Replays` a partir do
+  `Btn_Arsenal` já existente na cena (`GameObject.Find`, mesmo padrão de
+  `CombatSceneLoader.RandomizeArenaBackground`) — mesmo tamanho/âncora, deslocado pra baixo pelo
+  mesmo espaçamento vertical já usado entre Chibers e Arsenal (lido dos dois `RectTransform` em
+  runtime, com fallback fixo de 211.87px caso `Btn_SelectCharacter` não seja achado). Visual
+  replica `CharacterCardButtonStyle` manualmente (ícone placeholder + faixa de label + sombra via
+  `UIButtonShadowStyle`) em vez de reaproveitar aquele componente — seus campos `theme`/
+  `iconOverride` são `[SerializeField] private`, só wireáveis pelo Inspector em GameObjects já
+  existentes na cena, não dava pra configurar num GameObject novo criado por código.
+  `CharacterPanel` ganhou `public void ShowReplays()` (chama o mesmo fluxo de popup que antes só o
+  botão interno disparava) e perdeu o botão "REPLAYS"/`BuildReplaysButton` de dentro da seção
+  Habilidades/Armas/Pets — o popup de lista em si (`ShowReplayListLoading`/
+  `LoadAndShowReplaysAsync`/`PlayReplay`) não mudou, só quem o aciona.
+
+- 2026-07-18: Bug real corrigido — `FirestoreService.EnsurePersistence()` derrubava TODA
+  gravação/leitura da sessão (personagem, matchHistory, opponents_index, replay) com
+  `InvalidOperationException: The settings cannot be modified after calling non-static methods...`
+  sempre que `OpponentSearchService.FetchOpponentsAsync` (usa `FirebaseFirestore.DefaultInstance`
+  direto, sem passar por `FirestoreService`) rodava antes de qualquer save da sessão — ex: 1ª luta
+  depois de pular o login, ou Play Mode iniciado direto numa cena que não passa por
+  `00_Login`/`LoginController.SyncCharacterRoutine`. `EnsurePersistence()` agora marca
+  `_persistenceConfigured = true` ANTES de tentar (não depois) e envolve
+  `Db.Settings.PersistenceEnabled = true` num try/catch silencioso — falhar só significa que o
+  cache offline nativo não liga nesta sessão, sem derrubar a operação real de leitura/escrita.
+  Novo `FirestoreService.TryEnsurePersistence()` (wrapper público) chamado por
+  `OpponentSearchService` antes do próprio acesso direto ao Firestore, na ordem certa.
+
+- 2026-07-18: Sistema de replay (reprodução) — botão "REPLAYS" no `CharacterPanel` (01_MainMenu,
+  logo abaixo de "VER DETALHES"), completando a gravação implementada mais cedo no mesmo dia (ver
+  entrada abaixo). Clicar abre um popup (reaproveita a MESMA infra de `_popupOverlayGo`/
+  `_popupContentRoot`/`_popupPanelRt` já usada por `ShowSkillDetail`/`ShowWeaponDetail`, só com uma
+  lista rolável em vez de ícone+texto) que busca `FirestoreService.ListReplaysAsync` e mostra os
+  últimos replays daquele personagem (resultado + adversário + data); clicar num item reconstrói os
+  dois `PlayerProfile` (runtime, via novo `ReplaySnapshotConverter.ToRuntimeProfile` — mesmo
+  espírito de `PlayerProfileConverter.FromOpponentIndexMap`, casando por `profileName` no
+  `CharacterDatabase` e aplicando os stats/loadout CONGELADOS do snapshot em vez do progresso atual
+  do personagem) e carrega `04_CombatScenePVP`.
+  Novo canal cross-scene `ReplayPlaybackState` (`Assets/Scripts/Data/`) — deliberadamente um campo
+  estático puro, não um `ScriptableObject` em Resources (padrão de sempre do projeto): os dois
+  profiles reconstruídos usam os holders normais por baixo (`SelectedProfileHolder`/
+  `SelectedOpponentHolder` continuam intocados, então o personagem real do jogador nunca é
+  sobrescrito), só faltava um jeito de dizer "não rode `CombatSimulator`, use estes eventos já
+  prontos". `CombatSceneLoader.Initialize()` checa `ReplayPlaybackState.IsActive` ANTES do branch de
+  `useSimulator` — se ativo, pula a simulação inteira, usa os eventos gravados direto e consome
+  (`Clear()`) o estado, pra uma luta normal seguinte não herdar nada por engano.
+  `AttackSequencer` ganhou `isReplayPlayback` (setado por `CombatSceneLoader` nesse modo) — checado
+  logo no início de `OnCombatEnd`, pulando XP/`LocalSaveService.Save`/histórico de batalhas/gravação
+  de outro replay por completo (o `player1Profile` nesse momento é o profile RUNTIME reconstruído
+  do snapshot, não o personagem de verdade — tratá-lo como se fosse salvaria stats congelados por
+  cima do progresso real) e mostrando `ReplayEndPanel` (novo, `Assets/Scripts/UI/` — versão mínima
+  de `CombatResultPanel`, só "VITÓRIA/DERROTA de {nome} contra {nome}" + botão Voltar, sem
+  XP/level-up) em vez do painel normal.
+  `MainMenuController` ganhou o campo `characterDatabase` (`[SerializeField]`, precisa ser wireado
+  manualmente no Inspector com `Assets/ScriptableObjects/Databases/CharacterDatabase.asset` —
+  usado só por `ReplaySnapshotConverter` pra resolver o adversário de um replay; sem ele o botão
+  REPLAYS continua listando normalmente, só falha ao tentar reproduzir um item, com log de erro em
+  vez de travar).
+
+- 2026-07-18: Sistema de replay (gravação) — log de eventos completo de cada luta salvo em
+  `users/{uid}/characters/{characterId}/replays/{replayId}` (Opção B da análise, aprovada pelo
+  usuário: log completo em vez de seed+snapshot só, porque WeaponData/SkillData são rebalanceados
+  com frequência real no projeto — um replay reconstruído por seed divergiria do resultado
+  original assim que qualquer skill/arma usada naquela luta mudasse de valor). Novo `ReplayEventDTO`
+  (`Assets/Scripts/Combat/`) — formato salvo DESACOPLADO de `CombatEvent` (a classe de runtime),
+  com conversão via `CombatEventReplayConverter`; `type` gravado como string (nome do enum), não o
+  índice numérico, pra sobreviver a uma futura inserção no meio de `CombatEventType`.
+  `ReplayEventDTOMap.ToMap` só grava por evento os campos que fogem do valor-padrão (um `TurnStart`
+  vira só `{type, playerIndex}`) — evita o bloat de serializar sempre os ~30 campos de
+  `CombatEvent`/DTO como o `JsonUtility` do projeto faria. `ReplayDTO`/`ReplayPlayerSnapshotDTO`
+  (`Assets/Scripts/Data/`) guardam `createdAtTicks`, `opponentCharacterId`/`opponentName`,
+  `result` ("win"/"loss"), `seed` (capturado de verdade — `CombatSceneLoader` agora gera o seed
+  explicitamente antes de `CombatSimulator.Simulate()` em vez de deixar cair no default aleatório;
+  não é estritamente necessário pro replay, mas serve de auditoria/debug), `eventCount` e o
+  snapshot de stats/armas/skills/pets de cada jogador NO MOMENTO da luta (reaproveita
+  `PlayerProfileConverter.ToDTO`, já que `PlayerProfile`/`WeaponData`/`SkillData` são todos assets
+  vivos que mudam depois — replay não pode depender do estado atual deles). `ReplayRecorder`
+  (`Assets/Scripts/Backend/`) monta o DTO e chama `FirestoreService.SaveReplayAsync`, disparado em
+  `AttackSequencer.OnCombatEnd` (mesmo ponto/padrão fire-and-forget de `SaveMatchHistoryAsync`).
+  Rotação client-side (sem Cloud Function — projeto ainda não tem nenhuma implantada, ver
+  ARQUITETURA.md): a própria escrita, depois de gravar o replay novo, consulta os últimos por
+  `createdAtTicks` desc e apaga o que sobrar além de 10 por personagem (`FirestoreService.
+  TrimOldReplaysAsync`, `MaxReplaysPerCharacter=10`). Regras do Firestore novas (subcoleção
+  `replays` dentro de `characters/{characterId}`) e uma nota nova em ARQUITETURA.md documentando
+  que replay fabricado client-side (nenhuma validação server-side do CONTEÚDO ainda) é dívida
+  técnica conhecida/aceita por enquanto (dano cosmético, não money), a revisitar na Fase 8 junto do
+  anti-cheat de moeda. **Fora de escopo desta rodada**: a UI de "assistir" (botão, lista de
+  replays, tela que realimenta `CombatPlayer` a partir do `List<CombatEvent>` reconstruído por
+  `CombatEventReplayConverter.FromDTOList`) — só a gravação/persistência foi implementada; a
+  leitura/reprodução fica pra uma próxima tarefa.
+
 - 2026-07-18: Ajustes de layout no card de `05_SelectOpponent` (`SelectOpponentController.cs`):
   "Level X" movido do RightPanel pra cima do retrato do personagem (`LevelAbovePortrait`, nova
   faixa dourada centralizada, mesma largura do Portrait); Portrait escalado 1.5x (`PortraitScale`,

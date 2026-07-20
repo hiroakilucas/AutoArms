@@ -9,6 +9,8 @@ public class MainMenuCharacterPreview : MonoBehaviour
     public Transform spawnPoint;
     private GameObject currentCharacter;
     private GameObject levelXpHudGo;
+    private GameObject energyHudGo;
+    private readonly List<Image> _energyIcons = new List<Image>();
     [SerializeField] private SelectedProfileHolder selectedProfileHolder;
 
     // Troca rápida de personagem (2026-07-14, pedido do usuário) — setas laterais + arrastar o
@@ -62,6 +64,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
     {
         if (currentCharacter != null) Destroy(currentCharacter);
         if (levelXpHudGo != null) Destroy(levelXpHudGo);
+        if (energyHudGo != null) Destroy(energyHudGo);
         if (profile == null || profile.characterPrefab == null) return;
 
         currentCharacter = Instantiate(profile.characterPrefab, spawnPoint.position, Quaternion.identity);
@@ -72,6 +75,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         var animController = PrepareCharacterForPreview(currentCharacter);
         BuildClickReaction(currentCharacter, animController);
         BuildLevelXpHud(profile);
+        BuildEnergyHud();
     }
 
     // Remove os componentes de combate ativos (o personagem aqui é só um preview em Idle, nunca
@@ -107,8 +111,9 @@ public class MainMenuCharacterPreview : MonoBehaviour
         selectedProfileHolder.currentProfile = profile;
         StartCoroutine(SlideToCharacter(profile, direction));
 
-        // CharacterPanel (lado direito) só lê SelectedProfileHolder.currentProfile uma vez por
-        // RefreshAll — não escuta o holder sozinho, precisa ser cutucado manualmente.
+        // CharacterPanel (gaveta no rodapé, modo bottomAnchored — ver MainMenuController.Start)
+        // só lê SelectedProfileHolder.currentProfile uma vez por RefreshAll — não escuta o
+        // holder sozinho, precisa ser cutucado manualmente.
         var panel = FindObjectOfType<CharacterPanel>();
         if (panel != null) panel.Refresh();
 
@@ -145,8 +150,10 @@ public class MainMenuCharacterPreview : MonoBehaviour
 
         var oldCharacter = currentCharacter;
         var oldHud = levelXpHudGo;
+        var oldEnergyHud = energyHudGo;
         currentCharacter = null;
         levelXpHudGo = null;
+        energyHudGo = null;
 
         GameObject newCharacter = null;
         AnimationController newAnimController = null;
@@ -179,12 +186,14 @@ public class MainMenuCharacterPreview : MonoBehaviour
 
         if (oldCharacter != null) Destroy(oldCharacter);
         if (oldHud != null) Destroy(oldHud);
+        if (oldEnergyHud != null) Destroy(oldEnergyHud);
 
         currentCharacter = newCharacter;
         if (newCharacter != null)
         {
             BuildClickReaction(newCharacter, newAnimController);
             BuildLevelXpHud(profile);
+            BuildEnergyHud();
         }
 
         _isSliding = false;
@@ -311,12 +320,7 @@ public class MainMenuCharacterPreview : MonoBehaviour
         Color textColor = theme.textOnDark;
         Color goldColor = theme.currencyGold;
 
-        const float halfWidth = 8.888889f; // OrthographicSize(5) * aspecto 16:9
-        float centerXFraction = (CharacterCenterX + halfWidth) / (halfWidth * 2f);
-        // Acompanha CharacterGroundY: mesmo deslocamento em unidades de mundo vira o mesmo
-        // deslocamento em fração de tela (reposicionamento rígido do personagem, cabeça
-        // inclusa) — ver comentário de CalibratedGroundY/CalibratedYFraction acima.
-        float yFraction = CalibratedYFraction + (CharacterGroundY - CalibratedGroundY) / (2f * OrthographicSize);
+        ComputeHudFractions(out float centerXFraction, out float yFraction);
 
         var canvasGo = new GameObject("LevelXpHud");
         levelXpHudGo = canvasGo; // guardado pra SpawnCharacter destruir e reconstruir a cada troca rápida
@@ -332,12 +336,14 @@ public class MainMenuCharacterPreview : MonoBehaviour
         var rootGo = new GameObject("Root");
         rootGo.transform.SetParent(canvasGo.transform, false);
         var rrt = rootGo.AddComponent<RectTransform>();
-        // Caixa aumentada (2026-07-07): 240x56 → 280x76, pra caber o texto de XP dentro da
-        // barra com folga. Y calculado a partir de CharacterGroundY (yFraction acima), não
-        // mais um valor fixo — segue o personagem quando ele se move na tela.
+        // Caixa: 240x56 (original) → 280x76 (2026-07-07) → 320x130 (2026-07-20, 1ª rodada mobile)
+        // → 320x90 (2026-07-20, 2ª rodada — pedido do usuário: reduzir a altura da BARRA; "Level
+        // X" e "atual/necessário" viraram uma linha só lado a lado em vez de sobrepostos,
+        // liberando altura). Y calculado a partir de CharacterGroundY (yFraction acima), não mais
+        // um valor fixo — segue o personagem quando ele se move na tela.
         rrt.anchorMin = rrt.anchorMax = new Vector2(centerXFraction, yFraction);
         rrt.pivot = new Vector2(0.5f, 0.5f);
-        rrt.sizeDelta = new Vector2(280f, 76f);
+        rrt.sizeDelta = new Vector2(320f, 90f);
 
         // Fundo sólido (2026-07-07, era translúcido) — panelBackgroundAlt, mesma cor de fundo
         // do CharacterPanel, opaco.
@@ -345,31 +351,46 @@ public class MainMenuCharacterPreview : MonoBehaviour
         bg.sprite = UIShapeUtil.RoundedRect(panelBg, 16f);
         bg.type = Image.Type.Sliced;
 
+        // Linha única "Level X" + "atual/necessário" lado a lado (2026-07-20, pedido do usuário —
+        // era "Level X" sozinho numa linha, com o "atual/necessário" sobreposto dentro da própria
+        // barra abaixo). Level à esquerda, fração de XP à direita, mesma linha.
         var lvlGo = new GameObject("LevelText");
         lvlGo.transform.SetParent(rootGo.transform, false);
         var lrt = lvlGo.AddComponent<RectTransform>();
-        lrt.anchorMin = new Vector2(0.05f, 0.66f); lrt.anchorMax = new Vector2(0.95f, 0.96f);
+        lrt.anchorMin = new Vector2(0.06f, 0.58f); lrt.anchorMax = new Vector2(0.5f, 0.96f);
         lrt.offsetMin = lrt.offsetMax = Vector2.zero;
         var lvlTxt = lvlGo.AddComponent<TextMeshProUGUI>();
         lvlTxt.text = $"Level {p.level}";
-        lvlTxt.fontSize = 18; lvlTxt.fontStyle = FontStyles.Bold;
+        lvlTxt.fontSize = 28; lvlTxt.fontStyle = FontStyles.Bold;
         lvlTxt.color = textColor;
-        lvlTxt.alignment = TextAlignmentOptions.Center;
-
-        // Barra engordada (2026-07-07): ocupava só 0.14-0.42 (~16px de 56px) — agora
-        // 0.08-0.58 (~38px de 76px), espaço suficiente pra caber o texto "atual/necessário"
-        // centralizado dentro dela, além de mais legível por si só.
-        var barBgGo = new GameObject("BarBg");
-        barBgGo.transform.SetParent(rootGo.transform, false);
-        var bbrt = barBgGo.AddComponent<RectTransform>();
-        bbrt.anchorMin = new Vector2(0.06f, 0.08f); bbrt.anchorMax = new Vector2(0.94f, 0.58f);
-        bbrt.offsetMin = bbrt.offsetMax = Vector2.zero;
-        var barBgImg = barBgGo.AddComponent<Image>();
-        barBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 8f);
-        barBgImg.type = Image.Type.Sliced;
+        lvlTxt.alignment = TextAlignmentOptions.MidlineLeft;
 
         int req = XpSystem.XpRequired(p.level);
         float pct = req > 0 ? Mathf.Clamp01((float)p.xpCurrent / req) : 0f;
+
+        var xpLabelGo = new GameObject("XpText");
+        xpLabelGo.transform.SetParent(rootGo.transform, false);
+        var xlrt = xpLabelGo.AddComponent<RectTransform>();
+        xlrt.anchorMin = new Vector2(0.5f, 0.58f); xlrt.anchorMax = new Vector2(0.94f, 0.96f);
+        xlrt.offsetMin = xlrt.offsetMax = Vector2.zero;
+        var xpTxt = xpLabelGo.AddComponent<TextMeshProUGUI>();
+        xpTxt.text = $"{p.xpCurrent}/{req}";
+        xpTxt.fontSize = 28; xpTxt.fontStyle = FontStyles.Bold;
+        xpTxt.color = textColor;
+        xpTxt.alignment = TextAlignmentOptions.MidlineRight;
+
+        // Barra fina (2026-07-20, era 0.08-0.58 = ~44px de 76px — bem mais grossa, porque antes
+        // precisava caber o texto "atual/necessário" dentro dela; agora que o texto subiu pra
+        // linha de cima, a barra só precisa ser uma indicação visual fina) ocupando a largura
+        // toda logo abaixo da linha de texto.
+        var barBgGo = new GameObject("BarBg");
+        barBgGo.transform.SetParent(rootGo.transform, false);
+        var bbrt = barBgGo.AddComponent<RectTransform>();
+        bbrt.anchorMin = new Vector2(0.06f, 0.14f); bbrt.anchorMax = new Vector2(0.94f, 0.34f);
+        bbrt.offsetMin = bbrt.offsetMax = Vector2.zero;
+        var barBgImg = barBgGo.AddComponent<Image>();
+        barBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 6f);
+        barBgImg.type = Image.Type.Sliced;
 
         var fillGo = new GameObject("Fill");
         fillGo.transform.SetParent(barBgGo.transform, false);
@@ -377,21 +398,257 @@ public class MainMenuCharacterPreview : MonoBehaviour
         frt.anchorMin = new Vector2(0f, 0f); frt.anchorMax = new Vector2(Mathf.Max(pct, 0.001f), 1f);
         frt.offsetMin = frt.offsetMax = Vector2.zero;
         var fillImg = fillGo.AddComponent<Image>();
-        fillImg.sprite = UIShapeUtil.RoundedRect(goldColor, 7f);
+        fillImg.sprite = UIShapeUtil.RoundedRect(goldColor, 5f);
         fillImg.type = Image.Type.Sliced;
+    }
 
-        // Texto de XP dentro da própria barra (2026-07-07), "atual/necessário" — sobreposto ao
-        // fundo+preenchimento (criado depois do Fill, então desenha por cima).
-        var xpTxtGo = new GameObject("XpText");
-        xpTxtGo.transform.SetParent(barBgGo.transform, false);
-        var xrt = xpTxtGo.AddComponent<RectTransform>();
-        xrt.anchorMin = Vector2.zero; xrt.anchorMax = Vector2.one;
-        xrt.offsetMin = xrt.offsetMax = Vector2.zero;
-        var xpTxt = xpTxtGo.AddComponent<TextMeshProUGUI>();
-        xpTxt.text = $"{p.xpCurrent}/{req}";
-        xpTxt.fontSize = 14; xpTxt.fontStyle = FontStyles.Bold;
-        xpTxt.color = textColor;
-        xpTxt.alignment = TextAlignmentOptions.Center;
+    // Fração de tela (X centralizado no personagem, Y calibrado por CharacterGroundY) usada
+    // tanto por BuildLevelXpHud quanto por BuildEnergyHud — extraído (2026-07-19) pra não
+    // duplicar a fórmula entre os dois HUDs empilhados acima da cabeça do personagem.
+    private void ComputeHudFractions(out float centerXFraction, out float yFraction)
+    {
+        const float halfWidth = 8.888889f; // OrthographicSize(5) * aspecto 16:9
+        centerXFraction = (CharacterCenterX + halfWidth) / (halfWidth * 2f);
+        // Acompanha CharacterGroundY: mesmo deslocamento em unidades de mundo vira o mesmo
+        // deslocamento em fração de tela (reposicionamento rígido do personagem, cabeça
+        // inclusa) — ver comentário de CalibratedGroundY/CalibratedYFraction acima.
+        yFraction = CalibratedYFraction + (CharacterGroundY - CalibratedGroundY) / (2f * OrthographicSize);
+    }
+
+    // Fileira de energia (2026-07-19, pedido do usuário) — 10 ícones. Esvazia da DIREITA pra
+    // ESQUERDA ao consumir e reenche na mesma ordem (os ícones preenchidos ficam sempre "colados"
+    // à esquerda) — ícone na posição visual i (0=esquerda...9=direita) aparece cheio quando
+    // i < EnergyCurrent, vazio/acinzentado caso contrário. Lê PlayerEconomyState (cache síncrono
+    // populado por EnergyService/LoginController.LoadEconomyRoutine) — não faz nenhuma chamada ao
+    // Firestore por conta própria.
+    // 2026-07-20 (bug real corrigido): ANTES ficava no topo da pilha vertical acima do
+    // personagem, seguindo `ComputeHudFractions` (mesmo ponto do LevelXpHud) — mudar o aspect
+    // ratio da tela desalinhava o chip porque parte do cálculo (`.../1080f` em BuildEnergyHud)
+    // assumia Canvas sempre com 1080 de altura, o que só é verdade em 16:9 exato (ver comentário
+    // de BuildEnergyHud). Passou a usar uma âncora FIXA no topo-centro da tela (mesmo princípio
+    // do BtnJogar/BuildCurrencyHud) — não segue mais o personagem, mas fica estável em qualquer
+    // resolução/aspect ratio.
+    // 2026-07-20 (2ª rodada, reorganização do HUD superior): alinhado na MESMA altura de
+    // moeda/diamante em vez de ficar centralizado sozinho mais acima — ver
+    // EnergyHudTopAlignmentOffset. O texto "Próxima energia em H:MM:SS" deixou de ficar
+    // permanente na tela — primeiro virou um tooltip inline por toque, depois (mesmo dia, 2ª
+    // rodada) um popup modal centralizado (ver OnEnergyRowTapped/
+    // MainMenuController.ShowEnergyStatusPopup) porque o tooltip inline ficava cortado perto do
+    // topo da tela.
+    private const int EnergySlotCount = 10;
+    // 88f (2026-07-20, era 44f) — redesenho mobile, pedido do usuário: dobrar de novo.
+    private const float EnergyIconSize = 88f;
+    // Não é mais fixo (2026-07-20, 4ª rodada) — o espaçamento agora é CALCULADO em
+    // MeasureTimerTextWidth/BuildEnergyHud, pra fileira de ícones ficar do mesmo tamanho do
+    // texto "Próxima energia em H:MM:SS" (pedido do usuário, de quando esse texto ainda era
+    // exibido ao lado da fileira — ver acima). Clamp evita sobreposição a ponto de virar uma
+    // mancha ilegível se o texto for mais estreito que ~40% da largura natural da fileira.
+    private const float EnergyIconSpacingMin = -60f;
+    // Só usado por MeasureTimerTextWidth agora (sizing da fileira) — o texto em si não é mais
+    // renderizado nesse tamanho (o popup usa a fonte padrão de BuildPopup). Mantido em 32
+    // (valor já em uso antes desta rodada) pra não alterar o espaçamento dos ícones já calibrado.
+    private const float EnergyTimerFontSize = 32f;
+    // Altura-alvo do CENTRO da fileira de energia, em distância abaixo do topo da tela — alinhada
+    // com moeda/diamante (2026-07-20, pedido do usuário: "mesma linha horizontal", em vez de
+    // energia ficar centralizada mais acima e moeda/diamante à direita separadamente). Calculado
+    // a partir dos valores exatos de `MainMenuController.BuildCurrencyHud` (Row anchoredPosition
+    // -6.099976, sizeDelta.y 146.346, ícone de moeda em y=0 / diamante em y=4.827 dentro do Row):
+    // moeda fica ~79.27 abaixo do topo da tela, diamante ~74.45 — usa a média (~76.86). Os dois
+    // HUDs são classes/Canvas SEPARADOS (sem acoplamento automático) — se os valores de
+    // BuildCurrencyHud mudarem no futuro, reconferir esta constante também.
+    private const float EnergyHudTopAlignmentOffset = 76.86f;
+    private static readonly Color EnergyEmptyTint = new Color(0.3f, 0.3f, 0.3f, 0.55f);
+
+    private void BuildEnergyHud()
+    {
+        var theme = ResolveTheme();
+        if (theme == null) return;
+
+        var energySprite = Resources.Load<Sprite>("UI/Economy/Energy");
+
+        float rowHeight = EnergyIconSize;
+
+        var canvasGo = new GameObject("EnergyHud");
+        energyHudGo = canvasGo;
+        canvasGo.transform.SetParent(transform, false);
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 4;
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        // Mede a largura real do texto do timer ANTES de decidir o espaçamento dos ícones
+        // (2026-07-20, pedido do usuário: "deixar [a fileira] do mesmo tamanho que o texto
+        // 'Próxima energia em 0:00:00'") — e só então calcula o espaçamento negativo necessário
+        // pra fileira de EnergySlotCount ícones somar essa mesma largura.
+        float timerTextWidth = MeasureTimerTextWidth(canvasGo);
+        float rowWidth = Mathf.Max(timerTextWidth, EnergyIconSize);
+        float spacing = (rowWidth - EnergySlotCount * EnergyIconSize) / (EnergySlotCount - 1);
+        spacing = Mathf.Max(spacing, EnergyIconSpacingMin);
+        rowWidth = EnergySlotCount * EnergyIconSize + (EnergySlotCount - 1) * spacing;
+
+        var rootGo = new GameObject("Root");
+        rootGo.transform.SetParent(canvasGo.transform, false);
+        var rrt = rootGo.AddComponent<RectTransform>();
+        // Âncora FIXA no topo-centro da tela (2026-07-20, bug real corrigido — ver comentário
+        // acima do método) em vez do ponto fracionário calculado a partir da posição do
+        // personagem (`ComputeHudFractions`) — esse cálculo antigo somava um offset em PIXELS
+        // dividido por 1080 pra virar fração (`.../1080f`), assumindo que o Canvas sempre mede
+        // exatamente 1080 de altura; com CanvasScaler em ScaleWithScreenSize + matchWidthOrHeight
+        // travado na LARGURA, mudar o aspect ratio (ex: tela mais larga no Free Aspect do Editor)
+        // faz a altura REAL do Canvas variar (fica MENOR que 1080 numa tela mais larga), então a
+        // fração calculada não batia mais com a altura verdadeira — o chip de energia "flutuava"
+        // pra cima/baixo do lugar certo. (0.5, 1) é uma âncora de ponto único num canto real da
+        // tela (mesmo princípio do BtnJogar/`BuildCurrencyHud`, ambos com âncora em canto fixo),
+        // então fica estável em qualquer resolução/aspect ratio — só não segue mais o personagem
+        // (LevelXpHud continua seguindo, ver BuildLevelXpHud/ComputeHudFractions; não fazia parte
+        // do pedido). anchoredPosition.y usa EnergyHudTopAlignmentOffset (2ª rodada) em vez de
+        // reservar espaço pro texto do timer acima — ele não é mais permanente (virou tooltip).
+        rrt.anchorMin = rrt.anchorMax = new Vector2(0.5f, 1f);
+        rrt.pivot = new Vector2(0.5f, 0.5f);
+        rrt.sizeDelta = new Vector2(rowWidth, rowHeight);
+        rrt.anchoredPosition = new Vector2(0f, -EnergyHudTopAlignmentOffset);
+
+        BuildEnergyChipBackground(rootGo, theme);
+
+        _energyIcons.Clear();
+        for (int i = 0; i < EnergySlotCount; i++)
+        {
+            var iconGo = new GameObject($"Slot{i}");
+            iconGo.transform.SetParent(rootGo.transform, false);
+            var irt = iconGo.AddComponent<RectTransform>();
+            irt.anchorMin = irt.anchorMax = new Vector2(0f, 0.5f);
+            irt.pivot = new Vector2(0f, 0.5f);
+            irt.sizeDelta = new Vector2(EnergyIconSize, EnergyIconSize);
+            irt.anchoredPosition = new Vector2(i * (EnergyIconSize + spacing), 0f);
+            var img = iconGo.AddComponent<Image>();
+            img.sprite = energySprite;
+            img.preserveAspect = true;
+            _energyIcons.Add(img);
+        }
+
+        // Botão invisível cobrindo a fileira inteira (2026-07-20, pedido do usuário — "adicionar
+        // interação de toque... reaproveitar o mesmo padrão de tooltip por clique que o Arsenal
+        // já usa") — toca a fileira pra abrir o popup com o tempo exato (ver OnEnergyRowTapped).
+        // Usa uma Image transparente (`Color.clear`) como `targetGraphic` só pra dar área de
+        // clique — sem ela o Button não teria nenhum Graphic raycastável próprio pra capturar o
+        // toque.
+        var tapGo = new GameObject("TapArea");
+        tapGo.transform.SetParent(rootGo.transform, false);
+        var tapRt = tapGo.AddComponent<RectTransform>();
+        tapRt.anchorMin = Vector2.zero; tapRt.anchorMax = Vector2.one;
+        tapRt.offsetMin = tapRt.offsetMax = Vector2.zero;
+        var tapImg = tapGo.AddComponent<Image>();
+        tapImg.color = Color.clear;
+        var tapBtn = tapGo.AddComponent<Button>();
+        tapBtn.targetGraphic = tapImg;
+        tapBtn.transition = Selectable.Transition.None;
+        tapBtn.onClick.AddListener(OnEnergyRowTapped);
+
+        // Watcher sempre ativo, sem parte visual (2026-07-20, 2ª rodada — ver comentário de
+        // BuildEnergyResyncWatcher) — mantém vivo o re-sync automático quando o countdown chega
+        // em zero, independente de o jogador ter tocado a fileira ou não.
+        BuildEnergyResyncWatcher(rootGo);
+
+        ApplyEnergyFill();
+    }
+
+    // Toque na fileira de energia (2026-07-20, pedido do usuário) — mostra o tempo exato até a
+    // próxima energia. 2ª rodada (mesmo dia): o tooltip inline (ancorado ACIMA da fileira, ver
+    // histórico no CHANGELOG) ficava cortado/inacessível perto do topo da tela — trocado por um
+    // popup modal CENTRALIZADO na tela (overlay escurecido + painel + botão "OK"), o mesmo padrão
+    // que os outros popups do projeto (REPLAYS, mensagens de energia esgotada) já usam. O popup
+    // mora em `MainMenuController` (mesmo Canvas/estilo dos outros); aqui só decide SE deve abrir.
+    // Cheio (10/10) não tem nada regenerando — toque não faz nada nesse caso (pedido explícito do
+    // usuário), em vez de abrir um popup mostrando "Energia cheia".
+    private void OnEnergyRowTapped()
+    {
+        if (PlayerEconomyState.EnergyCurrent >= PlayerEconomyState.EnergyMax) return;
+        FindObjectOfType<MainMenuController>()?.ShowEnergyStatusPopup();
+    }
+
+    // Substitui o antigo tooltip inline (removido nesta rodada) como dono do CountdownLabel que
+    // dispara o re-sync automático quando o countdown chega em zero (`EnergyCountdownAtZero`/
+    // `RefreshEconomyOnMenuLoad`, bug corrigido numa rodada anterior). GameObject sempre ATIVO,
+    // sem Text/Image nenhum — só existe pra manter esse `Update()` rodando em segundo plano,
+    // independente do popup estar aberto ou fechado (ele só abre por toque agora, ver
+    // OnEnergyRowTapped/MainMenuController.ShowEnergyStatusPopup).
+    private void BuildEnergyResyncWatcher(GameObject parent)
+    {
+        var watcherGo = new GameObject("ResyncWatcher");
+        watcherGo.transform.SetParent(parent.transform, false);
+        watcherGo.AddComponent<CountdownLabel>().Init(null, null,
+            isDoneCheck: PlayerEconomyState.EnergyCountdownAtZero,
+            onDone: () => FindObjectOfType<MainMenuController>()?.RefreshEconomyOnMenuLoad());
+    }
+
+    // Mede a largura que o texto do timer vai ocupar usando um TMP temporário/invisível (alpha
+    // 0, destruído logo em seguida) — precisa estar numa hierarquia ATIVA (filho de canvasGo,
+    // já ativo) pra TMP_Text.Awake() resolver o fontAsset antes de GetPreferredValues()
+    // funcionar (mesma pegadinha já documentada em CharacterPanel.ShowSkillDetail sobre popups
+    // desativados). "0:00:00" é o texto de referência: dígitos são intercambiáveis em largura na
+    // fonte do projeto, então qualquer combinação de MM:SS mede quase o mesmo.
+    private float MeasureTimerTextWidth(GameObject canvasGo)
+    {
+        var probeGo = new GameObject("TimerWidthProbe");
+        probeGo.transform.SetParent(canvasGo.transform, false);
+        var probeTxt = probeGo.AddComponent<TextMeshProUGUI>();
+        probeTxt.fontSize = EnergyTimerFontSize;
+        probeTxt.fontStyle = FontStyles.Bold;
+        probeTxt.color = new Color(0f, 0f, 0f, 0f);
+        Vector2 size = probeTxt.GetPreferredValues("Próxima energia em 0:00:00", 0f, 0f);
+        Destroy(probeGo);
+        return size.x;
+    }
+
+    // Chip de fundo atrás da fileira de ícones (2026-07-20, pedido do usuário — hoje ficam soltos
+    // direto sobre o fundo da cena, com contraste baixo). Mesmo tom do painel de detalhe do
+    // personagem (`CharacterPanel.PanelBgColor` = `theme.panelBackgroundAlt`) pra manter
+    // consistência visual entre os dois HUDs, mas semi-transparente (2026-07-20, 2ª rodada —
+    // pedido do usuário: "integrar melhor com o brilho variável da cena atrás, mantendo
+    // contraste suficiente"; era opaco). Filho do PRÓPRIO rootGo (que já tem o tamanho exato da
+    // fileira de ícones) e criado ANTES dos ícones, então renderiza atrás deles (ordem de sibling
+    // no Canvas). Stretch (0,0)-(1,1) com offsets NEGATIVOS/POSITIVOS pra "abraçar" o conteúdo
+    // com um padding mínimo (2026-07-20, 3ª rodada: não reserva mais espaço extra em cima pro
+    // timer — ele deixou de ser permanente, virou popup por toque, ver OnEnergyRowTapped/
+    // MainMenuController.ShowEnergyStatusPopup).
+    private void BuildEnergyChipBackground(GameObject rootGo, UITheme theme)
+    {
+        const float chipPadX = 8f;
+        const float chipPadY = 8f;
+
+        var chipGo = new GameObject("ChipBg");
+        chipGo.transform.SetParent(rootGo.transform, false);
+        var chipRt = chipGo.AddComponent<RectTransform>();
+        chipRt.anchorMin = Vector2.zero; chipRt.anchorMax = Vector2.one;
+        chipRt.offsetMin = new Vector2(-chipPadX, -chipPadY);
+        chipRt.offsetMax = new Vector2(chipPadX, chipPadY);
+        var chipImg = chipGo.AddComponent<Image>();
+        var chipColor = theme.panelBackgroundAlt;
+        chipColor.a = 0.6f;
+        chipImg.sprite = UIShapeUtil.RoundedRect(chipColor, 20f);
+        chipImg.type = Image.Type.Sliced;
+    }
+
+    // Só recolore os ícones já construídos (sem destruir/reconstruir a fileira) — chamado pelo
+    // MainMenuController depois de consumir/reabastecer energia, e por RefreshEnergyHud (público)
+    // pra qualquer outro chamador externo.
+    private void ApplyEnergyFill()
+    {
+        int current = Mathf.Clamp(PlayerEconomyState.EnergyCurrent, 0, EnergySlotCount);
+        for (int i = 0; i < _energyIcons.Count; i++)
+            _energyIcons[i].color = i < current ? Color.white : EnergyEmptyTint;
+    }
+
+    // Público (2026-07-19) — MainMenuController chama depois de EnergyService.ConsumeOneAsync/
+    // RefillOneAsync pra refletir o novo valor sem esperar uma troca de personagem/recarregar a
+    // cena. No-op silencioso se a fileira ainda não foi construída (personagem ainda carregando).
+    public void RefreshEnergyHud()
+    {
+        if (_energyIcons.Count == 0) return;
+        ApplyEnergyFill();
     }
 
     // MainMenuController.theme já é comprovadamente confiável (CharacterPanel depende dele e
