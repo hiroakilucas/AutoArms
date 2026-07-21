@@ -4,10 +4,17 @@ Documento de referência para o sistema de monetização do AutoArms (Fase 4).
 
 ## Status
 - [x] UI da loja (placeholder) — implementada 2026-07-20 (`06_Loja`/`ShopController.cs`/
-  `ShopCardUI.cs`, 5 abas, grid de cards, navegação sem reload, compra fake local em memória).
-  Falta: aprovação de layout, arte final dos ícones/cards, ligação com WalletService real.
+  `ShopCardUI.cs`, 5 abas, grid de cards, navegação sem reload). Falta: aprovação de layout, arte
+  final dos ícones/cards.
+- [x] Persistência real do RESULTADO da compra (2026-07-21) — diamante creditado de verdade
+  (`WalletService.AddDiamondsAsync`), desbloqueios/passe/progressão gravados em `users/{uid}`
+  (`ShopStateService.cs`) em vez de resetar a cada sessão. Não é o mesmo que "gateway de pagamento
+  real" abaixo — o clique em "Comprar" ainda não processa nenhum pagamento de verdade, só grava o
+  resultado como se tivesse pago.
 - [ ] Compra real de diamante (Google Play Billing / Apple StoreKit) — bloqueado até validação server-side (Fase 8)
-- [ ] Gasto de diamante (skip, 1.5x, slots, personagens) — pode ser implementado com o WalletService atual (placeholder, mas debita valor já existente, não vende)
+- Desbloqueios/Passes/Progressão (seções 2-4) continuam modelados como **cash direto** (IAP), não
+  gastam diamante — ver "Itens em aberto" abaixo (decisão já tomada, não é mais uma pergunta em
+  aberto).
 
 ## 1. Loja de diamantes (cash)
 | Diamantes | Preço (R$) | R$/diamante |
@@ -96,10 +103,38 @@ Ordem de implementação:
    compra local (sem gravar no Firestore)
 2. Aprovação de layout
 3. Substituição de placeholder por arte final (Leonardo AI)
-4. Ligação com WalletService real e, para diamante, gateway de pagamento
-   (Fase 8)
+4. ~~Ligação com WalletService real~~ — feito 2026-07-21 (`ShopStateService.cs`,
+   `WalletService.AddDiamondsAsync`); falta só o gateway de pagamento real (Fase 8) — sem ele, a
+   escrita no Firestore acontece sem nenhum pagamento de verdade ter ocorrido.
+
+## 10. Continuar jogando com energia zerada (diamante, por personagem)
+
+Preço PROGRESSIVO por dia, POR PERSONAGEM (implementado 2026-07-21, `EnergySettings.
+refillCostTier1/2/3Plus`, `EnergyService.GetRefillCostAsync`/`PayToRefillAsync`): 1ª vez no dia
+(hora do servidor) = 10 diamantes, 2ª = 20, 3ª em diante = 40 (travado). Contador reseta sozinho à
+meia-noite (hora do servidor, nunca o device) — não é uma aba da Loja, é o popup que aparece ao
+clicar "Jogar" com energia em 0 (`MainMenuController.ShowRefillConfirmPopup`).
+
+## 11. Novo Sorteio no Level-Up (diamante)
+
+Implementado 2026-07-21 (`CombatResultPanel.ShowLevelUpChoice`) — desenho final divergiu do
+"Reset de Level Up" do `ROADMAP_FUTURO.md` Fase 4 (ver nota lá): custo fixo em 3 degraus (1º
+sorteio novo = 50 diamantes, 2º = 100, 3º = 200), travado depois do 3º uso por level-up, em vez de
+dobrar indefinidamente. Refaz as N caixas do level-up (não só 2) com a mesma roleta de revelação.
+
+## 12. Resetar Personagem (gera moeda — não é o "Reset de Build" do roadmap)
+
+Implementado 2026-07-21 (`CharacterPanel`, botão no painel de detalhamento) — mecanismo PARALELO
+ao "Reset de Build" ainda não implementado (`ROADMAP_FUTURO.md` Fase 4): reseta o personagem pro
+Level 1 (não mantém o nível atual) e GERA `nível anterior × CharacterResetSettings.coinsPerLevel`
+(10) moedas, em vez de custar diamante. Popup de confirmação explícita antes de executar (ação
+destrutiva).
 
 ## Itens em aberto
-- Definir se skip/1.5x/passe é debitado em diamante ou pago direto em cash
-  — hoje modelado como cash direto (IAP), não gasta diamante.
+- ~~Definir se skip/1.5x/passe é debitado em diamante ou pago direto em cash~~ — resolvido: cash
+  direto (IAP), não gasta diamante. O que ERA fake (o estado da compra em si, não o valor gasto)
+  passou a persistir de verdade em 2026-07-21 — ver seção Status.
 - Confirmar arte de ícones de raridade (caixa/baú por cor, seção 8).
+- Personagens (seção 5/aba Personagens da Loja) continuam sem persistência real e sem opção de
+  compra com diamante — só R$ (raridades) e moeda (card "Próximo Personagem", também sem persistir
+  ainda). Fora do escopo até agora ("NÃO FAZER AINDA", pedido explícito do usuário 2026-07-21).

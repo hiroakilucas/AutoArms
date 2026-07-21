@@ -1,7 +1,16 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 143 tarefas | Concluídas: 43 (recontado em 2026-07-15 — ver nota em CLAUDE.md)
+- Total: 144 tarefas | Concluídas: 52 (recontado em 2026-07-21 — ver nota em CLAUDE.md)
+
+- 2026-07-21: **Docs sincronizados com o roadmap** — `ROADMAP_FUTURO.md` Fase 4: marcados `[x]`
+  Sistema de diamantes, Sistema de energia com limite diário, Precificação dos pacotes e Reset de
+  Level Up (com nota de divergência de cada um — desenho final ficou diferente do texto original);
+  "Reset de Build" continua em aberto, com nota distinguindo do novo "Resetar Personagem" (mecanismo
+  paralelo). `MONETIZACAO.md` ganhou 3 seções novas (10/11/12: energia por diamante, Novo Sorteio,
+  Resetar Personagem) e Status atualizado. `CLAUDE.md`: descrição de `06_Loja`/`ShowLevelUpChoice`/
+  `EnergySettings`/`CharacterPanel` atualizada pra refletir a persistência real e as mudanças de
+  layout do level-up; contador de Progresso recalculado (144/52).
 
 - 2026-07-21: **Continuar jogando com energia zerada ganhou preço progressivo por dia, por
   personagem (pedido do usuário)**: substitui o custo fixo único (`EnergySettings.
