@@ -11,6 +11,7 @@ public static class PlayerProfileConverter
 {
     private static WeaponDatabase _weaponDatabase;
     private static SkillDatabase _skillDatabase;
+    private static PetDatabase _petDatabase;
 
     // Snapshot do estado de progressão de cada PlayerProfile na PRIMEIRA vez que ele é tocado
     // nesta sessão do processo (2026-07-15, correção de bug real de isolamento entre contas) —
@@ -88,6 +89,12 @@ public static class PlayerProfileConverter
         return _skillDatabase;
     }
 
+    private static PetDatabase GetPetDatabase()
+    {
+        if (_petDatabase == null) _petDatabase = Resources.Load<PetDatabase>("PetDatabase");
+        return _petDatabase;
+    }
+
     public static CharacterDTO ToDTO(PlayerProfile profile)
     {
         var dto = new CharacterDTO
@@ -130,7 +137,8 @@ public static class PlayerProfileConverter
 
         if (profile.pets != null)
             foreach (var p in profile.pets)
-                dto.pets.Add(p.ToString());
+                if (p != null)
+                    dto.pets.Add(new PetTierRef { type = p.petType.ToString(), tier = p.tier });
 
         return dto;
     }
@@ -183,11 +191,16 @@ public static class PlayerProfileConverter
             profile.skills = skills;
         }
 
-        if (dto.pets != null)
+        var petDb = GetPetDatabase();
+        if (petDb != null && dto.pets != null)
         {
-            var pets = new List<PetType>();
+            var pets = new List<PetData>();
             foreach (var p in dto.pets)
-                if (Enum.TryParse(p, out PetType pt)) pets.Add(pt);
+            {
+                if (!Enum.TryParse(p.type, out PetType pt)) continue;
+                var data = petDb.FindByTypeAndTier(pt, p.tier);
+                if (data != null) pets.Add(data);
+            }
             profile.pets = pets;
         }
     }

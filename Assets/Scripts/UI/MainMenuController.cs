@@ -53,6 +53,7 @@ public class MainMenuController : MonoBehaviour
         BuildLogoutButton();
         ReanchorLeftColumnToBottomLeft();
         BuildReplaysMenuButton(characterPanel);
+        BuildLojaMenuButton();
         AlignLeftColumnWithJogar();
         BuildCurrencyHud();
 
@@ -104,14 +105,32 @@ public class MainMenuController : MonoBehaviour
 
         _hudCoinText = BuildCurrencyEntry(rowGo, "UI/Economy/Coin",
             iconPos: new Vector2(0f, 0f), valuePos: new Vector2(142f, 4.827f),
-            iconSize: iconSize, valueWidth: valueWidth, fontSize: fontSize);
+            iconSize: iconSize, valueWidth: valueWidth, fontSize: fontSize,
+            valueBgPos: new Vector2(77f, 4.827003f), valueBgWidth: 245f);
         _hudDiamondText = BuildCurrencyEntry(rowGo, "UI/Economy/Diamond",
             iconPos: new Vector2(322f, 4.827f), valuePos: new Vector2(475f, 4.827f),
-            iconSize: iconSize, valueWidth: valueWidth, fontSize: fontSize);
+            iconSize: iconSize, valueWidth: valueWidth, fontSize: fontSize,
+            valueBgPos: new Vector2(406f, 4.827f), valueBgWidth: 245f);
     }
 
-    private TMP_Text BuildCurrencyEntry(GameObject parent, string spritePath, Vector2 iconPos, Vector2 valuePos, float iconSize, float valueWidth, float fontSize)
+    private TMP_Text BuildCurrencyEntry(GameObject parent, string spritePath, Vector2 iconPos, Vector2 valuePos, float iconSize, float valueWidth, float fontSize, Vector2 valueBgPos, float valueBgWidth)
     {
+        // Fundo preto semi-opaco atrás do número (2026-07-20, pedido do usuário — melhora a
+        // legibilidade do valor sobre o fundo variável da cena, mesmo espírito do chip da
+        // energia). Criado ANTES do ícone (sibling anterior = desenha atrás de tudo, inclusive
+        // do próprio ícone da moeda/diamante — pedido do usuário, 2026-07-20).
+        const float valueBgHeight = 78f; // ~1.4× fontSize — hug do texto, não a altura cheia do ícone
+        var valueBgGo = new GameObject("ValueBg");
+        valueBgGo.transform.SetParent(parent.transform, false);
+        var valueBgRt = valueBgGo.AddComponent<RectTransform>();
+        valueBgRt.anchorMin = valueBgRt.anchorMax = new Vector2(0f, 0.5f);
+        valueBgRt.pivot = new Vector2(0f, 0.5f);
+        valueBgRt.sizeDelta = new Vector2(valueBgWidth, valueBgHeight);
+        valueBgRt.anchoredPosition = valueBgPos;
+        var valueBgImg = valueBgGo.AddComponent<Image>();
+        valueBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 12f);
+        valueBgImg.type = Image.Type.Sliced;
+
         var iconGo = new GameObject("Icon");
         iconGo.transform.SetParent(parent.transform, false);
         var irt = iconGo.AddComponent<RectTransform>();
@@ -122,24 +141,6 @@ public class MainMenuController : MonoBehaviour
         var img = iconGo.AddComponent<Image>();
         img.sprite = Resources.Load<Sprite>(spritePath);
         img.preserveAspect = true;
-
-        // Fundo preto semi-opaco atrás do número (2026-07-20, pedido do usuário — melhora a
-        // legibilidade do valor sobre o fundo variável da cena, mesmo espírito do chip da
-        // energia). Criado ANTES do texto (sibling anterior = desenha atrás). Um pouco mais
-        // largo/alto que a caixa do texto (padding) pra "abraçar" o número com folga, não colado
-        // nas bordas dos dígitos.
-        const float valueBgPadX = 10f;
-        const float valueBgHeight = 78f; // ~1.4× fontSize — hug do texto, não a altura cheia do ícone
-        var valueBgGo = new GameObject("ValueBg");
-        valueBgGo.transform.SetParent(parent.transform, false);
-        var valueBgRt = valueBgGo.AddComponent<RectTransform>();
-        valueBgRt.anchorMin = valueBgRt.anchorMax = new Vector2(0f, 0.5f);
-        valueBgRt.pivot = new Vector2(0f, 0.5f);
-        valueBgRt.sizeDelta = new Vector2(valueWidth + valueBgPadX * 2f, valueBgHeight);
-        valueBgRt.anchoredPosition = valuePos - new Vector2(valueBgPadX, 0f);
-        var valueBgImg = valueBgGo.AddComponent<Image>();
-        valueBgImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.55f), 12f);
-        valueBgImg.type = Image.Type.Sliced;
 
         var txtGo = new GameObject("Value");
         txtGo.transform.SetParent(parent.transform, false);
@@ -180,7 +181,11 @@ public class MainMenuController : MonoBehaviour
 
         Task<(int coins, int diamonds)> walletTask = WalletService.LoadAsync(uid);
         Task<(int current, int max)> energyTask = EnergyService.GetOrRegenAsync(uid, characterId, _energySettings);
-        await Task.WhenAll(walletTask, energyTask);
+        // Bug real corrigido (2026-07-21) — mesmo motivo do hook em LoginController.
+        // LoadEconomyRoutine: sem isto, quem abre 01_MainMenu direto no Editor (sem passar por
+        // 00_Login) nunca carrega desbloqueios/passe/progressão nenhuma vez na sessão.
+        Task shopStateTask = ShopStateService.LoadAsync(uid);
+        await Task.WhenAll(walletTask, energyTask, shopStateTask);
 
         var (coins, diamonds) = walletTask.Result;
         var (energyCurrent, energyMax) = energyTask.Result;
@@ -298,6 +303,102 @@ public class MainMenuController : MonoBehaviour
         btnGo.AddComponent<UIButtonShadowStyle>();
     }
 
+    // Botão "LOJA" (Fase 4/Monetização, placeholder — ver MONETIZACAO.md) — mesma coluna de
+    // atalhos de Chibers/Arsenal/Replay, logo abaixo deste último. Mesmo padrão de
+    // BuildReplaysMenuButton acima (posição derivada de um botão já existente na coluna via
+    // GameObject.Find, ícone placeholder sem arte dedicada ainda — Lucas vai gerar as artes dos
+    // 4 botões juntos mais pra frente, pedido explícito do usuário nesta tarefa) — só troca o
+    // botão-âncora (Btn_Replays em vez de Btn_Arsenal) e o destino do clique (06_Loja).
+    private void BuildLojaMenuButton()
+    {
+        if (theme == null) return;
+
+        var replaysGo = GameObject.Find("Btn_Replays");
+        if (replaysGo == null) return;
+        var replaysRt = replaysGo.GetComponent<RectTransform>();
+        if (replaysRt == null) return;
+
+        float gapY = 211.87f;
+        var chibersGo = GameObject.Find("Btn_SelectCharacter");
+        var arsenalGo = GameObject.Find("Btn_Arsenal");
+        if (chibersGo != null && arsenalGo != null)
+        {
+            var chibersRt = chibersGo.GetComponent<RectTransform>();
+            var arsenalRt = arsenalGo.GetComponent<RectTransform>();
+            if (chibersRt != null && arsenalRt != null) gapY = chibersRt.anchoredPosition.y - arsenalRt.anchoredPosition.y;
+        }
+
+        var btnGo = new GameObject("Btn_Loja");
+        btnGo.transform.SetParent(replaysRt.parent, false);
+        var rt = btnGo.AddComponent<RectTransform>();
+        rt.anchorMin = replaysRt.anchorMin;
+        rt.anchorMax = replaysRt.anchorMax;
+        rt.pivot = replaysRt.pivot;
+        rt.sizeDelta = replaysRt.sizeDelta;
+        rt.anchoredPosition = replaysRt.anchoredPosition - new Vector2(0f, gapY);
+
+        var bg = btnGo.AddComponent<Image>();
+        bg.sprite = UIShapeUtil.RoundedRect(theme.secondaryButton, 16f);
+        bg.type = Image.Type.Sliced;
+        var btn = btnGo.AddComponent<Button>();
+        btn.targetGraphic = bg;
+        btn.onClick.AddListener(OnLojaButton);
+
+        var iconGo = new GameObject("Icon");
+        iconGo.transform.SetParent(btnGo.transform, false);
+        var iconRt = iconGo.AddComponent<RectTransform>();
+        iconRt.anchorMin = new Vector2(0.08f, 0.30f);
+        iconRt.anchorMax = new Vector2(0.92f, 0.92f);
+        iconRt.offsetMin = Vector2.zero; iconRt.offsetMax = Vector2.zero;
+        var iconImg = iconGo.AddComponent<Image>();
+        iconImg.sprite = UIShapeUtil.RoundedRect(Color.Lerp(theme.secondaryButton, Color.white, 0.35f), 10f);
+        iconImg.type = Image.Type.Sliced;
+
+        var stripGo = new GameObject("LabelStrip");
+        stripGo.transform.SetParent(btnGo.transform, false);
+        var stripRt = stripGo.AddComponent<RectTransform>();
+        stripRt.anchorMin = new Vector2(0f, 0f);
+        stripRt.anchorMax = new Vector2(1f, 0.30f);
+        stripRt.offsetMin = Vector2.zero; stripRt.offsetMax = Vector2.zero;
+        var stripImg = stripGo.AddComponent<Image>();
+        stripImg.sprite = UIShapeUtil.RoundedRect(theme.panelBackgroundAlt, 16f);
+        stripImg.type = Image.Type.Sliced;
+
+        var labelGo = new GameObject("Label");
+        labelGo.transform.SetParent(stripGo.transform, false);
+        var lrt = labelGo.AddComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+        var labelTxt = labelGo.AddComponent<TextMeshProUGUI>();
+        // Mesma correção de fonte/material já aplicada ao label do Replay (ver comentário em
+        // BuildReplaysMenuButton) — copia font+fontSharedMaterial do label de ARSENAL antes de
+        // setar .text, senão o glyph vem da fonte TMP padrão (fina, sem o outline customizado).
+        var arsenalLabel = arsenalGo != null ? arsenalGo.GetComponentInChildren<TMP_Text>(true) : null;
+        if (arsenalLabel != null)
+        {
+            labelTxt.font = arsenalLabel.font;
+            labelTxt.fontSharedMaterial = arsenalLabel.fontSharedMaterial;
+        }
+        labelTxt.text = "LOJA";
+        labelTxt.fontStyle = FontStyles.Bold;
+        labelTxt.color = theme.textOnDark;
+        labelTxt.outlineWidth = 0.2f;
+        labelTxt.outlineColor = theme.panelBackground;
+        labelTxt.enableAutoSizing = true;
+        labelTxt.fontSizeMin = 10f;
+        labelTxt.fontSizeMax = 40f;
+        labelTxt.alignment = TextAlignmentOptions.Center;
+        labelTxt.ForceMeshUpdate();
+
+        btnGo.AddComponent<UIButtonShadowStyle>();
+    }
+
+    // Fase 1 (placeholder) da Loja — cena 06_Loja, ver ShopController.cs/MONETIZACAO.md.
+    public void OnLojaButton()
+    {
+        SceneManager.LoadScene("06_Loja");
+    }
+
     // **Bug real corrigido (2026-07-20)**: "Btn_SelectCharacter"/"Btn_Arsenal" (Chibers/Arsenal,
     // pré-colocados em 01_MainMenu.unity) usavam âncora CENTRAL (anchorMin=anchorMax=(0.5,0.5))
     // com um offset fixo em pixels — diferente do BtnJogar, que usa uma âncora de PONTO ÚNICO num
@@ -345,43 +446,47 @@ public class MainMenuController : MonoBehaviour
         rt.anchoredPosition = newAnchoredPosition;
     }
 
-    // Alinha a base da coluna de atalhos (CHIBERS/ARSENAL/REPLAYS) com a base do BtnJogar
+    // Alinha a base da coluna de atalhos (CHIBERS/ARSENAL/REPLAY/LOJA) com a base do BtnJogar
     // (2026-07-20, pedido do usuário — hoje a coluna termina mais acima, desalinhada com o Jogar
-    // e com o painel de detalhe do personagem). Chamado DEPOIS de BuildReplaysMenuButton (precisa
-    // que Btn_Replays já exista pra deslocar os 3 juntos).
+    // e com o painel de detalhe do personagem). Chamado DEPOIS de BuildReplaysMenuButton/
+    // BuildLojaMenuButton (precisa que os dois já existam pra deslocar os 4 juntos).
     // Usa espaço de MUNDO (`GetWorldCorners`) em vez de tentar derivar a diferença a partir dos
     // valores brutos de anchoredPosition — mais simples de raciocinar e continua funcionando
     // mesmo depois de ReanchorLeftColumnToBottomLeft (a comparação em espaço de mundo não muda
     // com o esquema de âncora usado). Como os 4 botões são filhos do MESMO Canvas ("Panel"), a
-    // conversão de volta pra unidades locais (`lossyScale.y`) é exata.
+    // conversão de volta pra unidades locais (`lossyScale.y`) é exata. Btn_Loja (mais recente,
+    // mais abaixo na coluna) é quem define a base agora — era Btn_Replays antes dele existir.
     private void AlignLeftColumnWithJogar()
     {
         var jogarGo = GameObject.Find("BtnJogar");
         var chibersGo = GameObject.Find("Btn_SelectCharacter");
         var arsenalGo = GameObject.Find("Btn_Arsenal");
         var replaysGo = GameObject.Find("Btn_Replays");
-        if (jogarGo == null || chibersGo == null || arsenalGo == null || replaysGo == null) return;
+        var lojaGo = GameObject.Find("Btn_Loja");
+        if (jogarGo == null || chibersGo == null || arsenalGo == null || replaysGo == null || lojaGo == null) return;
 
         var jogarRt = jogarGo.GetComponent<RectTransform>();
         var chibersRt = chibersGo.GetComponent<RectTransform>();
         var arsenalRt = arsenalGo.GetComponent<RectTransform>();
         var replaysRt = replaysGo.GetComponent<RectTransform>();
-        if (jogarRt == null || chibersRt == null || arsenalRt == null || replaysRt == null) return;
+        var lojaRt = lojaGo.GetComponent<RectTransform>();
+        if (jogarRt == null || chibersRt == null || arsenalRt == null || replaysRt == null || lojaRt == null) return;
 
         var corners = new Vector3[4];
         jogarRt.GetWorldCorners(corners);
         float jogarBottomWorldY = corners[0].y; // corners[0] = bottom-left, em espaço de mundo
 
-        replaysRt.GetWorldCorners(corners);
-        float replaysBottomWorldY = corners[0].y;
+        lojaRt.GetWorldCorners(corners);
+        float lojaBottomWorldY = corners[0].y;
 
-        float deltaWorldY = jogarBottomWorldY - replaysBottomWorldY;
+        float deltaWorldY = jogarBottomWorldY - lojaBottomWorldY;
         float localDelta = deltaWorldY / arsenalRt.lossyScale.y;
         var shift = new Vector2(0f, localDelta);
 
         chibersRt.anchoredPosition += shift;
         arsenalRt.anchoredPosition += shift;
         replaysRt.anchoredPosition += shift;
+        lojaRt.anchoredPosition += shift;
     }
 
     // Botão "Sair da Conta" TEMPORÁRIO (2026-07-15, pedido do usuário) — só pra testar o fluxo
@@ -498,10 +603,12 @@ public class MainMenuController : MonoBehaviour
         var (current, _) = await EnergyService.GetOrRegenAsync(uid, characterId, _energySettings);
         RefreshEconomyHuds();
 
+        // Só CHECA energia aqui — o consumo de fato só acontece em AttackSequencer.OnCombatEnd,
+        // depois que a luta termina em vitória ou derrota (bug real reportado pelo usuário: energia
+        // estava sendo gasta neste clique, antes até da luta começar, então desistir em
+        // 05_SelectOpponent ou fechar o jogo no meio do combate já cobrava a energia à toa).
         if (current > 0)
         {
-            await EnergyService.ConsumeOneAsync(uid, characterId, current);
-            RefreshEconomyHuds();
             SceneManager.LoadScene("05_SelectOpponent");
             return;
         }
@@ -525,37 +632,45 @@ public class MainMenuController : MonoBehaviour
     // sob demanda (não faz parte de BuildUI nenhum) — mesmo espírito visual de BuildLogoutButton/
     // CharacterPanel (RoundedRect + TMP, sem prefab), mas autocontido/descartável: cria e destrói
     // o próprio Canvas a cada abertura, já que é um popup raro (só quando a energia zera).
-    private void ShowRefillConfirmPopup(string uid, string characterId)
+    // Preço progressivo por dia, POR PERSONAGEM (2026-07-21, pedido do usuário — substitui o
+    // custo fixo único de antes): 1ª vez hoje = refillCostTier1, 2ª = refillCostTier2, 3ª em
+    // diante = refillCostTier3Plus (travado). `async void` (mesmo padrão de OnPlayButton) porque
+    // precisa consultar EnergyService.GetRefillCostAsync (Firestore, hora do servidor) ANTES de
+    // saber que valor mostrar no popup — o call site em OnPlayButton continua chamando isto sem
+    // `await`, de propósito (mesmo fire-and-forget de sempre pra UI).
+    private async void ShowRefillConfirmPopup(string uid, string characterId)
     {
         if (theme == null || _energySettings == null) return;
 
-        int cost = _energySettings.diamondCostToRefill;
+        int cost = await EnergyService.GetRefillCostAsync(uid, characterId, _energySettings);
         if (PlayerEconomyState.Diamonds < cost)
         {
-            ShowMessagePopup($"Energia esgotada. Você precisa de {cost} diamantes pra continuar jogando agora (tem {PlayerEconomyState.Diamonds}).",
+            ShowMessagePopup($"Energia esgotada. Você precisa de {cost} diamantes pra continuar jogando agora (tem {PlayerEconomyState.Diamonds}). Visite a Loja pra comprar mais diamantes.",
                 showEnergyCountdown: true);
             return;
         }
 
         BuildPopup(
-            $"Energia esgotada.\nGastar {cost} diamantes pra reabastecer 1 energia e continuar?",
+            $"Energia esgotada.\nGastar {cost} diamantes pra continuar jogando com este personagem hoje?",
             confirmLabel: "Gastar diamantes",
-            onConfirm: () => { _ = SpendAndContinueRoutine(uid, characterId, cost); },
+            onConfirm: () => { _ = SpendAndContinueRoutine(uid, characterId); },
             cancelLabel: "Cancelar",
             showEnergyCountdown: true);
     }
 
-    private async Task SpendAndContinueRoutine(string uid, string characterId, int cost)
+    private async Task SpendAndContinueRoutine(string uid, string characterId)
     {
-        bool spent = await WalletService.SpendDiamondsAsync(uid, cost);
+        // Recalcula o custo de novo por dentro (mesma lógica de GetRefillCostAsync acima) em vez
+        // de reaproveitar o valor já mostrado no popup — evita cobrar um preço desatualizado se o
+        // dia virou ou outro pagamento aconteceu entre abrir o popup e confirmar (ver comentário
+        // em EnergyService.PayToRefillAsync).
+        var (spent, cost) = await EnergyService.PayToRefillAsync(uid, characterId, _energySettings);
         if (!spent)
         {
             ShowMessagePopup("Não foi possível gastar diamantes agora. Tente de novo.");
             return;
         }
 
-        await EnergyService.RefillOneAsync(uid, characterId);
-        await EnergyService.ConsumeOneAsync(uid, characterId, 1);
         RefreshEconomyHuds();
         SceneManager.LoadScene("05_SelectOpponent");
     }

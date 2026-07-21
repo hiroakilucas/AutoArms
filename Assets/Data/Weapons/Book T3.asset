@@ -16,15 +16,22 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 256822f3bb7e94846a56c30b3aed0ca9, type: 3}
   inHandSprite: {fileID: 21300000, guid: 256822f3bb7e94846a56c30b3aed0ca9, type: 3}
   attackSprite: {fileID: 0}
+  attackScaleMultiplier: {x: 1, y: 1, z: 1}
+  attackRotationOffset: {x: 0, y: 0, z: 0}
+  showAttackTipEffect: 0
+  attackTipOffset: {x: 0, y: 0, z: 0}
+  projectileSprite: {fileID: 0}
   damage: 13
   speedModifier: 1
   types: 0500000002000000
   scale: 0.8
   isBoomerang: 0
+  straightThrow: 0
   attackAnimation: 1
   tier: 3
   previousTier: {fileID: 11400000, guid: 64e5941bd2248fc42a935c9382f700e9, type: 2}
-  dropOdds: 0
+  nextTier: {fileID: 0}
+  dropOdds: 0.38
   hitSpeed: 1.2
   drawChance: 0.27
   reach: -1.5

@@ -123,6 +123,45 @@ public static class UIShapeUtil
         return sprite;
     }
 
+    // Triângulo de "play" apontando pra direita, rasterizado em runtime (mesmo espírito de Star
+    // acima) — usado pelo botão de assistir replay do CharacterPanel (2026-07-19). Existe pelo
+    // mesmo motivo de Star: o glifo Unicode "▶" não está incluso no atlas da fonte TMP do
+    // projeto (viraria "tofu" quebrado, mesma classe de bug já documentada com "★"/"☆" e "—").
+    private static readonly Dictionary<Color, Sprite> _playTriangleCache = new Dictionary<Color, Sprite>();
+
+    public static Sprite PlayTriangle(Color color)
+    {
+        if (_playTriangleCache.TryGetValue(color, out var cached)) return cached;
+
+        var texture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        // Vértices centralizados no canvas 64×64 — ápice à direita, base vertical à esquerda.
+        var pts = new[]
+        {
+            new Vector2(20f, 18f),
+            new Vector2(20f, 46f),
+            new Vector2(48f, 32f),
+        };
+
+        var pixels = new Color[TextureSize * TextureSize];
+        for (int y = 0; y < TextureSize; y++)
+        {
+            for (int x = 0; x < TextureSize; x++)
+            {
+                var p = new Vector2(x + 0.5f, y + 0.5f);
+                pixels[y * TextureSize + x] = PointInPolygon(p, pts) ? color : Color.clear;
+            }
+        }
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        var sprite = Sprite.Create(texture, new Rect(0, 0, TextureSize, TextureSize), new Vector2(0.5f, 0.5f), 100f);
+        _playTriangleCache[color] = sprite;
+        return sprite;
+    }
+
     private static Vector2[] StarPoints(float cx, float cy, float outerR, float innerR, int spikes = 5)
     {
         var pts = new Vector2[spikes * 2];

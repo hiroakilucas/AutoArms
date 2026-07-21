@@ -1597,6 +1597,7 @@ MonoBehaviour:
   selectWeapons: 03_SelectWeapons
   selectedProfileHolder: {fileID: 11400000, guid: 922f3509158987247abc4e20f118b45c, type: 2}
   theme: {fileID: 11400000, guid: ae33f2260edb6c9468a929a3eb2a84f5, type: 2}
+  characterDatabase: {fileID: 11400000, guid: e5c9ce6c28b8ff64c876aeffee74c4e9, type: 2}
 --- !u!4 &1078761891
 Transform:
   m_ObjectHideFlags: 0

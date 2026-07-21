@@ -44,7 +44,6 @@
 - [ ] **Presença em redes sociais (Discord, Instagram, etc.)**: criar e divulgar canais oficiais do jogo (servidor de Discord pra comunidade, conta de Instagram). Ainda não decidido o conteúdo de cada canal nem o cronograma de lançamento.
 
 ### Fase 6 — Infraestrutura
-- [ ] Criar cena 03_SelectWeapons (já referenciada no código)
 - [x] Definir banco de dados para salvar personagens (Firebase ou PlayFab) — **Firebase** (Auth +
   Firestore), decidido e implementado em 2026-07-14/15 (plano de contas/save na nuvem, Fatia -1 a
   6). Ver ARQUITETURA.md.
@@ -64,7 +63,20 @@
 - [ ] Instalar módulos Android e iOS no Unity Hub (Android SDK, NDK, OpenJDK)
 - [ ] Configurar Player Settings para Android (bundle ID, ícone, splash screen)
 - [ ] Configurar Player Settings para iOS (bundle ID, signing, capabilities)
-- [ ] Adaptar UI para telas mobile (safe area, resolução, touch input)
+- [ ] **Adaptar UI para telas mobile (safe area, resolução, touch input)** — dívida técnica
+  conhecida, registrada em 2026-07-20 ao reajustar o HUD principal pra mobile (moeda/diamante,
+  energia, XP, painel de personagem): **nenhuma Canvas do projeto trata Safe Area hoje** (só uma
+  exceção pontual, adicionada nesse mesmo trabalho, direto nos elementos do HUD principal —
+  não é um tratamento geral). Todas as Canvas (menu, combate, popups, login — todas as telas do
+  jogo) usam `CanvasScaler.ScaleMode.ScaleWithScreenSize` com `referenceResolution=1920×1080`
+  (paisagem) e `matchWidthOrHeight=0` (casa pela LARGURA); `ProjectSettings.defaultScreenOrientation`
+  está em Auto Rotation (não travado em retrato nem paisagem). Uma eventual migração pra retrato
+  de verdade exigiria: travar orientação, revisar `matchWidthOrHeight` (provavelmente pra 1,
+  casa pela altura) em TODAS as Canvas, e reposicionar/recalibrar toda fração de tela já ajustada
+  visualmente pro 1920×1080 paisagem (ex: `MainMenuCharacterPreview.CalibratedYFraction`,
+  `CharacterPanel.RootAnchorTop/Bottom`, etc.) — decisão adiada por enquanto (usuário optou por
+  manter paisagem/auto-rotate e só aumentar os elementos do HUD dentro do sistema atual), mas
+  precisa ser revisitada deliberadamente antes de um build mobile de verdade.
 - [ ] Testar build Android e resolver erros
 - [ ] Testar build iOS e resolver erros (requer Mac com Xcode)
 - [ ] Publicar na Google Play Store
@@ -147,8 +159,11 @@
 - [x] Tela de seleção de oponente ao clicar em Play (grid com 6 personagens inimigos) —
   `05_SelectOpponent`/`SelectOpponentController` (2026-07-07). Desde 2026-07-15 (Fatia 6 do plano
   de contas), tenta buscar adversários REAIS primeiro via `OpponentSearchService`/`opponents_index`
-  no Firestore — só cai no pool local fixo (`CharacterDatabase.opponentCharacters`) como fallback
-  (offline, sem sessão, ou ninguém sincronizado ainda).
+  no Firestore, priorizando `levelBucket` próximo do level do jogador — se vier incompleto,
+  completa com 12 bots gerados em runtime (`CharacterDatabase.botTemplates`/`BotProfileGenerator`,
+  stats/skill/arma escalados pro level do jogador, mesma tarefa citada em
+  `LIMPEZA_BASE.md`/2026-07-15) — só cai no pool local fixo (`CharacterDatabase.opponentCharacters`)
+  como fallback de ÚLTIMA instância, se nem os bots renderem nada.
 - [x] Histórico de confronto entre jogador e oponente selecionado (nº de batalhas e vitórias de
   cada lado) — diferente da aba "Histórico de batalhas" da Fase 5 (log geral de lutas): aqui é um
   recorte cabeça-a-cabeça mostrado antes de escolher o oponente. Cada card mostra
@@ -166,8 +181,8 @@
 - [ ] Tela de configurações: volume, notificações, idioma
 - [ ] Qualidade gráfica (avaliar viabilidade)
 - [ ] Links para sites oficiais do jogo
-- [ ] Mapa de skills (visualização em árvore)
-- [ ] Mapa de armas (visualização em árvore)
+- [x] Mapa de skills (visualização em árvore) — coberto pela grade de `03_Arsenal` (confirmado pelo usuário 2026-07-16: "mapa de skill e arma é o botão arsenal"), não uma árvore literal, mas cumpre o objetivo do item (visualizar todas as skills do jogo e o tier possuído de cada uma).
+- [x] Mapa de armas (visualização em árvore) — mesma cobertura de `03_Arsenal` do item acima.
 
 ### Fase 13 — Modo Caminho Infinito
 - [ ] Modo PVE infinito: batalhas começam no level 1 e a dificuldade escala a cada vitória — versão detalhada do item "Mapa PVE" já listado na Fase 5

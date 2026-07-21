@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Ghost Knight 3
   m_EditorClassIdentifier: 
   profileName: Ghost Knight 3
+  characterId: 
   characterPrefab: {fileID: 5025879745250392089, guid: e10ae02667e602a4eb809bb04ab2828e, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: 10b67872207946741b5cb066e5f13194, type: 3}
   splashArt: {fileID: 21300000, guid: d0fe26137a80698468dc4c2df8f7c439, type: 3}
+  rarity: 2
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
   maxHealth: 60
-  str: 4
-  agility: 3
-  speed: 7
+  str: 5
+  agility: 6
+  speed: 3
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

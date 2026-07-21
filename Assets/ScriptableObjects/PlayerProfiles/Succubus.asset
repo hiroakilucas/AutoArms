@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Succubus
   m_EditorClassIdentifier: 
   profileName: Succubus
+  characterId: 
   characterPrefab: {fileID: 1943085063419492, guid: 3eee6ca49dc328b46ae5e76fcf3907f3, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: b748c6247101f8544bebccfed7b87fae, type: 3}
   splashArt: {fileID: 21300000, guid: 1b8962ce5c19b5c4eb8fcf5e6497f5a4, type: 3}
+  rarity: 4
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
   maxHealth: 65
-  str: 4
-  agility: 2
-  speed: 7
+  str: 3
+  agility: 5
+  speed: 5
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

@@ -66,6 +66,12 @@ public class AttributePipBar
             case "STR": return StrIcon;
             case "AGI": return AgiIcon;
             case "SPD": return SpdIcon;
+            // "HP" (2026-07-20) — reaproveita o mesmo ícone de coração de BuildIconWithValue
+            // (HpIcon abaixo), pra permitir montar HP no mesmo estilo ícone+badge+pips de
+            // STR/AGI/SPD via Build() (pedido do usuário: gaveta mobile do CharacterPanel), em
+            // vez do estilo ícone+número sobreposto que BuildIconWithValue usa em todo o resto
+            // do projeto (CharacterPanel modo painel-lateral, SelectOpponentController).
+            case "HP": return HpIcon;
             default: return null;
         }
     }
@@ -74,8 +80,16 @@ public class AttributePipBar
     // com ícones maiores e mais próximos do badge/pips do que o `CharacterPanel` usa) — defaults
     // preservam exatamente o comportamento original (todos os chamadores existentes, ex:
     // `CharacterPanel.BuildInfoBlock`, continuam sem passar esses argumentos).
+    // `badgeWidth`/`badgeHeight`/`badgeFontSize` (2026-07-20, pedido do usuário — gaveta mobile do
+    // CharacterPanel: "fonte dos atributos em 35", depois "diminua os badge em width 61.425
+    // height 64.675") — defaults preservam o badge original (36×36px/16pt) pra todo chamador
+    // existente; largura/altura separadas (não mais um `badgeSize` quadrado único) porque o
+    // usuário pediu valores não-quadrados específicos. A borda de prestígio e o texto "×N"
+    // acompanham proporcionalmente (derivados de badgeWidth/Height, não mais hardcoded em
+    // 44/18/28/14), pra não ficarem desproporcionais se o badge mudar de tamanho.
     public static AttributePipBar Build(GameObject rowContainer, UITheme theme, string label,
-        float iconScale = 3f, float badgeAnchorX = 0.24f, float pipsAnchorMinX = 0.44f)
+        float iconScale = 3f, float badgeAnchorX = 0.24f, float pipsAnchorMinX = 0.44f,
+        float badgeWidth = 36f, float badgeHeight = 36f, float badgeFontSize = 16f)
     {
         var lblGo = new GameObject("Lbl");
         lblGo.transform.SetParent(rowContainer.transform, false);
@@ -111,31 +125,36 @@ public class AttributePipBar
         // mais antigo = desenha atrás), levemente maior (44×44 vs 36×36 do badge) e concêntrica
         // com ele (mesmo ponto de ancoragem 0.24/0.5, pivot central, deslocada +18px em X pra
         // coincidir com o centro do badge — que usa pivot (0,0.5) e começa nesse mesmo ponto).
+        float prestigeBorderWidth = badgeWidth + 8f;   // era 44 fixo pra badge 36 — 8px de halo, sempre
+        float prestigeBorderHeight = badgeHeight + 8f;
+        float prestigeBorderRadius = Mathf.Min(prestigeBorderWidth, prestigeBorderHeight) / 2f;
         var prestigeBorderGo = new GameObject("PrestigeBorder");
         prestigeBorderGo.transform.SetParent(rowContainer.transform, false);
         var pbRt = prestigeBorderGo.AddComponent<RectTransform>();
         pbRt.anchorMin = new Vector2(badgeAnchorX, 0.5f); pbRt.anchorMax = new Vector2(badgeAnchorX, 0.5f);
         pbRt.pivot = new Vector2(0.5f, 0.5f);
-        pbRt.anchoredPosition = new Vector2(18f, 0f);
-        pbRt.sizeDelta = new Vector2(44f, 44f);
+        pbRt.anchoredPosition = new Vector2(badgeWidth / 2f, 0f);
+        pbRt.sizeDelta = new Vector2(prestigeBorderWidth, prestigeBorderHeight);
         var prestigeBorderImg = prestigeBorderGo.AddComponent<Image>();
-        prestigeBorderImg.sprite = UIShapeUtil.RoundedRect(PrestigeColor, 22f);
+        prestigeBorderImg.sprite = UIShapeUtil.RoundedRect(PrestigeColor, prestigeBorderRadius);
         prestigeBorderImg.type = Image.Type.Sliced;
         prestigeBorderGo.AddComponent<PulsingAlpha>();
         prestigeBorderGo.SetActive(false);
 
-        // Badge circular: RoundedRect com raio = metade do lado vira um círculo (mesma técnica
-        // já usada nos badges de level em pill, só que com sizeDelta quadrado em vez de retangular).
+        // Badge circular/oval: RoundedRect com raio = metade do MENOR lado (mesma técnica já
+        // usada nos badges de level em pill, generalizada aqui pra suportar largura/altura
+        // diferentes, não só quadrado).
+        float badgeRadius = Mathf.Min(badgeWidth, badgeHeight) / 2f;
         var badgeGo = new GameObject("Badge");
         badgeGo.transform.SetParent(rowContainer.transform, false);
         var brt = badgeGo.AddComponent<RectTransform>();
         brt.anchorMin = new Vector2(badgeAnchorX, 0.5f); brt.anchorMax = new Vector2(badgeAnchorX, 0.5f);
         brt.pivot = new Vector2(0f, 0.5f);
-        brt.sizeDelta = new Vector2(36f, 36f);
+        brt.sizeDelta = new Vector2(badgeWidth, badgeHeight);
         var badgeImg = badgeGo.AddComponent<Image>();
-        badgeImg.sprite = UIShapeUtil.RoundedRect(Color.white, 18f);
+        badgeImg.sprite = UIShapeUtil.RoundedRect(Color.white, badgeRadius);
         badgeImg.type = Image.Type.Sliced;
-        var badgeText = AddCenteredLabel(badgeGo, "0", 16, theme.textOnLight);
+        var badgeText = AddCenteredLabel(badgeGo, "0", badgeFontSize, theme.textOnLight);
 
         // Texto "×N" de prestígio — canto superior direito do badge, também escondido por padrão.
         var prestigeTextGo = new GameObject("PrestigeText");
@@ -143,7 +162,7 @@ public class AttributePipBar
         var ptRt = prestigeTextGo.AddComponent<RectTransform>();
         ptRt.anchorMin = new Vector2(badgeAnchorX, 0.5f); ptRt.anchorMax = new Vector2(badgeAnchorX, 0.5f);
         ptRt.pivot = new Vector2(0f, 0f);
-        ptRt.anchoredPosition = new Vector2(28f, 14f);
+        ptRt.anchoredPosition = new Vector2(badgeWidth * 0.78f, badgeHeight * 0.39f); // era (28,14) fixo pra badge 36×36
         ptRt.sizeDelta = new Vector2(32f, 16f);
         var prestigeText = prestigeTextGo.AddComponent<TextMeshProUGUI>();
         prestigeText.fontSize = 11; prestigeText.fontStyle = FontStyles.Bold;

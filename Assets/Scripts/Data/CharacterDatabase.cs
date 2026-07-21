@@ -15,6 +15,15 @@ public class CharacterDatabase : ScriptableObject
     [Tooltip("Pool de oponentes exibidos em 05_SelectOpponent (até 6)")]
     public List<PlayerProfile> opponentCharacters = new List<PlayerProfile>();
 
+    // 12 PlayerProfile já existentes (reaproveitando visual/prefab/ícone/splash art) usados como
+    // "esqueleto" pros bots de matchmaking — SelectOpponentController.GenerateBotOpponents gera um
+    // PlayerProfile runtime por template via BotProfileGenerator (stats/skills/armas escalados pro
+    // level do jogador), preenchendo o grid quando a busca online (OpponentSearchService) não
+    // retorna gente real suficiente. Fallback intermediário: online > bots > opponentCharacters
+    // (placeholder de última instância). Populado por Tools > AutoArms > Setup Bot Templates.
+    [Tooltip("12 PlayerProfile usados como identidade visual dos bots de matchmaking (stats reais gerados em runtime, ver BotProfileGenerator)")]
+    public List<PlayerProfile> botTemplates = new List<PlayerProfile>();
+
     // Personagens elegíveis pra troca rápida (setas/arraste do personagem central em
     // 01_MainMenu, ver MainMenuCharacterPreview) — mesmo filtro isUnlockedForSelection &&
     // isPlayable e mesma ordem (favoritado primeiro, depois alfabético) do grid de

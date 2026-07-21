@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Medieval Warrior Girl
   m_EditorClassIdentifier: 
   profileName: Medieval Warrior Girl
+  characterId: 
   characterPrefab: {fileID: 1154517427754006, guid: 9cdfe8d790e801f4f8a24bc8c1b423e0, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: 0e5279db325c3214f876949ad1cfcc67, type: 3}
   splashArt: {fileID: 21300000, guid: 546177e110c3399418a7ded91e6af280, type: 3}
+  rarity: 0
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
   maxHealth: 60
   str: 4
-  agility: 5
-  speed: 5
+  agility: 3
+  speed: 7
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

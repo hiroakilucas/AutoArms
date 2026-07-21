@@ -31,7 +31,7 @@ MonoBehaviour:
   tier: 2
   previousTier: {fileID: 11400000, guid: bb200000000000000000000000000018, type: 2}
   nextTier: {fileID: 11400000, guid: e9fe88a11a1e1474286805ad364846dc, type: 2}
-  dropOdds: 0
+  dropOdds: 0.04
   hitSpeed: 2.67
   drawChance: 0.29
   reach: 0

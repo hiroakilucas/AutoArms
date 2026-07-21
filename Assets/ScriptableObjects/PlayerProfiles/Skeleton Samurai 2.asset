@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Skeleton Samurai 2
   m_EditorClassIdentifier: 
   profileName: Skeleton Samurai 2
+  characterId: 
   characterPrefab: {fileID: 209411776035720390, guid: f74d40bfd60485942aa77bdb847a01a8, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: 7ed3cbdac23c3474c91cd75214d7c94d, type: 3}
   splashArt: {fileID: 21300000, guid: a775bf593e64e2640b7ce66ed4510429, type: 3}
+  rarity: 2
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 60
+  maxHealth: 75
   str: 4
-  agility: 7
-  speed: 3
+  agility: 2
+  speed: 5
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

@@ -68,7 +68,6 @@ SpriteAtlas:
     - ffea29413c5a83c43be89f6e38e37c85: 21300000
     - f29271c1cbdc1a741ae301ca444c6263: 21300000
     - 0d20f3d189cda814cbb084a26e0b84eb: 21300000
-    - 37e8d0023ec67b34494d8e0814f45cd3: 21300000
     - 7bef03121cc386f4faded66ad9b88b31: 21300000
     - 9446ef126175415478e1cc46effe01f4: 21300000
     - 3bf3a63251e6a4545927eba2c61b150a: 21300000
@@ -141,7 +140,6 @@ SpriteAtlas:
     - 7e36427a1eb91764087227af6948ce65: 21300000
     - 9c8f138ac814d4544a34365252154e16: 21300000
     - 6d0d049a72aa05148be7174189ccc496: 21300000
-    - 298b71ca76173b3448fc912e6e1b0290: 21300000
     - 086df7cadef3f7b45abc8bb39d8488f3: 21300000
     - d3fd01da838dc9e408216a67439db8ed: 21300000
     - 939ea10b6685f572cdf559d609adb08f: 21300000
@@ -195,7 +193,6 @@ SpriteAtlas:
   - {fileID: 21300000, guid: ffea29413c5a83c43be89f6e38e37c85, type: 3}
   - {fileID: 21300000, guid: f29271c1cbdc1a741ae301ca444c6263, type: 3}
   - {fileID: 21300000, guid: 0d20f3d189cda814cbb084a26e0b84eb, type: 3}
-  - {fileID: 21300000, guid: 37e8d0023ec67b34494d8e0814f45cd3, type: 3}
   - {fileID: 21300000, guid: 7bef03121cc386f4faded66ad9b88b31, type: 3}
   - {fileID: 21300000, guid: 9446ef126175415478e1cc46effe01f4, type: 3}
   - {fileID: 21300000, guid: 3bf3a63251e6a4545927eba2c61b150a, type: 3}
@@ -268,7 +265,6 @@ SpriteAtlas:
   - {fileID: 21300000, guid: 7e36427a1eb91764087227af6948ce65, type: 3}
   - {fileID: 21300000, guid: 9c8f138ac814d4544a34365252154e16, type: 3}
   - {fileID: 21300000, guid: 6d0d049a72aa05148be7174189ccc496, type: 3}
-  - {fileID: 21300000, guid: 298b71ca76173b3448fc912e6e1b0290, type: 3}
   - {fileID: 21300000, guid: 086df7cadef3f7b45abc8bb39d8488f3, type: 3}
   - {fileID: 21300000, guid: d3fd01da838dc9e408216a67439db8ed, type: 3}
   - {fileID: 21300000, guid: 939ea10b6685f572cdf559d609adb08f, type: 3}
@@ -321,7 +317,6 @@ SpriteAtlas:
   - Fan1
   - Anchor2
   - Flail2
-  - Sword
   - Face 01
   - Knife2
   - Reaper3
@@ -394,7 +389,6 @@ SpriteAtlas:
   - Right Leg
   - Left Arm
   - Bump2
-  - Sword
   - Scimitar3
   - SlashFX
   - Whip3

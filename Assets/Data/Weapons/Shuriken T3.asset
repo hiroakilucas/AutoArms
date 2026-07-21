@@ -20,6 +20,7 @@ MonoBehaviour:
   attackRotationOffset: {x: 0, y: 0, z: 0}
   showAttackTipEffect: 0
   attackTipOffset: {x: 0, y: 0, z: 0}
+  projectileSprite: {fileID: 0}
   damage: 7
   speedModifier: 1
   types: 06000000
@@ -29,7 +30,8 @@ MonoBehaviour:
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: 644c5406336576d46827c109cedcda79, type: 2}
-  dropOdds: 0
+  nextTier: {fileID: 0}
+  dropOdds: 0.77
   hitSpeed: 10
   drawChance: 0.47
   reach: 0

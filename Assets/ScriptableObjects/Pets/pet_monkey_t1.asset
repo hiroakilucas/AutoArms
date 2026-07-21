@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a300e400553411d47a6fb0869eb89e15, type: 3}
+  m_Name: pet_monkey_t1
+  m_EditorClassIdentifier: 
+  petType: 2
+  tier: 1
+  previousTier: {fileID: 0}
+  nextTier: {fileID: 11400000, guid: 6fceaf6f002ce504f9de03050e7a0e5c, type: 2}
+  icon: {fileID: 21300000, guid: 26e19f09ea4f671683732216f79a4875, type: 3}
+  hpMalusPercent: 0.25
+  odds: 0.1
+  initiative: 1
+  str: 24
+  agility: 17
+  speed: 25
+  hp: 34
+  damage: 3
+  comboRate: 0.7
+  evasionBase: 0.2
+  accuracyBonus: 0
+  disarmRate: 0
+  comboDebuff: 0
+  blockDebuff: 0

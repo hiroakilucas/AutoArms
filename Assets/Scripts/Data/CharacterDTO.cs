@@ -21,6 +21,16 @@ public class SkillTierRef
     public int tier;
 }
 
+// Mesma ideia de WeaponTierRef/SkillTierRef, mas pra PetData (2026-07-16, tiers de pet) - `type`
+// e PetType.ToString() (Mouse/Monkey/Boar), resolvido de volta via
+// PetDatabase.FindByTypeAndTier.
+[Serializable]
+public class PetTierRef
+{
+    public string type;
+    public int tier;
+}
+
 // Representacao serializavel da progressao de UM PlayerProfile - usada hoje pelo save local em
 // JSON (LocalSaveService) e pensada pra ser o mesmo formato usado pelo save na nuvem
 // (Firestore, ver ARQUITETURA.md e o plano de contas/backend) mais pra frente. Sem nenhuma
@@ -70,7 +80,7 @@ public class CharacterDTO
 
     public List<WeaponTierRef> weapons = new List<WeaponTierRef>();
     public List<SkillTierRef> skills = new List<SkillTierRef>();
-    public List<string> pets = new List<string>(); // PetType.ToString()
+    public List<PetTierRef> pets = new List<PetTierRef>();
 
     // DateTime.UtcNow.Ticks no momento do save - usado pra reconciliacao "ultimo gravado ganha"
     // quando o save na nuvem (Firestore) entrar (ver ARQUITETURA.md/plano de contas). Sem uso

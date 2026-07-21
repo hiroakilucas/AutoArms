@@ -23,4 +23,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/05_SelectOpponent.unity
     guid: d489b9ec74f64a7eb3f0f37ee5a1fc7d
+  - enabled: 1
+    path: Assets/Scenes/06_Loja.unity
+    guid: 9c2b7e4a1d8f4c6b9a3e5d7c1b8f4a6d
   m_configObjects: {}

@@ -31,6 +31,17 @@ Firestore para progressão de personagem precisava já prever isso.
    especificamente, porque aqui envolve dinheiro real. O resto do jogo (combate, level, skills)
    pode continuar no modelo "cliente confiável" por mais tempo — moeda premium não.
 
+**Atualização 2026-07-19 — exceção temporária registrada, não um relaxamento da regra**: o campo
+`diamonds` (`users/{uid}`, ver `WalletService.cs`) passou a existir de verdade, junto do sistema de
+energia (HUD de moeda/diamante/energia, `EnergyService.cs`/`CharacterPanel.BuildWalletBar`/
+`MainMenuCharacterPreview.BuildEnergyHud`) — mas o projeto ainda não tem NENHUMA Cloud Function
+implantada. Decisão explícita do usuário ao encomendar essa feature: entregar
+`WalletService.SpendDiamondsAsync` como um placeholder client-writable por enquanto (mesmo modelo
+"cliente confiável" que `level`/`str`/etc já usam), isolado numa função só, marcada com TODO —
+trocar por uma Cloud Function callable assim que a Fase 4/Monetização criar o projeto de Functions
+de verdade, sem mudar a assinatura pro chamador. A regra abaixo (nunca client-writable) continua
+sendo o alvo final; isto é uma exceção datada e sinalizada, não uma reversão silenciosa dela.
+
 **Não implementado ainda** (correto deixar pra quando a Fase 4 for de fato construída) — só a
 regra em si é fixa e não deve ser esquecida/relaxada quando esse dia chegar.
 
@@ -59,7 +70,10 @@ service cloud.firestore {
 
       match /characters/{characterId} {
         allow read: if request.auth != null && request.auth.uid == uid;
-        allow write: if request.auth != null && request.auth.uid == uid
+        // `create, update` (não `write` puro) — ver nota abaixo sobre a armadilha de `delete`.
+        // Nenhum código apaga um characters/{characterId} hoje, mas separado por precaução (o
+        // mesmo bug real já aconteceu em replays/{replayId}, ver logo abaixo).
+        allow create, update: if request.auth != null && request.auth.uid == uid
           && request.resource.data.level is int
           && request.resource.data.level >= 1
           && request.resource.data.level <= 9999
@@ -75,6 +89,31 @@ service cloud.firestore {
           && request.resource.data.weapons.size() <= 50
           && request.resource.data.skills is list
           && request.resource.data.skills.size() <= 100;
+
+        // Replay (log de eventos completo, 2026-07-18 — ver CHANGELOG.md e a nota "Replay
+        // fabricado client-side" mais abaixo). Cap de 400 eventos cobre o teto de segurança do
+        // próprio CombatSimulator (maxRounds=300, ver CombatSimulator.cs) com folga. `result` só
+        // aceita os 2 valores válidos — não impede um cliente forjar um replay falso (ver nota),
+        // só barra um documento grosseiramente mal formado.
+        //
+        // Bug real corrigido (2026-07-20): era um único `allow write` cobrindo create+update+
+        // DELETE com essa mesma validação de `request.resource.data.*` — mas numa operação de
+        // delete, `request.resource` é `null` (não existe "dado novo" a validar), então QUALQUER
+        // delete era rejeitado com "Missing or insufficient permissions". `FirestoreService.
+        // TrimOldReplaysAsync` apaga replays além do teto de `MaxReplaysPerCharacter` (10) — todo
+        // delete falhava silenciosamente (dentro do mesmo try/catch do save), aparentando "falha
+        // ao salvar replay" no log quando na real o replay NOVO salvava certinho (create passa
+        // pela validação normal); só a limpeza dos antigos nunca funcionava, acumulando document
+        // os sem rotação. Separado em `create, update` (com a validação de dados) + `delete` (só
+        // checagem de dono, sem exigir `request.resource.data` nenhum).
+        match /replays/{replayId} {
+          allow read: if request.auth != null && request.auth.uid == uid;
+          allow create, update: if request.auth != null && request.auth.uid == uid
+            && request.resource.data.result in ["win", "loss"]
+            && request.resource.data.events is list
+            && request.resource.data.events.size() <= 400;
+          allow delete: if request.auth != null && request.auth.uid == uid;
+        }
       }
 
       match /matchHistory/{opponentId} {
@@ -93,7 +132,9 @@ service cloud.firestore {
     // grosseiramente forjado pelo cliente.
     match /opponents_index/{characterId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == request.resource.data.ownerUid
+      // `create, update` (não `write` puro, mesmo motivo do fix em replays/{replayId} acima) —
+      // nenhum código apaga um opponents_index hoje, separado só por precaução.
+      allow create, update: if request.auth != null && request.auth.uid == request.resource.data.ownerUid
         && request.resource.data.level is int
         && request.resource.data.level >= 1
         && request.resource.data.level <= 9999
@@ -217,6 +258,28 @@ Firebase project ID — isso vale tanto pra testes quanto, em tese, pra qualquer
 executável duas vezes. Não é um bug do nosso código — é uma limitação conhecida da SDK C++ do
 Firestore; revisitar (`PersistenceEnabled = false`, já que `LocalSaveService` cobre o offline real)
 se esse tipo de crash voltar a acontecer sem a causa óbvia de "2 instâncias rodando".
+
+## Replay fabricado client-side — dívida técnica conhecida e aceita por enquanto
+
+Contexto: análise do sistema de replay (2026-07-18, ver CHANGELOG.md) — `AttackSequencer.OnCombatEnd`
+grava o log de eventos completo da luta (`ReplayRecorder`/`ReplayDTO`) em
+`users/{uid}/characters/{characterId}/replays/{replayId}` depois que o **cliente** já rodou
+`CombatSimulator` e decidiu quem venceu. As regras do Firestore (ver acima) só validam a FORMA do
+documento (`result` é "win"/"loss", `events` é lista, cap de tamanho) — não existe nenhuma
+validação server-side do CONTEÚDO. Nada impede um cliente modificado gravar um replay inteiramente
+inventado (ex: "venci" contra um adversário que nunca existiu, ou um log de eventos que não bate
+com nenhuma luta real).
+
+**Decisão consciente**: aceitar esse risco por enquanto, sem bloquear a feature nele. Diferente da
+regra de diamantes (moeda premium, dinheiro real — ver "Moeda premium" no topo deste arquivo), um
+replay forjado não move nenhum recurso de ninguém — o dano é só cosmético (um jogador mentir pra si
+mesmo sobre o próprio histórico). Não vale a pena exigir Cloud Function **desde o dia 1** pra isso,
+ao contrário de diamantes.
+
+**Revisitar na Fase 8** (anti-cheat/validação server-side geral, ver ROADMAP_FUTURO.md), junto do
+resto do trabalho de validação de resultado de luta — nesse ponto o projeto já deve ter Cloud
+Functions de verdade implantadas por outro motivo (ex: a própria regra de diamantes acima), e dá
+pra reaproveitar essa infra em vez de justificar uma implantação nova só pra replay.
 
 ## Nome de exibição público — nickname da conta + nome do personagem (requisito futuro)
 

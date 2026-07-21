@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Winter Witch 1
   m_EditorClassIdentifier: 
   profileName: Winter Witch 1
+  characterId: 
   characterPrefab: {fileID: 3125084127375158869, guid: f19fe96e968c25048a93abd7a37f6f36, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: c3dd7ff3b04c7a0449029a22df9fe6a3, type: 3}
   splashArt: {fileID: 21300000, guid: 7b20165b47b280346a5e3897e00d8533, type: 3}
+  rarity: 2
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 65
+  maxHealth: 70
   str: 5
   agility: 4
-  speed: 4
+  speed: 3
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

@@ -13,17 +13,20 @@ MonoBehaviour:
   m_Name: Samurai 2
   m_EditorClassIdentifier: 
   profileName: Samurai 2
+  characterId: 
   characterPrefab: {fileID: 4412961634935885534, guid: 5c929a8cdcfd9a846977610392cfe041, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: 9d0ec8c2dc71f3b45a7d75b177968755, type: 3}
   splashArt: {fileID: 21300000, guid: 48e33557fce90144f9f2df57b400b0c2, type: 3}
+  rarity: 1
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 70
-  str: 5
+  maxHealth: 65
+  str: 6
   agility: 3
   speed: 4
   armor: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

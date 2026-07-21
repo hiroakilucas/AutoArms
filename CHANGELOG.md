@@ -3,6 +3,363 @@
 ### Progresso
 - Total: 143 tarefas | Concluídas: 43 (recontado em 2026-07-15 — ver nota em CLAUDE.md)
 
+- 2026-07-21: **Continuar jogando com energia zerada ganhou preço progressivo por dia, por
+  personagem (pedido do usuário)**: substitui o custo fixo único (`EnergySettings.
+  diamondCostToRefill=20`) por 3 faixas em `EnergySettings` (`refillCostTier1=10`/
+  `refillCostTier2=20`/`refillCostTier3Plus=40`, travado a partir da 3ª) — novos campos
+  `energyRefillPaymentsToday`/`energyRefillLastPaymentTimestamp` em
+  `users/{uid}/characters/{characterId}` (mesmo documento de energyCurrent, contador POR
+  PERSONAGEM) resetam sozinhos quando a data (hora do SERVIDOR, mesmo `ReadServerNowAsync` já
+  usado pela regeneração natural — nunca o relógio do device) muda, sem precisar de job/Cloud
+  Function rodando à meia-noite. `EnergyService.GetRefillCostAsync`/`PayToRefillAsync` (novos,
+  substituem `RefillOneAsync`); popup de confirmação em `MainMenuController` já mostra o valor
+  certo e sugere a Loja quando o saldo é insuficiente.
+
+- 2026-07-21: **Level-up — correção de layout (pedido do usuário, 3ª rodada)**: ícone das caixas
+  de escolha reposicionado pra posY 45 (era 85), nome logo abaixo (posY -52, antes -30 acima
+  colava no meio do ícone maior). Botão "Novo Sorteio" corrigido — a tentativa anterior (canto
+  inferior esquerdo, posX 840) caiu no meio da tela; trocado pra canto INFERIOR DIREITO da tela,
+  fora da janela de escolha (que fica centralizada).
+
+- 2026-07-21: **Level-up — correção de layout (pedido do usuário, 2ª rodada)**: ícone das caixas
+  de escolha corrigido pra 150×150 (tentativa anterior, +130=210, ficou grande demais). Botão
+  "Novo Sorteio" movido pra FORA do painel da pirâmide — reparentado em `root` (tela inteira) em
+  vez de `bg`/ChoicePanel, ancorado no canto inferior esquerdo da tela (posX≈840, abaixo/fora do
+  quadrante das caixas). Posição exata não testada visualmente — avisar se não bater com "abaixo
+  da informação do personagem".
+
+- 2026-07-21: **Level-up — ajustes finos de layout (pedido do usuário)**: contador de diamante
+  escalado 2x; botão "Novo Sorteio" virou um quadrado 200×200 (fonte 35), movido pro centro-
+  inferior do painel (âncora trocada de canto-direito pra centro, já que um posX positivo só faz
+  sentido geometricamente a partir do centro); descrição removida das caixas de escolha (só ícone
+  + nome agora); ícone das caixas +130 de largura/altura (80→210) — combinação não testada
+  visualmente, o ícone maior pode encostar no nome logo abaixo dependendo da caixa.
+
+- 2026-07-21: **Level-up — contador de diamante visível + "Novo Sorteio" com preço progressivo e
+  limite de 3 (pedido do usuário)**: painel de escolha ganhou um contador de diamante (canto
+  superior direito, mesmo estilo do contador da Loja) pra o jogador ver o saldo antes de decidir
+  se vale a pena resortear. Preço do "Novo Sorteio" deixou de ser fixo (30) e virou progressivo —
+  1º uso 50 diamantes, 2º 100, 3º 200 — e o botão trava permanentemente ("Limite de sorteios
+  atingido") depois do 3º uso, mesmo com saldo suficiente pra continuar. Gasto agora passa por
+  `WalletService.SpendDiamondsAsync` (persistido de verdade) quando há conta logada, mesmo padrão
+  de `MainMenuController.SpendAndContinueRoutine` — antes só decrementava o contador local em
+  memória.
+
+- 2026-07-21: **Bug real corrigido — desbloqueios/passe/progressão persistidos não tinham efeito
+  fora da Loja**: reportado pelo usuário depois de reiniciar o app — diamante funcionou, mas
+  Skip/1.5x ficaram desabilitados em combate mesmo "esgotados" (comprados) na Loja, o bônus de XP
+  do passe não aplicou numa vitória mesmo mostrando "Ativo", e o level-up não ofereceu as caixas
+  extras de Progressão. Causa: `ShopStateService.LoadAsync` só rodava dentro de
+  `ShopController.Start()` — se o jogador fosse direto pra batalha sem visitar a Loja NESTA
+  sessão, `PlayerUnlocksState`/`PlayerPassState`/`PlayerProgressionState` ficavam no default
+  (tudo desligado) mesmo com o dado certo no Firestore; a própria Loja sempre parecia certa porque
+  recarregava o estado ao abrir, mascarando o problema. Corrigido carregando esse estado nos
+  mesmos 2 pontos onde moeda/diamante/energia já carregam (`LoginController.LoadEconomyRoutine`,
+  `MainMenuController.RefreshEconomyOnMenuLoad`) — agora vale pra qualquer combate da sessão, não
+  só depois de abrir a Loja.
+
+- 2026-07-21: **Loja — persistência real de compras (Firestore), substitui o estado fake local**:
+  diamante/desbloqueios (Skip/1.5x/Bundle)/Passes (Básico/Pro)/Progressão (Slots 1-3)/bônus de 1ª
+  compra por pacote agora gravam em `users/{uid}` (novo `ShopStateService.cs` + `WalletService.
+  AddDiamondsAsync`) em vez de resetar a cada sessão; `ShopController` carrega esse estado ao
+  abrir a Loja e os cards já nascem refletindo o que a conta já possui. Reaproveita os campos
+  `coins`/`diamonds` já existentes (não os nomes `diamondBalance`/`coinBalance`) e o modelo Básico/
+  Pro independente já vigente (não um `tier` único) — ver comentário no topo de
+  `ShopStateService.cs`. TODO SEGURANÇA registrado no código: gravação ainda client-side, sem
+  Cloud Function (ARQUITETURA.md "Moeda premium").
+
+- 2026-07-21: **Resetar Personagem — gera moeda (mecanismo paralelo ao "Reset de Build" do
+  roadmap, que ainda não existe em código)**: novo botão no painel de detalhamento do personagem
+  (`CharacterPanel`, fim da lista de Habilidades/Armas/Pets/Passivas), com popup de confirmação
+  explícita antes de executar. Reseta o personagem pro Level 1 (mesma lógica de campos de
+  `Tools > AutoArms > Reset All Profiles to Level 1`) e credita `nível anterior × coinsPerLevel`
+  moedas (novo `CharacterResetSettings.asset`, `Assets/Resources/`, multiplicador ajustável sem
+  código — 10 por padrão). Não implementa a liberação de personagem por moeda (fora do escopo).
+
+- 2026-07-21: **Bug real corrigido + botão quadrado pro painel de detalhamento (pedido do
+  usuário)**: "o primeiro painel sem expandir está cobrindo uma skill" — o bloco Compact do
+  `CharacterPanel` (nome/HP/pips, sempre visível por padrão) tapava uma das caixas de escolha.
+  `CharacterPanel.Setup` ganhou um parâmetro opcional `hideCompact` (default `false`, sem efeito
+  em nenhum outro caller — 01_MainMenu/02_SelectCharacter/03_Arsenal continuam idênticos) que pula
+  o estado Compact por completo, inclusive ao recolher (`CrossFade` ajustado pra não reativar o
+  Compact quando `hideCompact=true` — sem isso, fechar o painel expandido reexibiria o bloco que
+  cobria a skill). `CombatResultPanel` agora usa esse modo + um botão quadrado próprio (ícone "i",
+  canto superior direito, fora do `Root` do CharacterPanel — sempre clicável independente do
+  estado) que chama `Expand()`/`Collapse()` direto, abrindo o painel já expandido, sem passar pelo
+  Compact.
+
+- 2026-07-21: **Level-up — layout em pirâmide, cards 1.5x, botão de reset no canto inferior
+  direito, painel de detalhamento maior (pedido do usuário)**: caixas passam de fileira única
+  horizontal pra pirâmide (fileira de cima = metade das caixas arredondada pra baixo, fileira de
+  baixo = o resto — 2 em cima/3 em baixo pra 5 caixas, como pedido; generaliza pras contagens
+  2/3/4 também). Cards escalados 1.5x (`MakeLevelUpCard` ganhou parâmetro `scale`, aplicado direto
+  na `RectTransform` do card — conteúdo interno escala junto de graça). Botão "Novo Sorteio" movido
+  do canto superior pro INFERIOR direito (evita disputar espaço com o painel de detalhamento, que
+  mora no canto superior direito). Painel de detalhamento do personagem escalado 1.5x — como
+  `CharacterPanel` não tem parâmetro de escala próprio (componente compartilhado com
+  01_MainMenu/02_SelectCharacter/03_Arsenal), a `RectTransform` "Root" é escalada de fora
+  (`CombatResultPanel`, sem tocar em `CharacterPanel.cs`), com pivot movido pro canto superior
+  direito antes de escalar pra crescer pra dentro da tela em vez de vazar pela borda. Geometria
+  (posições/tamanhos de painel) é um chute inicial não testado visualmente — calibrar depois de
+  ver em jogo, especialmente com 4-5 caixas (mais provável de sobrepor o painel de detalhamento).
+
+- 2026-07-21: **Level-up — roleta de cassino, sem repetição na mesma sequência, botão "Novo
+  Sorteio" (pedido do usuário)**: reportado "veio dois Feline Agility na mesma escolha" — as
+  caixas 2+ agora excluem skill/arma/pet já sorteado nas caixas ANTERIORES do mesmo level-up
+  (`DrawAndBuildCards`, filtra os pools elegíveis antes de cada sorteio; reverte a permissão de
+  repetição da entrada anterior do changelog). Novo `LevelUpReelSpinner.cs` gira o ícone de cada
+  caixa por um pool de sprites de todo o jogo antes de travar no resultado real já sorteado —
+  caixas travam em sequência da esquerda pra direita (duração cumulativa maior por caixa);
+  "Escolher" e o popup de detalhe do ícone ficam desabilitados até travar. Novo botão "Novo
+  Sorteio (30 diamantes)" no canto do painel — gasta `PlayerEconomyState.Diamonds` (client-side,
+  mesmo placeholder de Fase 1 de sempre) e refaz o sorteio + a roleta das N caixas do zero; preço
+  fixo escolhido sem confirmação do usuário, ajustar a constante `RerollCost` se não for o valor
+  desejado.
+
+- 2026-07-21: **Level-up — volta direto ao menu ao escolher + fundo preto sólido (pedido do
+  usuário)**: escolher um bônus na tela de level-up carrega `01_MainMenu` na hora (mesma coroutine
+  do botão "Continuar"), sem exigir um clique extra. Overlay atrás das caixas de escolha trocado de
+  55% translúcido pra preto sólido — como o painel de detalhamento usa um canvas raiz próprio
+  (`sortingOrder=1500`, sempre acima de qualquer canvas do jogo), o mesmo overlay único cobre os
+  dois (caixas de escolha e painel de detalhamento) sem precisar duplicar o backdrop.
+
+- 2026-07-21: **Bug real corrigido (2ª rodada)** — painel de detalhamento do level-up e o popup de
+  detalhe continuavam atrás das caixas de escolha mesmo depois de forçar `sortingOrder=1500` no
+  Canvas do `CharacterPanel`. Causa real: o painel estava parentado dentro de `root` (já filho do
+  Canvas da tela de escolha) — isso vira um CANVAS ANINHADO, e `sortingOrder` de um canvas aninhado
+  só reordena entre irmãos do mesmo canvas pai, nunca vence canvases-RAIZ concorrentes
+  (HealthBar/HealthBarPet = 100). Corrigido instanciando o painel SEM PAI nenhum (GameObject raiz
+  de cena própria, mesmo padrão de `ArsenalController.EnsureDetailPanel`/`SelectOpponentController`
+  — os únicos outros lugares que já usavam `CharacterPanel` com sucesso) — canvas raiz de verdade,
+  `sortingOrder=1500` agora vence qualquer canvas do jogo. Passou a precisar de destruição manual
+  (não é mais filho de `root`, `Object.Destroy(root)` não alcança mais ele).
+
+- 2026-07-21: **Level-up — popup de detalhe ao clicar no ícone + painel de detalhamento do
+  personagem (pedido do usuário)**: `CombatResultPanel.MakeLevelUpCard` agora abre o mesmo popup
+  do `01_MainMenu` (`CharacterPanel.ShowSkillDetail`/`ShowWeaponDetail`/`ShowPetDetail`) ao clicar
+  no ícone de uma caixa com skill/arma/pet. `ShowLevelUpChoice` também instancia um `CharacterPanel`
+  visível (mesmo componente/posição do menu — compacto por padrão, nome/HP/STR/AGI/SPD; clique
+  expande pra ver Habilidades/Armas/Pets equipados) mostrando o profile ANTES do bônus escolhido,
+  pra comparar com o que já possui. Novo campo `AttackSequencer.theme` (wireado em
+  `04_CombatScenePVP.unity`) leva o `UITheme` até o `CombatResultPanel`, que não tinha acesso a
+  nenhum antes.
+
+- 2026-07-21: **Level-up — Caixa 1 sempre status base, Caixas 2+ sorteio ponderado por odds reais
+  (pedido do usuário)**: nova `PlayerProgressionState` (canal estático, mesmo padrão de
+  `PlayerUnlocksState`/`PlayerPassState`) grava os Slots de Skill comprados na Loja e decide o
+  número de caixas do level-up (2 base + 1 por slot, até 5). `LevelUpEngine.DrawBaseAttributeOption`
+  (Caixa 1, só HP/STR/AGI/SPD) e `DrawWeightedOption` (Caixas 2+, pesa cada skill/arma/pet
+  elegível pelo próprio `odds`/`dropOdds` aplicado na tarefa anterior; fatia residual cai pro
+  mesmo pool de status base — nenhuma caixa fica vazia) somam-se ao `DrawOption` antigo (mantido
+  intacto, ainda usado por `BotProfileGenerator`). `CombatResultPanel.ShowAllOptionsForTesting`
+  desligado (era o modo de teste "mostra tudo numa grade") pra essa diferenciação aparecer de
+  verdade em jogo; painel de escolha agora tem largura dinâmica pra caber de 2 a 5 cartões.
+
+- 2026-07-21: **Loja — trava de progressão sequencial na aba Progressão**: Slot de Skill 2 e Slot
+  de Skill 3 aparecem bloqueados ("Requer Slot de Skill N") até o slot anterior ser comprado —
+  `ShopController.ProgressionLockState` checa `ShopItem.Purchased` do prerequisito (mesma variável
+  local de sempre, sem estado novo) e `ShopCardUI.RefreshPurchaseState` desabilita o botão Comprar
+  (cinza, sem clique) enquanto bloqueado; destrava imediatamente após a compra do slot anterior
+  (`RebuildGrid`, sem reload de cena).
+
+- 2026-07-21: **Odds de sorteio (My Brute) aplicados em Skills/Armas/Pets**: novo campo
+  `SkillData.odds` (`WeaponData.dropOdds`/`PetData.odds` já existiam) preenchido pra 51/53 skills,
+  26/26 armas e 3/3 pets via tabela original My Brute/eternaltwin (soma combinada 99.35%, não
+  normalizada — valor confere com a fonte original). Ferramenta `Tools > AutoArms > Apply My Brute
+  Odds` (`Assets/Editor/OddsApplier.cs`) aplica os valores nos `.asset`; "Bandage"/"Backup" ficaram
+  de fora (sem `SkillData` correspondente no projeto ainda). Campos só preenchidos — nenhum sorteio
+  de combate foi alterado (CombatResultPanel.ShowLevelUpChoice continua nos pesos 60/30/10 de
+  sempre).
+
+- 2026-07-21: **Bug real corrigido** — `MainMenuController.characterDatabase` nunca tinha sido
+  wireado em `01_MainMenu.unity` (campo adicionado ao script depois do último save da cena, nunca
+  arrastado no Inspector) — clicar num replay logava "CharacterDatabase não wireado" em vez de
+  reproduzir. Corrigido adicionando a referência direto na cena (mesmo GUID já usado por
+  `CharacterPreviewManager` pro mesmo asset).
+
+- 2026-07-21: **Skip/1.5x sempre habilitados durante replay** (pedido do usuário) — os dois
+  botões da tela de combate passavam pelo mesmo gate de `PlayerUnlocksState` mesmo ao reproduzir
+  um replay já resolvido, travando quem não tinha comprado o desbloqueio na Loja mesmo só pra
+  assistir a própria luta de novo. `CombatHUD.AddSpeedControls` agora lê `player.sequencer.
+  isReplayPlayback` (já setado por `CombatSceneLoader` antes de montar o HUD) e força os dois
+  botões habilitados nesse modo, independente do estado de compra.
+
+- 2026-07-21: **Loja — Passes revisados pra INDEPENDENTES + bônus de XP real por vitória**
+  (pedido do usuário, substitui o modelo de "tier único"/upgrade da entrada anterior do
+  changelog): `PlayerPassState` trocou `ActiveTier`/`DaysRemaining` por `BasicoDaysRemaining`/
+  `ProDaysRemaining` — Básico e Pro agora contam 30 dias cada um por conta própria, podendo os
+  dois estarem ativos ao mesmo tempo (comprar um não afeta o contador do outro). Novo
+  `PlayerPassState.WinXpBonus()` (0/1/2/3) somado ao XP base de vitória em
+  `AttackSequencer.OnCombatEnd` (2 + bônus) fecha exatamente nos totais pedidos: sem passe = 2 XP,
+  só Básico = 3 XP, só Pro = 4 XP, os dois = 5 XP — só na vitória, nunca na derrota, e só enquanto
+  o(s) passe(s) estiver(em) dentro do período de 30 dias. Popup "i" do card atualizado pra refletir
+  que o bônus de XP já funciona de verdade; a coleta diária de diamante/moeda continua pendente
+  (fora do escopo pedido).
+
+- 2026-07-21: **Loja — lógica de compra da aba Passes (ativação/upgrade/acúmulo de dias)**: novo
+  `PlayerPassState.cs` (canal estático cross-scene, mesmo padrão de `PlayerEconomyState`/
+  `PlayerUnlocksState`) guardando o tier ativo (nenhum/Básico/Pro) e os dias restantes.
+  `ShopController.ApplyPassPurchase` implementa as 5 regras pedidas: sem passe ativo → ativa com
+  30 dias; Pro comprado com Básico ativo → upgrade pra Pro + acumula (dias do Básico + 30); Básico
+  comprado com Pro ativo → mantém Pro, só soma 30 dias; mesmo tier comprado de novo → só soma 30
+  dias. Os dois cards agora ficam SEM LIMITE (removido `limit: 1` de antes) — continuam
+  compráveis pra acumular, mostrando "Ativo — N dias restantes" no lugar do "Comprado Nx (sessão)"
+  genérico quando aplicável (`ShopCardUI` ganhou um parâmetro `statusOverride` pra isso, sem afetar
+  nenhum outro card). Novo botão "i" no canto superior direito dos cards de passe (`ShopCardUI`,
+  parâmetro `onInfo`) abre um popup avisando que a recompensa diária (diamante/moeda/XP) ainda não
+  foi implementada — só a ativação/contagem de dias funciona nesta Fase 1. Lógica/efeitos de
+  Diamantes, Skip, 1.5x, Bundle e o layout de sidebar+scroll horizontal inalterados.
+
+- 2026-07-21: **Desbloqueios de verdade: Skip/1.5x do combate agora exigem compra na Loja**
+  (pedido do usuário, teste da aba Desbloqueios) — novo `PlayerUnlocksState.cs` (canal estático
+  cross-scene, mesmo padrão de `PlayerEconomyState`) com `SkipUnlocked`/`Speed15xUnlocked`;
+  `ShopController.OnBuyClicked` grava `true` neles ao comprar Skip/1.5x/Bundle na aba
+  Desbloqueios. `CombatHUD.MakeSpeedToggleButton`/`MakeSpeedButton` (botões de velocidade/Skip da
+  tela de combate, antes sempre disponíveis pra todo mundo) agora leem esse estado — sem a compra,
+  o botão continua visível mas fica opaco (40% de alpha) e `interactable = false`; depois de
+  comprado funciona normalmente. **TODO de segurança marcado no código** — só em memória nesta
+  Fase 1 (sem Firestore), reseta a cada sessão/reinstalação.
+
+- 2026-07-21: **Bug real corrigido (causa raiz de verdade)** — efeito de diamantes voando
+  continuava não aparecendo mesmo sem nenhum erro no Console. Causa: `ShopController.Start()`
+  capturava `_canvasTransform = canvasGo.transform` ANTES de `canvasGo.AddComponent<Canvas>()` —
+  `Canvas` exige `RectTransform` (`[RequireComponent]`), então o Unity troca o `Transform` plano
+  original por um `RectTransform` novo nesse momento (destruindo o componente antigo). A
+  referência já capturada em `_canvasTransform` ficava "morta" (fake-null, sem lançar exceção) —
+  `FlyingDiamondIcon.Rent` reparentava os ícones nessa referência inválida, então eles ficavam
+  fora de qualquer Canvas e nunca renderizavam (tudo o mais na Loja usa `canvasGo.transform`
+  fresco a cada chamada, por isso só este efeito específico quebrava). Corrigido movendo a
+  captura de `_canvasTransform` pra depois de `AddComponent<Canvas>()`.
+
+- 2026-07-21: **Bug real corrigido** — usuário reportou "não apareceu o efeito ainda" (diamantes
+  voando). Causa: o contador de diamante do header (`ShopController.BuildDiamondCounter`) usava
+  `HorizontalLayoutGroup.childControlWidth = false`, que faz o layout IGNORAR `LayoutElement.
+  preferredWidth`/`flexibleWidth` dos filhos — ícone e número do contador renderizavam com
+  largura ~0 (efetivamente invisíveis), então o "destino" visual do voo nunca aparecia de
+  referência. Corrigido pra `childControlWidth = true`. Aproveitado pra deixar o efeito em si mais
+  perceptível: ícone 48→64px, "pop" de entrada (escala 0→overshoot→1 em vez de aparecer estático
+  no tamanho final) e timings reajustados pra caber com folga na janela de 0.4-0.8s mesmo com o
+  pop somado; guard de `SpawnDiamondBurst` agora loga um aviso se alguma referência necessária
+  vier nula, em vez de falhar em silêncio.
+
+- 2026-07-21: **Loja — efeito "diamantes voando" + saldo local de verdade (aba Diamantes)**: novo
+  contador de diamante no header da Loja (`ShopController.BuildDiamondCounter`, canto superior
+  direito), refletindo `PlayerEconomyState.Diamonds` (mesmo campo estático usado no resto do app).
+  Comprar qualquer pacote agora credita o saldo DE VERDADE em memória (`PlayerEconomyState.
+  Diamonds += credited`, considerando o bônus de 1ª compra quando aplicável) e dispara 5-8 ícones
+  de diamante (`FlyingDiamondIcon.cs`, componente novo) voando do botão "COMPRAR" clicado
+  (`ShopCardUI.BuyButtonWorldPosition`, refinado 2026-07-21 — saía do centro do card inteiro antes)
+  até o contador, em trajetória de arco (Bézier quadrática, altura proporcional à distância), com atraso/duração levemente
+  variados por ícone (rajada) — o número do contador sobe aos poucos conforme cada ícone chega
+  (não tudo de uma vez), fechando exatamente no valor certo quando o último chega. Duração total
+  do efeito entre ~0.4s-0.8s. `FlyingDiamondIcon` usa pool estático com `SetActive`/`RemoveAll(p
+  => p == null)`, mesmo padrão de `DamagePopup`/`CombatPlayer._ghostPool`. **TODO de segurança
+  marcado no código** — saldo só em memória nesta Fase 1 (sem gravação no Firestore/WalletService
+  ainda), então é perdido ao voltar pro menu principal (que resincroniza com o Firestore de
+  verdade); compra com dinheiro real vai precisar de validação server-side do recibo antes de
+  creditar, quando a Fase 4 ganhar o gateway de pagamento (ver ARQUITETURA.md "Moeda premium").
+
+- 2026-07-21: **Bug real corrigido** — painel do personagem (gaveta mobile, `01_MainMenu`) expandido
+  ultrapassava o teto da tela em telas com proporção mais larga que 16:9, cortando as skills/armas
+  do topo (`BottomDrawerExpandedTopOverflow` era um valor fixo de 348.4799px em pixels de
+  referência 1920×1080; como o Canvas trava a escala pela LARGURA, telas mais "esticadas" têm
+  menos altura disponível em unidades locais do que 1080). `CharacterPanel.BuildExpanded` agora
+  clampa esse overflow pelo espaço real sobrando até o teto do `SafeArea` (lido direto do
+  RectTransform, com uma margem de 20px — `BottomDrawerTopSafeMargin`) — em telas grandes (16:9 ou
+  mais estreitas) o comportamento não muda nada; só telas pequenas (proporção mais larga) passam a
+  ter o Expanded "acompanhando o teto" em vez de ultrapassá-lo.
+
+- 2026-07-20: **Loja — bônus de 1ª compra por pacote de diamante (aba Diamantes)**: cada um dos 8
+  cards ganhou um selo "1ª compra: N diamantes (+25%)" (`ShopController.NewDiamondItem`, +25%
+  arredondado pra cima — `Mathf.CeilToInt`, bate com a tabela do pedido: 30→38, 80→100, 170→213,
+  360→450, 950→1188, 2000→2500, 4100→5125, 6100→7625), visível só até aquele pacote específico ser
+  comprado uma vez (`ShopItem.FirstPurchaseBonusUsed`, por pacote — comprar o de 80 não afeta o de
+  170); depois disso o selo some e o card volta a mostrar só a quantidade normal. A compra fake
+  (log no Console) credita a quantidade certa (com ou sem bônus). Preço em R$ de cada pacote
+  inalterado. **TODO de segurança marcado no código** (`ShopItem`) — o flag só existe em memória
+  nesta Fase 1, reseta a cada sessão/reinstalação; precisa virar autoritativo no servidor antes do
+  lançamento real (mesma regra de "nunca confiar no cliente" de ARQUITETURA.md "Moeda premium").
+
+- 2026-07-20: **Loja — Passes mensais (aba Passes) desabilitam e mostram dias restantes após a
+  compra**: `limit: 1` nos dois passes (pedido do usuário) + `ShopItem.PassDaysRemaining` (fixado
+  em 30 na compra, `ShopController.OnBuyClicked`) — o botão passa de "COMPRAR" pra "30 dias" em
+  vez do "ESGOTADO" genérico (`ShopCardUI.Build`/`RefreshPurchaseState` ganharam um parâmetro
+  `soldOutLabel` opcional pra isso). Fase 1 (mock): só fixa o valor inicial, não decrementa
+  sozinho — não existe relógio/tick nem Firestore ainda pra um countdown real.
+
+- 2026-07-20: **Loja — comprar o Bundle desabilita Skip/1.5x avulsos**: direção oposta da regra já
+  existente (Skip/1.5x avulso faz o Bundle sumir) — agora comprar o Bundle primeiro marca Skip de
+  batalha e Velocidade 1.5x como esgotados (`Purchased = PurchaseLimit`, mesmo estado "ESGOTADO"/
+  desabilitado de qualquer item com limite), sem removê-los da lista (`ShopController.
+  OnBuyClicked`, novo bloco `item.Title == BundleTitle`).
+
+- 2026-07-20: **Loja — Skip/1.5x/Bundle (aba Desbloqueios) limitados a 1 compra cada**: os 3 cards
+  ganharam `limit: 1` (pedido do usuário) — mesmo comportamento de esgotar (desabilita, mostra
+  "ESGOTADO") já usado em Progressão/Personagens. Regra de o Bundle sumir ao comprar Skip ou 1.5x
+  primeiro (ver linha anterior no changelog) continua funcionando igual, agora com os 3 também
+  esgotando individualmente depois da 1ª compra.
+
+- 2026-07-20: **Bug real corrigido** — cards da Loja "iam indo pra direita" a cada compra
+  (`ShopController.RebuildGrid`): `Destroy()` só remove o GameObject de fato no fim do frame, mas
+  os cards novos eram adicionados como filhos do `Content` imediatamente — por um instante o
+  `GridLayoutGroup`/`ContentSizeFitter` viam o DOBRO de cards (antigos pendentes + novos) e
+  calculavam a largura em cima disso, empurrando os cards um pouco mais pra direita a cada clique
+  de compra. Corrigido desparentando (`SetParent(null, false)`, efeito imediato) os cards antigos
+  antes de destruí-los, em vez de só chamar `Destroy()` direto.
+
+- 2026-07-20: **Loja — Slots de Skill (aba Progressão) limitados a 1 compra cada**: os 3 cards
+  (`Slot de Skill 1/2/3`) ganharam `limit: 1` (pedido do usuário — eram sem limite, dava pra
+  comprar o mesmo slot várias vezes) — mesmo comportamento de esgotar já usado na aba Personagens
+  (card desabilita e mostra "ESGOTADO" depois da 1ª compra). Textos/preços inalterados.
+
+- 2026-07-20: **Loja — card de liberação de personagem por MOEDA (aba Personagens)**: novo
+  primeiro card da aba (`ShopController.BuildItemData`, título "Próximo Personagem"), cobrindo a
+  seção 6 do MONETIZACAO.md que ainda não tinha UI — único card da Loja com preço em moeda (ícone
+  Coin, não Diamond) e preço DINÂMICO: 100/200/400/600/800/1000 da 1ª à 6ª liberação, +400 a cada
+  liberação a partir da 7ª (`CharacterSlotCost`). Clicar em "Comprar" incrementa o contador local
+  (`ShopItem.Purchased`, mesmo mecanismo em memória da Fase 1) e reconstrói o card já mostrando o
+  preço da PRÓXIMA liberação — dá pra clicar várias vezes seguidas e ver a progressão
+  100→200→400→600→800→1000→1400→1800... Cards de Raro/Legendary/Imortal inalterados.
+
+- 2026-07-20: **Loja — regra do Bundle na aba Desbloqueios**: Bundle (Skip + 1.5x) passou a ser o
+  primeiro card da lista (antes vinha por último); comprar Skip de batalha OU Velocidade 1.5x
+  avulso agora remove o Bundle da lista (`ShopController.OnBuyClicked`, checa `SkipTitle`/
+  `BoostTitle`/`BundleTitle`) — não faz mais sentido oferecer o combo depois que um dos dois já
+  foi liberado individualmente. Estado só em memória (Fase 1), reseta ao sair da cena.
+
+- 2026-07-20: **Loja — layout revisto (sidebar + scroll horizontal)**: as 5 abas
+  (`ShopController.BuildSidebar`) saíram da barra horizontal no topo e viraram uma barra lateral
+  vertical à esquerda (botões empilhados via `VerticalLayoutGroup`, estilo Brawl Stars, pedido do
+  usuário); os cards de cada aba (`ShopController.BuildScrollView`/`RebuildGrid`) passaram de grid
+  vertical (wrap) pra rolagem HORIZONTAL — `GridLayoutGroup.Constraint.FixedRowCount`, 2 linhas na
+  aba Diamantes (8 pacotes), 1 linha nas demais. Cards bem maiores (altura quase preenchendo a
+  região disponível, corrigindo o fundo bege vazio sobrando abaixo deles) — `ShopCardUI.Build`
+  agora recebe a altura real do card e escala ícone/paddings/fontes proporcionalmente
+  (`scale = cardHeight/420`); a altura do subtítulo deixou de ser uma constante proporcional fixa
+  e passou a ser calculada a partir do espaço realmente sobrante entre título e preço (bug real
+  encontrado ao conferir a geometria — a caixa de subtítulo antiga podia se sobrepor ao cluster de
+  preço/status/comprar, só não aparecia porque o texto nunca era longo o bastante pra preencher a
+  caixa inteira). Lógica de compra fake, textos e preços de cada card **inalterados**.
+
+- 2026-07-20: **Loja (Fase 1 — placeholder, ver MONETIZACAO.md)**: nova cena `06_Loja`
+  (`ShopController.cs`) com 5 abas horizontais (Diamantes/Desbloqueios/Passes/Progressão/
+  Personagens), grid de cards (`ShopCardUI.cs`, mesmo padrão de grid/RoundedRect de
+  `ArsenalController`/`ArsenalSlotUI`) e navegação entre abas sem reload de cena. Preços/itens
+  espelham `MONETIZACAO.md` (documento novo, criado nesta sessão — referência oficial da Fase 4).
+  Aba Diamantes usa o ícone final (`Diamond.png`); as outras 4 abas usam retângulo cinza
+  placeholder (sem arte ainda). Clicar em "Comprar" não grava no Firestore nem debita
+  `WalletService` de verdade — só loga no Console e incrementa um contador local em memória (aba
+  Personagens desabilita o card ao esgotar o limite de compras). Botão "LOJA" novo em
+  `01_MainMenu` (`MainMenuController.BuildLojaMenuButton`), mesma coluna de atalhos abaixo de
+  REPLAY, ícone placeholder (arte dos 4 botões da coluna a gerar depois, junto).
+
+- 2026-07-20: **Bug real corrigido** — energia era descontada no clique do botão Jogar
+  (`MainMenuController.OnPlayButton`), antes até da luta acontecer; desistir em
+  `05_SelectOpponent` ou fechar o jogo no meio do combate já cobrava a energia à toa. Consumo
+  movido pra `AttackSequencer.OnCombatEnd` (só roda quando a luta termina em vitória ou derrota
+  de verdade); `OnPlayButton` só checa/gate a energia agora, e `SpendAndContinueRoutine` só
+  reabastece (sem consumir na hora) — ver seção **Sistema de Energia/Moeda** em CLAUDE.md.
+
 - 2026-07-20: Botão REPLAY do menu principal (`MainMenuController.BuildReplaysMenuButton`):
   - Texto "REPLAYS"→**"REPLAY"** (singular, pedido do usuário).
   - **Bug real corrigido** — o texto renderizava mais fino e com contorno menos visível que

@@ -10,15 +10,17 @@ public class CombatResultPanel : MonoBehaviour
 {
     public void Show(bool player1Won, int xpGained, int xpBefore, int levelBefore,
                      PlayerProfile profile, bool didLevelUp,
-                     SkillDatabase skillDatabase = null, WeaponData[] allWeapons = null)
+                     SkillDatabase skillDatabase = null, WeaponData[] allWeapons = null,
+                     PetData[] petPool = null, UITheme theme = null)
     {
         StartCoroutine(ShowRoutine(player1Won, xpGained, xpBefore, levelBefore,
-                                   profile, didLevelUp, skillDatabase, allWeapons));
+                                   profile, didLevelUp, skillDatabase, allWeapons, petPool, theme));
     }
 
     private IEnumerator ShowRoutine(bool player1Won, int xpGained, int xpBefore, int levelBefore,
                                     PlayerProfile profile, bool didLevelUp,
-                                    SkillDatabase skillDatabase, WeaponData[] allWeapons)
+                                    SkillDatabase skillDatabase, WeaponData[] allWeapons, PetData[] petPool,
+                                    UITheme theme)
     {
         yield return new WaitForSeconds(0.8f);
 
@@ -101,9 +103,12 @@ public class CombatResultPanel : MonoBehaviour
             barFill.fillAmount = xpRequiredAfter > 0 ? (float)profile.xpCurrent / xpRequiredAfter : 0f;
             xpLabel.text = $"{profile.xpCurrent} / {xpRequiredAfter} XP";
 
-            ShowLevelUpChoice(canvas.transform, profile, skillDatabase, allWeapons, () => {
+            // Pedido do usuário (2026-07-21): ao escolher o bônus, voltar direto pro menu
+            // principal em vez de exigir um clique extra em "Continuar" — mesma coroutine
+            // assíncrona do próprio botão "Continuar" (LoadMainMenuAsync).
+            ShowLevelUpChoice(canvas.transform, profile, skillDatabase, allWeapons, petPool, theme, () => {
                 choiceDone = true;
-                continueBtn.interactable = true;
+                StartCoroutine(LoadMainMenuAsync());
             });
 
             yield return new WaitUntil(() => choiceDone);
@@ -111,170 +116,15 @@ public class CombatResultPanel : MonoBehaviour
     }
 
     // ── Level-Up Choice Panel ────────────────────────────────────────────────
-
-    private struct LevelUpOption
-    {
-        public enum Kind { Attribute, Skill, Weapon, Pet }
-        public Kind kind;
-        public int attrIndex;
-        public SkillData skill;
-        public WeaponData weapon;
-        public PetType petType;
-
-        public string Name() => kind switch {
-            Kind.Attribute => new[] {
-                "+12 HP", "+2 STR", "+2 AGI", "+2 SPD",
-                "+1 STR / +1 AGI", "+1 AGI / +1 SPD", "+1 STR / +1 SPD",
-                "+6 HP / +1 STR", "+6 HP / +1 AGI", "+6 HP / +1 SPD"
-            }[attrIndex],
-            Kind.Skill     => skill != null ? (skill.tier > 1 ? $"{skill.skillName} (T{skill.tier})" : skill.skillName) : "?",
-            Kind.Weapon    => weapon?.weaponName ?? "?",
-            Kind.Pet       => PetState.DisplayName(petType),
-            _              => "?"
-        };
-
-        public string Desc() => kind switch {
-            Kind.Attribute => new[] {
-                "Vida máxima +12",
-                "Força +2",
-                "Agilidade +2",
-                "Velocidade +2",
-                "Força +1, Agilidade +1",
-                "Agilidade +1, Velocidade +1",
-                "Força +1, Velocidade +1",
-                "Vida máxima +6, Força +1",
-                "Vida máxima +6, Agilidade +1",
-                "Vida máxima +6, Velocidade +1"
-            }[attrIndex],
-            Kind.Skill  => skill?.description ?? "",
-            Kind.Weapon => weapon != null ? $"{string.Join(", ", weapon.types)} • {weapon.damage} dano" : "",
-            // -HP do dono (HpCost) entra logo na escolha — ApplyBonus já garante maxHealth >= 1.
-            Kind.Pet    => $"Luta junto. -{PetState.HpCost(petType)} HP máximo do dono",
-            _           => ""
-        };
-
-        public Color AttrColor() => kind == Kind.Attribute ? attrIndex switch {
-            0 => new Color(0.8f, 0.2f, 0.2f),
-            1 => new Color(1f,   0.6f, 0.1f),
-            2 => new Color(0.2f, 0.7f, 0.2f),
-            3 => new Color(0.3f, 0.5f, 1f),
-            4 => new Color(0.9f, 0.7f, 0.1f),
-            5 => new Color(0.2f, 0.8f, 0.6f),
-            6 => new Color(0.7f, 0.4f, 0.9f),
-            7 => new Color(0.9f, 0.4f, 0.2f),  // HP+STR — laranja-avermelhado
-            8 => new Color(0.4f, 0.7f, 0.3f),  // HP+AGI — verde-médio
-            9 => new Color(0.4f, 0.6f, 0.9f),  // HP+SPD — azul-médio
-            _ => Color.white
-        } : Color.white;
-    }
-
-    // Pool de pets sempre disponível (sem restrição de duplicatas — o mesmo tipo pode sair de
-    // novo mesmo que o jogador já tenha um igual), por isso wPet não degrada a 0 como
-    // wSkill/wWeapon quando o pool correspondente está vazio.
-    private static readonly PetType[] PetPool = { PetType.Mouse, PetType.Monkey, PetType.Boar };
-
-    private static LevelUpOption DrawOption(List<SkillData> skills, List<WeaponData> weapons)
-    {
-        float wAttr   = 0.60f;
-        float wSkill  = skills.Count  > 0 ? 0.30f : 0f;
-        float wWeapon = weapons.Count > 0 ? 0.10f : 0f;
-        float wPet    = 0.10f;
-        float total   = wAttr + wSkill + wWeapon + wPet;
-        float r       = Random.value * total;
-
-        if (r < wAttr)
-            return new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = Random.Range(0, 10) };
-        if (r < wAttr + wSkill)
-            return new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = skills[Random.Range(0, skills.Count)] };
-        if (r < wAttr + wSkill + wWeapon)
-            return new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = weapons[Random.Range(0, weapons.Count)] };
-        return new LevelUpOption { kind = LevelUpOption.Kind.Pet, petType = PetPool[Random.Range(0, PetPool.Length)] };
-    }
-
-    private static bool SameOption(LevelUpOption a, LevelUpOption b)
-    {
-        if (a.kind != b.kind) return false;
-        return a.kind switch {
-            LevelUpOption.Kind.Attribute => a.attrIndex == b.attrIndex,
-            LevelUpOption.Kind.Skill     => a.skill     == b.skill,
-            LevelUpOption.Kind.Weapon    => a.weapon    == b.weapon,
-            LevelUpOption.Kind.Pet       => a.petType   == b.petType,
-            _                            => false
-        };
-    }
+    // LevelUpOption (struct) e a matemática de sorteio/aplicação/elegibilidade (DrawOption/
+    // SameOption/ApplyBonus/filtros de skill-arma) moraram aqui antes — extraídas pra
+    // LevelUpEngine (Assets/Scripts/Utils/) pra serem reaproveitadas por BotProfileGenerator, sem
+    // duplicar os pesos/regras de tier-chain em dois lugares. Este arquivo continua dono da UI e
+    // da persistência (ApplyBonus abaixo).
 
     private static void ApplyBonus(LevelUpOption opt, PlayerProfile profile)
     {
-        switch (opt.kind)
-        {
-            case LevelUpOption.Kind.Attribute:
-                switch (opt.attrIndex)
-                {
-                    case 0: profile.maxHealth += 12; break;
-                    case 1: profile.str       += 2; break;
-                    case 2: profile.agility   += 2; break;
-                    case 3: profile.speed     += 2; break;
-                    case 4: profile.str += 1; profile.agility += 1; break;
-                    case 5: profile.agility += 1; profile.speed += 1; break;
-                    case 6: profile.str += 1; profile.speed += 1; break;
-                    case 7: profile.maxHealth += 6; profile.str     += 1; break;
-                    case 8: profile.maxHealth += 6; profile.agility += 1; break;
-                    case 9: profile.maxHealth += 6; profile.speed   += 1; break;
-                }
-                break;
-            case LevelUpOption.Kind.Skill:
-                if (opt.skill != null && !profile.skills.Contains(opt.skill))
-                {
-                    // Upgrade de tier: remove o tier anterior da lista antes de adicionar o novo
-                    // — mesmo padrão de WeaponData (Kind.Weapon abaixo). Comparação por
-                    // nome+tier, mesmo padrão do resto deste arquivo.
-                    if (opt.skill.previousTier != null)
-                        profile.skills.RemoveAll(ps => ps != null
-                            && ps.skillName == opt.skill.previousTier.skillName
-                            && ps.tier == opt.skill.previousTier.tier);
-                    profile.skills.Add(opt.skill);
-
-                    // Vitality / Herculean Strength / Feline Agility / Lightning Bolt /
-                    // Reconnaissance / First Strike: flat permanente (HP/STR/AGI/SPD,
-                    // bonusValue2 do asset) aplicado uma única vez na escolha (igual a um pick de
-                    // Atributo) — o percentual restante (bonusValue1) é aplicado em runtime sobre
-                    // esse valor já somado (ApplySkillStats/GetEffectiveStats).
-                    // bonusValue2 é o TOTAL acumulado do tier (ex: Herculean T1=+3, T2=+5 total,
-                    // T3=+7 total) — não aditivo por tier. Numa troca de tier o T1/T2 antigo já
-                    // aplicou sua parcela, então só a DIFERENÇA entre o total novo e o total do
-                    // tier anterior deve ser somada agora (senão dobra a contagem).
-                    float prevBonus2 = opt.skill.previousTier != null ? opt.skill.previousTier.bonusValue2 : 0f;
-                    int   delta2     = Mathf.RoundToInt(opt.skill.bonusValue2 - prevBonus2);
-
-                    if (opt.skill.skillName == "Vitality")
-                        profile.maxHealth += delta2;
-                    else if (opt.skill.skillName == "Herculean Strength")
-                        profile.str += delta2;
-                    else if (opt.skill.skillName == "Feline Agility")
-                        profile.agility += delta2;
-                    else if (opt.skill.skillName == "Lightning Bolt")
-                        profile.speed += delta2;
-                    else if (opt.skill.skillName == "Reconnaissance")
-                        profile.speed += delta2;
-                    else if (opt.skill.skillName == "First Strike")
-                        profile.speed += delta2;
-                }
-                break;
-            case LevelUpOption.Kind.Weapon:
-                if (opt.weapon != null && profile.weapons != null)
-                {
-                    // Upgrade de tier: remove o tier anterior do loadout antes de adicionar o novo
-                    if (opt.weapon.previousTier != null)
-                        profile.weapons.RemoveAll(lw => lw != null && lw.weaponName == opt.weapon.previousTier.weaponName);
-                    profile.weapons.Add(opt.weapon);
-                }
-                break;
-            case LevelUpOption.Kind.Pet:
-                // Sem restrição de duplicatas — o mesmo tipo pode aparecer de novo (ex: 2º Rato).
-                profile.pets.Add(opt.petType);
-                profile.maxHealth = Mathf.Max(1, profile.maxHealth - PetState.HpCost(opt.petType));
-                break;
-        }
+        LevelUpEngine.ApplyOption(opt, profile);
 #if UNITY_EDITOR
         UnityEditor.EditorUtility.SetDirty(profile);
 #endif
@@ -284,84 +134,38 @@ public class CombatResultPanel : MonoBehaviour
         LocalSaveService.Save(profile);
     }
 
-    // TESTE: mostra todas as skills/armas/atributos disponíveis em vez de sortear 2 opções
-    // ponderadas. Reverter para o sorteio original (DrawOption/SameOption abaixo) trocando
-    // esta flag para false quando o teste terminar.
-    private const bool ShowAllOptionsForTesting = true;
+    // TESTE: mostra todas as skills/armas/atributos disponíveis em vez de sortear as caixas reais.
+    // Desligado (2026-07-21, pedido do usuário) — necessário pra ver a diferenciação Caixa 1
+    // (status base) vs. Caixas 2+ (pool ponderado por odds) implementada em ShowLevelUpChoice
+    // abaixo. Religar só temporariamente se for voltar a testar ícone de skill um por um (ver
+    // CLAUDE.md "Testando skills uma a uma").
+    private const bool ShowAllOptionsForTesting = false;
 
     private static void ShowLevelUpChoice(Transform canvasRoot, PlayerProfile profile,
-        SkillDatabase skillDb, WeaponData[] allWeaponsPool, System.Action onChosen)
+        SkillDatabase skillDb, WeaponData[] allWeaponsPool, PetData[] petPool, UITheme theme, System.Action onChosen)
     {
         // Build available option pools
         if (skillDb == null || skillDb.skills == null || skillDb.skills.Count == 0)
             Debug.LogError("[LevelUp] ERRO: SkillDatabase não encontrado ou vazio");
 
-        var availableSkills = new List<SkillData>();
-        if (skillDb != null && skillDb.skills != null)
-            foreach (var s in skillDb.skills)
-            {
-                if (s == null) continue;
-
-                // Ícone: T1 usa o próprio; T2/T3 (icon sempre null, ver SkillTierGenerator) sobem
-                // a cadeia previousTier até achar um — mesmo padrão de herança visual do
-                // WeaponHandler.EquipSpecific. Testando skill por skill: enquanto a raiz (T1) não
-                // tiver um ícone re-adicionado em Assets/Data/UI/Skills/, NENHUM tier aparece.
-                var rootIcon = s;
-                while (rootIcon != null && rootIcon.icon == null) rootIcon = rootIcon.previousTier;
-                if (rootIcon == null || rootIcon.icon == null) continue;
-
-                if (s.tier <= 1)
-                {
-                    // T1: só aparece se o jogador ainda não tem NENHUM tier desta skill
-                    if (!profile.skills.Exists(ps => ps != null && ps.skillName == s.skillName))
-                        availableSkills.Add(s);
-                }
-                else
-                {
-                    // T2/T3: só aparece como upgrade se o jogador já tem o tier anterior
-                    // equipado — mesmo padrão de WeaponData (ver availableWeapons abaixo).
-                    // Comparação por nome+tier (não por referência), mesmo padrão do resto
-                    // deste arquivo (ex: filtro de T1 acima, IsInLoadout de armas).
-                    if (s.previousTier != null && profile.skills.Exists(ps =>
-                        ps != null && ps.skillName == s.previousTier.skillName && ps.tier == s.previousTier.tier))
-                        availableSkills.Add(s);
-                }
-            }
-
-        var availableWeapons = new List<WeaponData>();
-        var loadoutWeapons = profile.weapons;
-        if (allWeaponsPool != null)
-            foreach (var w in allWeaponsPool)
-            {
-                if (w == null) continue;
-                if (IsInLoadout(w, loadoutWeapons)) continue;
-
-                if (w.tier <= 1)
-                {
-                    // T1: só aparece se não há upgrade desta arma (T2 ou T3) no loadout
-                    if (!HasUpgradeInLoadout(w, loadoutWeapons, allWeaponsPool))
-                        availableWeapons.Add(w);
-                }
-                else
-                {
-                    // T2/T3: só aparece se o tier anterior está no loadout
-                    if (w.previousTier != null && IsInLoadout(w.previousTier, loadoutWeapons))
-                        availableWeapons.Add(w);
-                }
-            }
+        // requireIcon:true preserva o gate de teste atual (skill só aparece pro jogador se a
+        // raiz T1 já tiver um ícone re-adicionado em Assets/Data/UI/Skills/, ver CLAUDE.md).
+        var availableSkills  = LevelUpEngine.BuildAvailableSkills(profile, skillDb?.skills, requireIcon: true);
+        var availableWeapons = LevelUpEngine.BuildAvailableWeapons(profile, allWeaponsPool);
+        // Filtro de elegibilidade (2026-07-17): T1 só se não possui nenhum tier deste pet; T2/T3
+        // só o `nextTier` do que já possui — mesmo padrão de BuildAvailableSkills/Weapons.
+        var availablePets = LevelUpEngine.BuildAvailablePets(profile, petPool != null ? new List<PetData>(petPool) : null);
 
         if (ShowAllOptionsForTesting)
         {
-            ShowAllOptionsChoice(canvasRoot, profile, availableSkills, availableWeapons, onChosen);
+            ShowAllOptionsChoice(canvasRoot, profile, availableSkills, availableWeapons, availablePets, onChosen);
             return;
         }
 
-        // Draw 2 unique options
-        var opt1 = DrawOption(availableSkills, availableWeapons);
-        LevelUpOption opt2;
-        int tries = 0;
-        do { opt2 = DrawOption(availableSkills, availableWeapons); tries++; }
-        while (tries < 50 && SameOption(opt1, opt2));
+        // N = PlayerProgressionState.LevelUpBoxCount() (2 base + 1 por Slot de Skill comprado na
+        // Loja, até 5). Caixa 1 sempre status base (HP/STR/AGI/SPD); Caixas 2..N sorteio ponderado
+        // — ver DrawAndBuildCards (local, abaixo) pra regra completa de sorteio/no-repeat.
+        int boxCount = Mathf.Clamp(PlayerProgressionState.LevelUpBoxCount(), 2, 5);
 
         // Root container covers the whole canvas (renders above result panel as last sibling)
         var root = new GameObject("LevelUpChoiceRoot");
@@ -371,7 +175,12 @@ public class CombatResultPanel : MonoBehaviour
         rootRt.anchorMax = Vector2.one;
         rootRt.offsetMin = rootRt.offsetMax = Vector2.zero;
 
-        // Blocking overlay so result panel buttons can't be clicked
+        // Blocking overlay so result panel buttons can't be clicked. Fundo preto sólido (pedido do
+        // usuário, 2026-07-21 — era 55% translúcido) — fica atrás tanto das caixas de escolha
+        // (mesmo canvas, `bg`/ChoicePanel criado depois, sibling na frente) quanto do painel de
+        // detalhamento (canvas PRÓPRIO/raiz, sortingOrder=1500, sempre acima de QUALQUER canvas
+        // deste, incluindo este overlay — ver comentário em detailPanelGo abaixo), então um único
+        // overlay cobre os dois sem precisar duplicar o backdrop em cada canvas.
         var ov = new GameObject("Overlay");
         ov.transform.SetParent(root.transform, false);
         var ovRt = ov.AddComponent<RectTransform>();
@@ -379,25 +188,368 @@ public class CombatResultPanel : MonoBehaviour
         ovRt.anchorMax = Vector2.one;
         ovRt.offsetMin = ovRt.offsetMax = Vector2.zero;
         var ovImg = ov.AddComponent<Image>();
-        ovImg.color = new Color(0, 0, 0, 0.55f);
+        ovImg.color = new Color(0, 0, 0, 1f);
         ovImg.raycastTarget = true;
 
-        // Choice panel background
+        // Painel de detalhamento do personagem (2026-07-21, pedido do usuário) — mesmo
+        // CharacterPanel do 01_MainMenu (compacto por padrão: nome/HP/STR/AGI/SPD; clique expande
+        // pra ver Habilidades/Armas/Pets equipados), mostrando o profile ATUAL (antes do bônus
+        // escolhido) — ajuda a decidir comparando com o que já possui. `Setup(null, ...)` +
+        // `SetProfile(profile)` porque já temos o PlayerProfile de verdade aqui, sem precisar de
+        // um SelectedProfileHolder (RefreshAll usa `_overrideProfile ?? _holder?.currentProfile`,
+        // então holder nulo é seguro). `theme` vem de AttackSequencer (wireado no Inspector de
+        // 04_CombatScenePVP) — nulo é seguro, só pula a construção deste painel.
+        //
+        // Bug real corrigido (2026-07-21, 2ª rodada — reportado pelo usuário: painel ainda não
+        // aparecia e o popup ainda ficava atrás mesmo depois de forçar sortingOrder=1500): a 1ª
+        // tentativa parentava `detailPanelGo` dentro de `root` (que já é filho do Canvas de
+        // `canvasRoot`) — isso faz o Canvas PRÓPRIO do CharacterPanel virar um CANVAS AGRUPADO
+        // (nested), e um canvas aninhado só reordena entre IRMÃOS dentro do mesmo canvas pai;
+        // `sortingOrder` alto não adianta contra canvases-RAIZ concorrentes (HealthBar/
+        // HealthBarPet = 100). Todo outro lugar que usa CharacterPanel (ArsenalController.
+        // EnsureDetailPanel, SelectOpponentController) instancia ele SEM PAI NENHUM — GameObject
+        // raiz de cena própria, canvas raiz de verdade, sortingOrder funciona contra qualquer
+        // outro canvas raiz do jogo. Corrigido replicando esse padrão: `detailPanelGo` não é mais
+        // filho de `root` — como não é destruído junto (`Object.Destroy(root)` não alcança mais
+        // ele), cada callback de escolha abaixo destrói os dois explicitamente.
+        CharacterPanel detailPanel = null;
+        GameObject detailPanelGo = null;
+        if (theme != null)
+        {
+            detailPanelGo = new GameObject("LevelUpDetailPanel");
+            detailPanel = detailPanelGo.AddComponent<CharacterPanel>();
+            // hideCompact:true (2026-07-21, pedido do usuário — "o primeiro painel sem expandir
+            // está cobrindo uma skill") — o bloco Compact (nome/HP/pips, sempre visível por
+            // padrão) tapava uma das caixas de escolha. Com hideCompact, nada do CharacterPanel
+            // aparece até o botão quadrado próprio abaixo chamar Expand() — ver comentário em
+            // CharacterPanel.Setup/CrossFade.
+            detailPanel.Setup(null, theme, hideCompact: true);
+            detailPanel.SetProfile(profile);
+
+            var detailCanvas = detailPanelGo.GetComponentInChildren<Canvas>();
+            if (detailCanvas != null) detailCanvas.sortingOrder = 1500;
+
+            // Painel maior (pedido do usuário, 2026-07-21) — CharacterPanel não tem parâmetro de
+            // escala próprio (componente compartilhado por 01_MainMenu/02_SelectCharacter/
+            // 03_Arsenal, PanelWidth/EdgeMargin são const fixos usados por várias telas) — escala
+            // a RectTransform "Root" de fora, sem tocar em CharacterPanel.cs. Pivot movido pro
+            // canto superior direito ANTES de escalar, com offsetMin/Max REAPLICADOS com os
+            // mesmos valores que CharacterPanel.BuildUI já usa pro modo painel-lateral (só a
+            // troca de pivot por si só deslocaria o retângulo, já que anchoredPosition é relativo
+            // ao pivot) — assim o painel cresce PRA DENTRO da tela a partir do canto superior
+            // direito (mesma posição de sempre), em vez de crescer também pra fora da tela.
+            var detailRootRt = detailPanelGo.transform.Find("Canvas/Root")?.GetComponent<RectTransform>();
+            if (detailRootRt != null)
+            {
+                const float DetailPanelScale = 1.5f;
+                detailRootRt.pivot = new Vector2(1f, 1f);
+                detailRootRt.offsetMin = new Vector2(-(CharacterPanel.PanelWidth + CharacterPanel.EdgeMargin), 0f);
+                detailRootRt.offsetMax = new Vector2(-CharacterPanel.EdgeMargin, 0f);
+                detailRootRt.localScale = Vector3.one * DetailPanelScale;
+            }
+
+            // Botão quadrado (pedido do usuário, 2026-07-21) — parentado no MESMO Canvas do
+            // CharacterPanel (sibling de "Root"/popup, adicionado por último = desenha por cima
+            // dos dois), não dentro de "Root" — assim continua clicável em qualquer estado
+            // (fechado ou expandido), sempre no mesmo canto. Toggle simples: abre já EXPANDIDO
+            // (pedido do usuário — não passa pelo Compact, que está escondido) e fecha de volta.
+            if (detailCanvas != null)
+            {
+                bool detailExpanded = false;
+                var toggleGo = new GameObject("DetailToggleButton");
+                toggleGo.transform.SetParent(detailCanvas.transform, false);
+                var toggleRt = toggleGo.AddComponent<RectTransform>();
+                toggleRt.anchorMin = toggleRt.anchorMax = new Vector2(1f, 1f);
+                toggleRt.pivot = new Vector2(1f, 1f);
+                toggleRt.anchoredPosition = new Vector2(-CharacterPanel.EdgeMargin, -20f);
+                toggleRt.sizeDelta = new Vector2(80f, 80f);
+                var toggleImg = toggleGo.AddComponent<Image>();
+                toggleImg.sprite = UIShapeUtil.RoundedRect(theme.primaryAction, 14f);
+                toggleImg.type = Image.Type.Sliced;
+                var toggleBtn = toggleGo.AddComponent<Button>();
+                toggleBtn.targetGraphic = toggleImg;
+
+                var toggleLabelGo = new GameObject("Label");
+                toggleLabelGo.transform.SetParent(toggleGo.transform, false);
+                var toggleLabelRt = toggleLabelGo.AddComponent<RectTransform>();
+                toggleLabelRt.anchorMin = Vector2.zero; toggleLabelRt.anchorMax = Vector2.one;
+                toggleLabelRt.offsetMin = toggleLabelRt.offsetMax = Vector2.zero;
+                var toggleLabelTxt = toggleLabelGo.AddComponent<TextMeshProUGUI>();
+                toggleLabelTxt.text = "i";
+                toggleLabelTxt.fontSize = 34;
+                toggleLabelTxt.fontStyle = FontStyles.Bold;
+                toggleLabelTxt.color = theme.textOnDark;
+                toggleLabelTxt.alignment = TextAlignmentOptions.Center;
+
+                toggleBtn.onClick.AddListener(() =>
+                {
+                    detailExpanded = !detailExpanded;
+                    if (detailExpanded) detailPanel.Expand();
+                    else detailPanel.Collapse();
+                });
+            }
+        }
+
+        // Layout em pirâmide (pedido do usuário, 2026-07-21 — "deixar as skills em formato de
+        // pirâmide, 2 em cima 3 em baixo") + cards escalados 1.5x (também pedido). Generaliza pra
+        // qualquer boxCount (2 a 5): fileira de cima = metade arredondada pra baixo, fileira de
+        // baixo = o resto — bate exatamente com "2 em cima 3 em baixo" pra 5 caixas (N=5 → 2/3);
+        // 4 caixas → 2/2; 3 caixas → 1/2; 2 caixas → 1/1.
+        const float CardScale = 1.5f;
+        const float CardBaseSize = 270f; // tamanho real do card, ver MakeLevelUpCard — CardScale só escala visualmente por cima
+        const float RowSpacingX = 300f * CardScale; // distância entre centros de card na MESMA fileira (era CardSlotWidth)
+        const float RowGapY = 40f; // vão vertical entre a fileira de cima e a de baixo
+        const float TopRowY = 200f;
+        float bottomRowY = TopRowY - (CardBaseSize * CardScale + RowGapY);
+
+        int topCount = boxCount / 2;
+        int bottomCount = boxCount - topCount;
+        int maxRowCount = Mathf.Max(topCount, bottomCount);
+
+        const float PanelSidePadding = 90f;
+        const float PanelHeight = 980f;
+        const float TitleY = 450f;
+        float panelWidth = maxRowCount * RowSpacingX + PanelSidePadding;
+
         var bg = new GameObject("ChoicePanel");
         bg.transform.SetParent(root.transform, false);
         var bgRt = bg.AddComponent<RectTransform>();
         bgRt.anchorMin = bgRt.anchorMax = bgRt.pivot = new Vector2(0.5f, 0.5f);
-        bgRt.sizeDelta = new Vector2(620f, 340f);
+        bgRt.sizeDelta = new Vector2(panelWidth, PanelHeight);
         bgRt.anchoredPosition = Vector2.zero;
         bg.AddComponent<Image>().color = new Color(0.04f, 0.04f, 0.14f, 0.98f);
 
         MakeLabel(bg, "ESCOLHA 1 BÔNUS:", 26, new Color(1f, 0.84f, 0f),
-            new Vector2(0, 140f), new Vector2(580f, 38f), bold: true);
+            new Vector2(0, TitleY), new Vector2(panelWidth - 40f, 38f), bold: true);
 
-        MakeLevelUpCard(bg, opt1, new Vector2(-155f, 5f),
-            () => { ApplyBonus(opt1, profile); Object.Destroy(root); onChosen(); });
-        MakeLevelUpCard(bg, opt2, new Vector2( 155f, 5f),
-            () => { ApplyBonus(opt2, profile); Object.Destroy(root); onChosen(); });
+        // Posição de cada caixa na pirâmide — índice 0..topCount-1 na fileira de cima
+        // (centralizada em X, independente da fileira de baixo), o resto na fileira de baixo.
+        Vector2 CardPosition(int i)
+        {
+            bool isTop = i < topCount;
+            int rowCount = isTop ? topCount : bottomCount;
+            int indexInRow = isTop ? i : i - topCount;
+            float rowY = isTop ? TopRowY : bottomRowY;
+            float rowFirstX = -(rowCount - 1) * RowSpacingX / 2f;
+            return new Vector2(rowFirstX + indexInRow * RowSpacingX, rowY);
+        }
+
+        // Container só pras caixas (separado do título/botão de reset acima) — o botão "Novo
+        // Sorteio" reconstrói só isto, sem destruir o resto do painel.
+        var cardsRow = new GameObject("CardsRow");
+        cardsRow.transform.SetParent(bg.transform, false);
+        var cardsRowRt = cardsRow.AddComponent<RectTransform>();
+        cardsRowRt.anchorMin = Vector2.zero; cardsRowRt.anchorMax = Vector2.one;
+        cardsRowRt.offsetMin = cardsRowRt.offsetMax = Vector2.zero;
+
+        // Pool de ícones da "roleta" (pedido do usuário, 2026-07-21 — "consegue fazer uma roleta
+        // igual aquelas máquinas de cassino? parando da esquerda para direita") — sprites de
+        // skills/armas/pets do JOGO INTEIRO (não só das opções sorteadas), pra dar variedade
+        // visual ao efeito de giro; construído uma vez só, reaproveitado em todo re-sorteio.
+        var spinPool = BuildSpinIconPool(skillDb, allWeaponsPool, petPool);
+        const float BaseSpinDuration = 0.9f;
+        const float StaggerPerBox = 0.35f; // cada caixa seguinte trava um pouco depois — efeito "parando da esquerda pra direita"
+
+        // Contador de diamante (pedido do usuário, 2026-07-21 — "deixar o diamante na seleção de
+        // skill... pra ele ver quanto tem") — canto superior direito do painel de escolha, mesmo
+        // ícone/estilo do contador da Loja (ShopController.BuildDiamondCounter). Só leitura — não
+        // é o mesmo contador da Loja (telas diferentes), mas lê o MESMO PlayerEconomyState.
+        // Diamonds; atualizado manualmente a cada gasto de "Novo Sorteio" (ver UpdateDiamondLabel
+        // abaixo), já que não há binding automático.
+        var diamondIconSprite = Resources.Load<Sprite>("UI/Economy/Diamond");
+        var diamondRowGo = new GameObject("DiamondCounter");
+        diamondRowGo.transform.SetParent(bg.transform, false);
+        var diamondRowRt = diamondRowGo.AddComponent<RectTransform>();
+        diamondRowRt.anchorMin = diamondRowRt.anchorMax = new Vector2(1f, 1f);
+        diamondRowRt.pivot = new Vector2(1f, 1f);
+        diamondRowRt.anchoredPosition = new Vector2(-16f, -16f);
+        diamondRowRt.sizeDelta = new Vector2(170f, 44f);
+        // Escala 2x (pedido do usuário, 2026-07-21) — pivot já é o canto superior direito (1,1),
+        // então cresce pra dentro do painel (esquerda/baixo) em vez de vazar pela borda.
+        diamondRowRt.localScale = new Vector3(2f, 2f, 1f);
+        var diamondRowImg = diamondRowGo.AddComponent<Image>();
+        diamondRowImg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.35f), 12f);
+        diamondRowImg.type = Image.Type.Sliced;
+        var diamondLayout = diamondRowGo.AddComponent<HorizontalLayoutGroup>();
+        diamondLayout.padding = new RectOffset(8, 10, 4, 4);
+        diamondLayout.spacing = 6f;
+        diamondLayout.childAlignment = TextAnchor.MiddleLeft;
+        diamondLayout.childControlWidth = true;
+        diamondLayout.childControlHeight = true;
+        diamondLayout.childForceExpandWidth = false;
+        diamondLayout.childForceExpandHeight = true;
+
+        var diamondIconGo = new GameObject("Icon");
+        diamondIconGo.transform.SetParent(diamondRowGo.transform, false);
+        diamondIconGo.AddComponent<RectTransform>();
+        var diamondIconLe = diamondIconGo.AddComponent<LayoutElement>();
+        diamondIconLe.preferredWidth = 32f; diamondIconLe.preferredHeight = 32f;
+        var diamondIconImg = diamondIconGo.AddComponent<Image>();
+        diamondIconImg.sprite = diamondIconSprite;
+        diamondIconImg.preserveAspect = true;
+
+        var diamondValueGo = new GameObject("Value");
+        diamondValueGo.transform.SetParent(diamondRowGo.transform, false);
+        diamondValueGo.AddComponent<RectTransform>();
+        var diamondValueLe = diamondValueGo.AddComponent<LayoutElement>();
+        diamondValueLe.preferredWidth = 90f; diamondValueLe.flexibleWidth = 1f;
+        var diamondValueTxt = diamondValueGo.AddComponent<TextMeshProUGUI>();
+        diamondValueTxt.text = PlayerEconomyState.Diamonds.ToString();
+        diamondValueTxt.fontSize = 22f;
+        diamondValueTxt.fontStyle = FontStyles.Bold;
+        diamondValueTxt.color = Color.white;
+        diamondValueTxt.alignment = TextAlignmentOptions.MidlineLeft;
+
+        // Botão "Novo Sorteio" (pedido do usuário, 2026-07-21) — gasta diamante e refaz o sorteio
+        // (incluindo a roleta de novo). Canto INFERIOR direito. Preço PROGRESSIVO (pedido do
+        // usuário, 2026-07-21, 2ª rodada): 1º sorteio novo = 50, 2º = 100, 3º = 200 — depois disso
+        // o botão trava (RerollLimit = 3, "deixe o limite para só 3 resets"). TODO SEGURANÇA
+        // (mesmo padrão de WalletService/ShopController, ver ARQUITETURA.md "Moeda premium"):
+        // gasto client-writable, placeholder de Fase 1.
+        int[] RerollCosts = { 50, 100, 200 };
+        int rerollCount = 0;
+        // MakeButton sempre registra um listener que invoca `onClick()` sem checar nulo — passar
+        // um no-op aqui (em vez de null) evita NullReferenceException nesse listener; o handler
+        // de verdade é registrado como um 2º listener via resetBtn.onClick.AddListener abaixo.
+        // Movido pra FORA do quadrante das caixas (pedido do usuário, 2026-07-21, 5ª rodada — a
+        // tentativa anterior, canto inferior ESQUERDO com posX 840, caiu no meio da tela) —
+        // parentado em `root` (tela inteira) em vez de `bg`/ChoicePanel, ancorado no canto
+        // INFERIOR DIREITO da tela, fora da janela de escolha (que fica centralizada).
+        var resetBtn = MakeButton(root, "", Vector2.zero, () => { });
+        var resetBtnRt = resetBtn.GetComponent<RectTransform>();
+        resetBtnRt.anchorMin = resetBtnRt.anchorMax = new Vector2(1f, 0f);
+        resetBtnRt.pivot = new Vector2(1f, 0f);
+        resetBtnRt.anchoredPosition = new Vector2(-32f, 40f);
+        resetBtnRt.sizeDelta = new Vector2(200f, 200f);
+        var resetBtnLabel = resetBtn.GetComponentInChildren<TextMeshProUGUI>();
+        resetBtnLabel.fontSize = 35;
+
+        void UpdateRerollButtonLabel()
+        {
+            resetBtnLabel.text = rerollCount >= RerollCosts.Length
+                ? "Limite de sorteios atingido"
+                : $"Novo Sorteio ({RerollCosts[rerollCount]} diamantes)";
+        }
+        UpdateRerollButtonLabel();
+
+        int spinsRemaining = 0;
+        void OnOneCardLanded()
+        {
+            spinsRemaining--;
+            if (spinsRemaining <= 0) resetBtn.interactable = rerollCount < RerollCosts.Length;
+        }
+
+        // Sorteia e monta as N caixas do zero — chamado na abertura da tela E a cada clique em
+        // "Novo Sorteio". Caixa 1: sempre status base (HP/STR/AGI/SPD), nunca skill/arma/pet
+        // (pedido do usuário). Caixas 2..N: sorteio ponderado pelos odds reais (LevelUpEngine.
+        // DrawWeightedOption), SEM REPETIR skill/arma/pet já sorteado NESTA MESMA sequência
+        // (pedido do usuário, 2026-07-21 — "veio dois feline agility na mesma escolha, não deve
+        // se repetir na mesma sequência"; reverte a permissão de repetição da versão anterior) —
+        // cada pool disponível é filtrado excluindo o que já saiu antes de cada sorteio seguinte.
+        // A fatia residual do sorteio ponderado ainda cai pro mesmo pool de status base da Caixa 1
+        // (nenhuma caixa fica vazia); atributos podem repetir entre caixas (não são "itens", só
+        // bônus numéricos — fora do escopo do pedido).
+        void DrawAndBuildCards()
+        {
+            for (int i = cardsRow.transform.childCount - 1; i >= 0; i--)
+                Object.Destroy(cardsRow.transform.GetChild(i).gameObject);
+
+            var usedSkills = new HashSet<SkillData>();
+            var usedWeapons = new HashSet<WeaponData>();
+            var usedPets = new HashSet<PetData>();
+            var options = new List<LevelUpOption> { LevelUpEngine.DrawBaseAttributeOption() };
+            for (int i = 1; i < boxCount; i++)
+            {
+                var skillsPool = availableSkills.FindAll(s => !usedSkills.Contains(s));
+                var weaponsPool = availableWeapons.FindAll(w => !usedWeapons.Contains(w));
+                var petsPool = availablePets.FindAll(p => !usedPets.Contains(p));
+                var opt = LevelUpEngine.DrawWeightedOption(skillsPool, weaponsPool, petsPool);
+                if (opt.kind == LevelUpOption.Kind.Skill) usedSkills.Add(opt.skill);
+                else if (opt.kind == LevelUpOption.Kind.Weapon) usedWeapons.Add(opt.weapon);
+                else if (opt.kind == LevelUpOption.Kind.Pet) usedPets.Add(opt.petData);
+                options.Add(opt);
+            }
+
+            spinsRemaining = options.Count;
+            resetBtn.interactable = false;
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                var capturedOpt = options[i];
+                Vector2 cardPos = CardPosition(i);
+                float spinDuration = BaseSpinDuration + i * StaggerPerBox;
+                MakeLevelUpCard(cardsRow, capturedOpt, cardPos, CardScale, detailPanel,
+                    spinPool, spinDuration, OnOneCardLanded,
+                    () => {
+                        ApplyBonus(capturedOpt, profile);
+                        Object.Destroy(root);
+                        // detailPanelGo não é mais filho de `root` (ver comentário acima) —
+                        // precisa ser destruído à parte, senão o painel/canvas ficam vazando na
+                        // cena depois da escolha.
+                        if (detailPanelGo != null) Object.Destroy(detailPanelGo);
+                        onChosen();
+                    });
+            }
+        }
+
+        resetBtn.onClick.AddListener(async () =>
+        {
+            if (rerollCount >= RerollCosts.Length) return;
+            int cost = RerollCosts[rerollCount];
+            if (PlayerEconomyState.Diamonds < cost) return; // Fase 1: sem popup de saldo insuficiente ainda, só ignora o clique
+
+            resetBtn.interactable = false; // evita duplo clique enquanto a gravação (se houver conta) está em andamento
+            bool spent;
+            if (AuthService.IsSignedIn)
+            {
+                // Gasto persistido de verdade (2026-07-21) — mesmo WalletService.SpendDiamondsAsync
+                // já usado em MainMenuController.SpendAndContinueRoutine; só decrementa
+                // PlayerEconomyState.Diamonds DEPOIS de confirmar a escrita no Firestore (evita
+                // contar o gasto duas vezes, já que o método já espelha o campo internamente).
+                spent = await WalletService.SpendDiamondsAsync(AuthService.CurrentUser.UserId, cost);
+            }
+            else
+            {
+                PlayerEconomyState.Diamonds -= cost;
+                spent = true;
+            }
+            if (!spent)
+            {
+                resetBtn.interactable = rerollCount < RerollCosts.Length;
+                return;
+            }
+
+            rerollCount++;
+            diamondValueTxt.text = PlayerEconomyState.Diamonds.ToString();
+            UpdateRerollButtonLabel();
+            DrawAndBuildCards();
+        });
+
+        DrawAndBuildCards();
+    }
+
+    // Sprites de TODAS as skills/armas/pets do jogo (não só das opções sorteadas) — usado só pra
+    // variedade visual do efeito de "roleta" (LevelUpReelSpinner), nunca influencia o sorteio em
+    // si (que já aconteceu antes, em DrawAndBuildCards).
+    private static List<Sprite> BuildSpinIconPool(SkillDatabase skillDb, WeaponData[] allWeaponsPool, PetData[] petPool)
+    {
+        var pool = new List<Sprite>();
+        if (skillDb?.skills != null)
+            foreach (var s in skillDb.skills)
+            {
+                var spr = LevelUpEngine.ResolveSkillIcon(s);
+                if (spr != null) pool.Add(spr);
+            }
+        if (allWeaponsPool != null)
+            foreach (var w in allWeaponsPool)
+            {
+                var spr = LevelUpEngine.ResolveWeaponIcon(w);
+                if (spr != null) pool.Add(spr);
+            }
+        if (petPool != null)
+            foreach (var p in petPool)
+                if (p?.icon != null) pool.Add(p.icon);
+        return pool;
     }
 
     // TESTE: grade rolável com as opções disponíveis (4 atributos + skills com ícone já
@@ -406,7 +558,7 @@ public class CombatResultPanel : MonoBehaviour
     // a uma (availableWeapons mantido como parâmetro, sem uso, pra reativar depois bastando
     // descomentar o foreach abaixo).
     private static void ShowAllOptionsChoice(Transform canvasRoot, PlayerProfile profile,
-        List<SkillData> availableSkills, List<WeaponData> availableWeapons, System.Action onChosen)
+        List<SkillData> availableSkills, List<WeaponData> availableWeapons, List<PetData> availablePets, System.Action onChosen)
     {
         var allOptions = new List<LevelUpOption>();
         for (int i = 0; i < 10; i++)
@@ -415,8 +567,8 @@ public class CombatResultPanel : MonoBehaviour
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = s });
         foreach (var w in availableWeapons)
             allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = w });
-        foreach (var pt in PetPool)
-            allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Pet, petType = pt });
+        foreach (var p in availablePets)
+            allOptions.Add(new LevelUpOption { kind = LevelUpOption.Kind.Pet, petData = p });
 
         var root = new GameObject("LevelUpChoiceRoot");
         root.transform.SetParent(canvasRoot, false);
@@ -484,12 +636,23 @@ public class CombatResultPanel : MonoBehaviour
         foreach (var opt in allOptions)
         {
             var capturedOpt = opt;
-            MakeLevelUpCard(content, capturedOpt, Vector2.zero,
+            // scale: 1f (sem escala neste modo — grade de teste usa células fixas 170x200).
+            // detailPanel: null (modo de teste, sem painel de detalhamento — ver ShowLevelUpChoice
+            // pro fluxo real, que constrói e passa um). spinPool: null (sem roleta neste modo —
+            // mostra o resultado direto, mesmo comportamento de sempre).
+            MakeLevelUpCard(content, capturedOpt, Vector2.zero, 1f, null, null, 0f, null,
                 () => { ApplyBonus(capturedOpt, profile); Object.Destroy(root); onChosen(); });
         }
     }
 
-    private static void MakeLevelUpCard(GameObject parent, LevelUpOption opt, Vector2 pos, System.Action onClick)
+    // spinPool/spinDuration/onSpinComplete (2026-07-21, pedido do usuário — efeito de "roleta de
+    // cassino"): se `spinPool` tiver itens, o ícone gira (LevelUpReelSpinner) por `spinDuration`
+    // segundos antes de travar no resultado — "Escolher" e o botão de popup do ícone ficam
+    // desabilitados até travar. `spinPool` nulo/vazio (modo de teste, ShowAllOptionsChoice) pula a
+    // animação e mostra o resultado direto, mesmo comportamento de antes desta mudança.
+    private static void MakeLevelUpCard(GameObject parent, LevelUpOption opt, Vector2 pos, float scale,
+        CharacterPanel detailPanel, List<Sprite> spinPool, float spinDuration,
+        System.Action onSpinComplete, System.Action onClick)
     {
         var card = new GameObject("Card");
         card.transform.SetParent(parent.transform, false);
@@ -497,6 +660,11 @@ public class CombatResultPanel : MonoBehaviour
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(270f, 270f);
         rt.anchoredPosition = pos;
+        // Escala o card inteiro (pedido do usuário, 2026-07-21: "1.5") — pivot central já
+        // configurado acima, então cresce simetricamente em torno da própria posição; todo o
+        // conteúdo interno (ícone/labels/botão) escala junto de graça, sem precisar tocar em
+        // nenhum valor de layout individual.
+        rt.localScale = Vector3.one * scale;
         card.AddComponent<Image>().color = new Color(0.09f, 0.09f, 0.22f, 1f);
 
         // Icon
@@ -504,37 +672,86 @@ public class CombatResultPanel : MonoBehaviour
         iconGo.transform.SetParent(card.transform, false);
         var iconRt = iconGo.AddComponent<RectTransform>();
         iconRt.anchorMin = iconRt.anchorMax = iconRt.pivot = new Vector2(0.5f, 0.5f);
-        iconRt.sizeDelta = new Vector2(80f, 80f);
-        iconRt.anchoredPosition = new Vector2(0, 85f);
+        // 150x150 (pedido do usuário, 2026-07-21, correção — era 80x80, tentativa anterior de
+        // +130=210 ficou grande demais).
+        iconRt.sizeDelta = new Vector2(150f, 150f);
+        // posY 45 (pedido do usuário, 2026-07-21) — era 85.
+        iconRt.anchoredPosition = new Vector2(0, 45f);
         var iconImg = iconGo.AddComponent<Image>();
 
-        Sprite iconSprite = opt.kind switch {
-            LevelUpOption.Kind.Skill   => ResolveSkillIcon(opt.skill),
+        // Bug real corrigido (2026-07-17): Kind.Pet nunca entrava neste switch (caía sempre no
+        // `_ => null` e mostrava só a cor placeholder abaixo) — mesmo depois de `PetData.icon`
+        // ser preenchido de verdade (2026-07-16, ver SelectOpponentController). O ícone já
+        // existia, só não estava sendo lido aqui.
+        Sprite finalSprite = opt.kind switch {
+            LevelUpOption.Kind.Skill   => LevelUpEngine.ResolveSkillIcon(opt.skill),
             LevelUpOption.Kind.Weapon  => opt.weapon?.inHandSprite,
+            LevelUpOption.Kind.Pet     => opt.petData?.icon,
             _                          => null
         };
-
-        if (iconSprite != null)
-        {
-            iconImg.sprite = iconSprite;
-            iconImg.color  = Color.white;
-        }
+        Color finalColor;
+        if (finalSprite != null) finalColor = Color.white;
         else if (opt.kind == LevelUpOption.Kind.Pet)
-        {
-            // Sem sprite de preview próprio ainda — cor sólida só pra diferenciar visualmente
-            // das demais categorias na grade de teste.
-            iconImg.color = new Color(0.55f, 0.35f, 0.18f);
-        }
+            // Fallback — só alcançado se opt.petData.icon vier null (asset sem ícone atribuído,
+            // não deveria mais acontecer pros 3 pets reais, mas mantido por segurança).
+            finalColor = new Color(0.55f, 0.35f, 0.18f);
         else
+            finalColor = opt.AttrColor();
+
+        // Popup de detalhe (2026-07-21, pedido do usuário) — clicar no ícone abre o mesmo popup
+        // do 01_MainMenu (ShowSkillDetail/ShowWeaponDetail/ShowPetDetail, CharacterPanel). Sem
+        // popup pra Kind.Attribute (não tem SkillData/WeaponData/PetData pra mostrar) nem quando
+        // detailPanel é nulo (theme não disponível — ver ShowLevelUpChoice).
+        Button iconBtn = null;
+        if (detailPanel != null && opt.kind != LevelUpOption.Kind.Attribute)
         {
-            iconImg.color = opt.AttrColor();
+            iconBtn = iconGo.AddComponent<Button>();
+            iconBtn.targetGraphic = iconImg;
+            iconBtn.onClick.AddListener(() =>
+            {
+                switch (opt.kind)
+                {
+                    case LevelUpOption.Kind.Skill:  detailPanel.ShowSkillDetail(opt.skill); break;
+                    case LevelUpOption.Kind.Weapon: detailPanel.ShowWeaponDetail(opt.weapon); break;
+                    case LevelUpOption.Kind.Pet:    detailPanel.ShowPetDetail(opt.petData, opt.petData?.icon); break;
+                }
+            });
         }
 
-        MakeLabel(card, opt.Name(), 22, Color.white, new Vector2(0, 13f), new Vector2(250f, 34f), bold: true);
-        MakeLabel(card, opt.Desc(), 16, new Color(0.78f, 0.78f, 0.78f), new Vector2(0, -28f), new Vector2(250f, 64f));
+        // Descrição removida (pedido do usuário, 2026-07-21 — "a descrição abaixo desses dois
+        // remove") — card mostra só ícone + nome agora. Nome logo abaixo do ícone (pedido do
+        // usuário) — ícone em posY 45, meia-altura 75 (150/2), borda inferior em -30; label
+        // centralizado em -52 (borda -30, meia-altura do label 17, +5 de vão).
+        MakeLabel(card, opt.Name(), 22, Color.white, new Vector2(0, -52f), new Vector2(250f, 34f), bold: true);
 
         var btn = MakeButton(card, "Escolher", new Vector2(0, -100f), onClick);
         btn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 44f);
+
+        // Roleta (2026-07-21, pedido do usuário): gira o ícone até travar no resultado real (já
+        // sorteado antes desta chamada — a animação é só a revelação); "Escolher" e o popup do
+        // ícone ficam desabilitados até travar, pra não deixar escolher/inspecionar um resultado
+        // que ainda está "girando". `spinPool` vazio/nulo (modo de teste) pula direto pro estado
+        // final, mesmo comportamento de antes desta mudança.
+        void HandleLanded()
+        {
+            btn.interactable = true;
+            if (iconBtn != null) iconBtn.interactable = true;
+            onSpinComplete?.Invoke();
+        }
+
+        if (spinPool != null && spinPool.Count > 0)
+        {
+            btn.interactable = false;
+            if (iconBtn != null) iconBtn.interactable = false;
+            var spinner = iconGo.AddComponent<LevelUpReelSpinner>();
+            spinner.Play(iconImg, finalSprite, finalColor, spinPool, spinDuration, HandleLanded);
+        }
+        else
+        {
+            iconImg.sprite = finalSprite;
+            iconImg.color = finalColor;
+            HandleLanded();
+        }
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -670,39 +887,4 @@ public class CombatResultPanel : MonoBehaviour
         return btn;
     }
 
-    // T2/T3 nunca têm icon próprio (ver SkillTierGenerator) — sobe a cadeia previousTier até
-    // achar um, mesmo padrão de WeaponHandler.EquipSpecific pro sprite da arma.
-    private static Sprite ResolveSkillIcon(SkillData s)
-    {
-        while (s != null && s.icon == null) s = s.previousTier;
-        return s?.icon;
-    }
-
-    private static bool IsInLoadout(WeaponData w, List<WeaponData> loadout)
-    {
-        if (loadout == null || w == null) return false;
-        foreach (var lw in loadout)
-            if (lw != null && lw.weaponName == w.weaponName) return true;
-        return false;
-    }
-
-    // Verifica se alguma versão de tier superior desta arma T1 já está no loadout
-    private static bool HasUpgradeInLoadout(WeaponData t1, List<WeaponData> loadout, WeaponData[] allWeapons)
-    {
-        if (allWeapons == null) return false;
-        foreach (var candidate in allWeapons)
-        {
-            if (candidate == null || candidate.tier <= 1) continue;
-            // T2 direto deste T1
-            if (candidate.previousTier != null && candidate.previousTier.weaponName == t1.weaponName
-                && IsInLoadout(candidate, loadout))
-                return true;
-            // T3 via cadeia T3→T2→T1
-            if (candidate.previousTier?.previousTier != null
-                && candidate.previousTier.previousTier.weaponName == t1.weaponName
-                && IsInLoadout(candidate, loadout))
-                return true;
-        }
-        return false;
-    }
 }

@@ -51,6 +51,10 @@ public class CharacterPanel : MonoBehaviour
 
     private GameObject _canvasGo;
     private RectTransform _rootRt;
+    // SafeArea do modo gaveta-inferior (2026-07-21) — guardado pra BuildExpanded conseguir ler
+    // `rect.height` na hora de clampar o overflow do Expanded pro teto real da tela (ver
+    // BottomDrawerExpandedTopOverflow/BuildExpanded). Só existe quando `_bottomAnchored`.
+    private RectTransform _safeAreaRt;
     private GameObject _compactGo, _expandedGo;
     private CanvasGroup _compactCg, _expandedCg;
     private bool _isExpanded;
@@ -72,6 +76,9 @@ public class CharacterPanel : MonoBehaviour
     // Expanded's InfoBlock também na base, com o ScrollArea de Skills/Armas/Pets ACIMA dele —
     // o oposto do modo painel-lateral, onde tudo fica ancorado no TOPO do Root).
     private bool _bottomAnchored;
+    // Ver comentário em Setup — quando true, o estado Compact nunca aparece (nem inicialmente nem
+    // ao Collapse()), CrossFade pula direto pra "nada visível" em vez de mostrar Compact.
+    private bool _hideCompact;
     private const float BottomDrawerMaxHeight = 820f; // CompactHeight + folga generosa pro ScrollArea
     // Largura real da gaveta (2026-07-20, "ajustes finos" pedidos pelo usuário) — igual à largura
     // final que o "Compact" já tinha (450 de PanelWidth + 206.857 à esquerda + 208.846 à direita,
@@ -94,6 +101,10 @@ public class CharacterPanel : MonoBehaviour
     // o Expanded cresce além do Root; o Compact continua do tamanho de sempre, e a base dos dois
     // permanece a mesma (BottomDrawerFloorGap).
     private const float BottomDrawerExpandedTopOverflow = 348.4799f;
+    // Margem de respiro entre o topo do Expanded e o teto real da tela, depois de clampado (ver
+    // BuildExpanded) — mesma ordem de grandeza de outras margens de borda do projeto (EdgeMargin
+    // acima, ~11px do RootAnchorTop de sempre).
+    private const float BottomDrawerTopSafeMargin = 20f;
 
     // Level+XP dentro do painel (2026-07-08, opt-in via Setup) — usado quando o painel é
     // reaproveitado fora do 01_MainMenu (ali o XP já fica acima da cabeça do personagem via
@@ -182,9 +193,14 @@ public class CharacterPanel : MonoBehaviour
     // RootAnchorBottom/RootAnchorTop só pra ESTA instância — usado por 02_SelectCharacter pra
     // encolher o Root e casar com a altura da moldura dourada ao redor dele. `null` (default,
     // usado pelo 01_MainMenu) preserva a janela vertical calibrada de sempre.
+    // `hideCompact` (2026-07-21, opcional, default false — sem efeito em nenhum caller existente):
+    // pula o estado Compact por completo (nunca aparece, nem no início nem ao clicar Collapse) —
+    // usado por CombatResultPanel (tela de level-up), que constrói seu PRÓPRIO botão quadrado de
+    // fora pra abrir/fechar (chamando Expand()/Collapse() diretamente) em vez do bloco Compact
+    // padrão, que estava cobrindo uma caixa de escolha. Ver CrossFade abaixo.
     public void Setup(SelectedProfileHolder holder, UITheme theme, bool showLevelXp = false,
         bool startHidden = false, float? anchorBottomOverride = null, float? anchorTopOverride = null,
-        CharacterDatabase characterDatabase = null, bool bottomAnchored = false)
+        CharacterDatabase characterDatabase = null, bool bottomAnchored = false, bool hideCompact = false)
     {
         _holder = holder;
         _theme = theme;
@@ -193,6 +209,7 @@ public class CharacterPanel : MonoBehaviour
         _anchorTop = anchorTopOverride ?? RootAnchorTop;
         _characterDatabase = characterDatabase;
         _bottomAnchored = bottomAnchored;
+        _hideCompact = hideCompact;
         BuildUI();
         RefreshAll();
 
@@ -294,26 +311,33 @@ public class CharacterPanel : MonoBehaviour
 
     private IEnumerator CrossFade(bool toExpanded)
     {
-        GameObject showGo = toExpanded ? _expandedGo : _compactGo;
+        // `_hideCompact` (2026-07-21): ao recolher (toExpanded=false), NÃO mostra o Compact —
+        // showGo/showCg ficam nulos, então o trecho abaixo só desliga o Expanded (fade de saída),
+        // sem nunca ativar/mostrar o bloco Compact. Sem efeito quando `_hideCompact=false` (todo
+        // outro caller) — showGo/showCg continuam sendo `_compactGo`/`_compactCg` normalmente.
+        GameObject showGo = toExpanded ? _expandedGo : (_hideCompact ? null : _compactGo);
         GameObject hideGo = toExpanded ? _compactGo  : _expandedGo;
-        CanvasGroup showCg = toExpanded ? _expandedCg : _compactCg;
+        CanvasGroup showCg = toExpanded ? _expandedCg : (_hideCompact ? null : _compactCg);
         CanvasGroup hideCg = toExpanded ? _compactCg  : _expandedCg;
 
-        showGo.SetActive(true);
-        showCg.interactable = false;
-        showCg.blocksRaycasts = false;
+        if (showGo != null)
+        {
+            showGo.SetActive(true);
+            showCg.interactable = false;
+            showCg.blocksRaycasts = false;
+        }
 
         float elapsed = 0f;
         while (elapsed < FadeDuration)
         {
             float t = elapsed / FadeDuration;
-            showCg.alpha = t;
+            if (showCg != null) showCg.alpha = t;
             hideCg.alpha = 1f - t;
             elapsed += Time.deltaTime;
             yield return null;
         }
-        showCg.alpha = 1f; hideCg.alpha = 0f;
-        showCg.interactable = true;  showCg.blocksRaycasts = true;
+        if (showCg != null) { showCg.alpha = 1f; showCg.interactable = true; showCg.blocksRaycasts = true; }
+        hideCg.alpha = 0f;
         hideCg.interactable = false; hideCg.blocksRaycasts = false;
         hideGo.SetActive(false);
     }
@@ -353,6 +377,7 @@ public class CharacterPanel : MonoBehaviour
             safeRt.offsetMin = safeRt.offsetMax = Vector2.zero;
             safeAreaGo.AddComponent<SafeArea>();
             rootParent = safeAreaGo.transform;
+            _safeAreaRt = safeRt;
         }
 
         var rootGo = new GameObject("Root");
@@ -385,9 +410,12 @@ public class CharacterPanel : MonoBehaviour
         BuildExpanded(rootGo);
 
         // Estado inicial: compacto visível, expandido desligado (sem animação — só acontece
-        // na primeira montagem da cena).
-        _compactGo.SetActive(true);
-        _compactCg.alpha = 1f; _compactCg.interactable = true; _compactCg.blocksRaycasts = true;
+        // na primeira montagem da cena). `_hideCompact` (2026-07-21): nem o compacto aparece —
+        // fica tudo escondido até o caller externo chamar Expand() (ver comentário em Setup).
+        _compactGo.SetActive(!_hideCompact);
+        _compactCg.alpha = _hideCompact ? 0f : 1f;
+        _compactCg.interactable = !_hideCompact;
+        _compactCg.blocksRaycasts = !_hideCompact;
         _expandedGo.SetActive(false);
         _expandedCg.alpha = 0f; _expandedCg.interactable = false; _expandedCg.blocksRaycasts = false;
 
@@ -476,8 +504,26 @@ public class CharacterPanel : MonoBehaviour
             // ancorado fixo na base) — a base do Expanded fica igual à do Compact, e o TOPO agora
             // ultrapassa o topo do Root em BottomDrawerExpandedTopOverflow (pedido do usuário —
             // ver comentário da constante), sobrepondo a fileira de energia quando expandido.
+            //
+            // **Bug real corrigido (2026-07-21)**: BottomDrawerExpandedTopOverflow é um valor
+            // FIXO em pixels de referência (1920×1080) — como o Canvas usa ScaleWithScreenSize
+            // travado pela LARGURA (matchWidthOrHeight=0, ver CLAUDE.md "Fase 7"), uma tela com
+            // proporção mais "esticada"/larga que 16:9 (comum em celular moderno em paisagem,
+            // ex: 20:9) tem MENOS altura disponível em unidades locais do Canvas do que 1080 —
+            // o overflow fixo então empurrava o topo do Expanded pra além do teto real da tela,
+            // cortando as skills/armas do topo da lista (reportado pelo usuário: "hoje ela
+            // ultrapassa, não dando pra visualizar algumas skills no topo"). Clampa o overflow
+            // pelo espaço REAL sobrando entre o topo do Root e o teto do SafeArea (que já reflete
+            // a altura de tela disponível, lida direto do RectTransform — computada na hora, sem
+            // precisar esperar um frame, já que SafeArea.Apply() já rodou no próprio Awake ao
+            // adicionar o componente em BuildUI) — em telas pequenas o Expanded "acompanha o
+            // teto" em vez de ultrapassá-lo; em telas grandes (16:9 ou mais estreitas que isso)
+            // continua exatamente com os 348.4799px de sempre, sem mudar nada.
+            float availableHeight = _safeAreaRt != null ? _safeAreaRt.rect.height : BottomDrawerMaxHeight;
+            float maxOverflow = Mathf.Max(0f, availableHeight - BottomDrawerTopSafeMargin - BottomDrawerMaxHeight);
+            float overflow = Mathf.Min(BottomDrawerExpandedTopOverflow, maxOverflow);
             rt.offsetMin = new Vector2(0f, BottomDrawerFloorGap);
-            rt.offsetMax = new Vector2(0f, BottomDrawerExpandedTopOverflow);
+            rt.offsetMax = new Vector2(0f, overflow);
         }
         else
         {
@@ -779,6 +825,7 @@ public class CharacterPanel : MonoBehaviour
         _petsEmpty = MakeMsg(content, "Nenhum pet ainda");
 
         BuildDetailsToggle(content);
+        BuildResetCharacterButton(content);
     }
 
     // Botão "REPLAYS" (2026-07-18, movido pro menu principal — MainMenuController.
@@ -1196,6 +1243,173 @@ public class CharacterPanel : MonoBehaviour
             _passiveRows[label] = BuildPassiveRow(passivesList, label);
 
         _passivesSection.SetActive(false);
+    }
+
+    // Profile atualmente exibido — mesma expressão usada em RefreshAll (_overrideProfile tem
+    // prioridade sobre _holder.currentProfile, ver comentário em SetProfile) — extraída aqui pra
+    // ser reaproveitada por fora de RefreshAll (ver OnResetCharacterClicked abaixo).
+    private PlayerProfile CurrentProfile() => _overrideProfile != null ? _overrideProfile : _holder?.currentProfile;
+
+    // "Resetar Personagem" (2026-07-21, pedido do usuário) — botão destrutivo no final do
+    // Expanded (depois de Habilidades/Armas/Pets/Passivas), mesmo estilo/posição de
+    // BuildDetailsToggle, cor `danger` pra sinalizar ação irreversível. Mecanismo PARALELO ao
+    // "Reset de Build" do roadmap (ROADMAP_FUTURO.md Fase 4 — ainda não implementado, custaria
+    // diamante e manteria o nível atual): este reseta pro Level 1 (mesma lógica de
+    // Tools > AutoArms > Reset All Profiles to Level 1) e GERA moeda em vez de custar diamante.
+    private void BuildResetCharacterButton(Transform content)
+    {
+        var btnGo = new GameObject("ResetCharacterButton");
+        btnGo.transform.SetParent(content, false);
+        btnGo.AddComponent<RectTransform>();
+        var le = btnGo.AddComponent<LayoutElement>();
+        le.preferredHeight = _bottomAnchored ? 64f : 44f; le.flexibleWidth = 1f;
+        var btnImg = btnGo.AddComponent<Image>();
+        btnImg.sprite = UIShapeUtil.RoundedRect(_theme.danger, 10f);
+        btnImg.type = Image.Type.Sliced;
+        var btn = btnGo.AddComponent<Button>();
+        btn.targetGraphic = btnImg;
+        btn.onClick.AddListener(OnResetCharacterClicked);
+        var label = AddLabel(btnGo, "RESETAR PERSONAGEM", _bottomAnchored ? 40 : 18, TextColor);
+        label.fontStyle = FontStyles.Bold;
+    }
+
+    private void OnResetCharacterClicked()
+    {
+        var profile = CurrentProfile();
+        if (profile == null) return;
+
+        // CharacterResetSettings (2026-07-21) — mesmo padrão de EnergySettings: ScriptableObject
+        // em Assets/Resources/, carregado por Resources.Load sem precisar wirear no Inspector
+        // (CharacterPanel é instanciado em 3 telas diferentes — 01_MainMenu/02_SelectCharacter/
+        // 03_Arsenal — wirear um campo novo em todas exigiria editar as 3 cenas).
+        var settings = Resources.Load<CharacterResetSettings>("CharacterResetSettings");
+        int coinsPerLevel = settings != null ? settings.coinsPerLevel : 10;
+        int coinsReward = profile.level * coinsPerLevel;
+
+        ShowResetConfirmPopup(profile, coinsPerLevel, coinsReward);
+    }
+
+    // Confirmação explícita (pedido do usuário — "ação destrutiva, precisa de confirmação
+    // explícita, não pode ser 1 clique só") — mesmo idioma visual de MainMenuController.
+    // BuildPopup/ShopController.ShowPassInfoPopup (overlay+painel+texto+botões), construído sob
+    // demanda e descartado ao fechar; canvas próprio com sortingOrder alto o bastante pra ficar
+    // acima do popup de detalhe de skill/arma deste mesmo CharacterPanel (_canvasGo, sortingOrder
+    // 20) e de qualquer outra coisa da tela onde o painel estiver sendo usado.
+    private void ShowResetConfirmPopup(PlayerProfile profile, int coinsPerLevel, int coinsReward)
+    {
+        var canvasGo = new GameObject("ResetConfirmPopupCanvas (temp)");
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 2000;
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        var overlayGo = new GameObject("Overlay");
+        overlayGo.transform.SetParent(canvasGo.transform, false);
+        var overlayRt = overlayGo.AddComponent<RectTransform>();
+        overlayRt.anchorMin = Vector2.zero; overlayRt.anchorMax = Vector2.one;
+        overlayRt.offsetMin = overlayRt.offsetMax = Vector2.zero;
+        var overlayImg = overlayGo.AddComponent<Image>();
+        overlayImg.color = new Color(0f, 0f, 0f, 0.7f);
+        var overlayBtn = overlayGo.AddComponent<Button>();
+        overlayBtn.targetGraphic = overlayImg;
+        overlayBtn.transition = Selectable.Transition.None;
+        overlayBtn.onClick.AddListener(() => Destroy(canvasGo)); // clicar fora cancela
+
+        var panelGo = new GameObject("Panel");
+        panelGo.transform.SetParent(canvasGo.transform, false);
+        var panelRt = panelGo.AddComponent<RectTransform>();
+        panelRt.anchorMin = panelRt.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRt.sizeDelta = new Vector2(680f, 420f);
+        panelRt.anchoredPosition = Vector2.zero;
+        var panelImg = panelGo.AddComponent<Image>();
+        panelImg.sprite = UIShapeUtil.RoundedRect(_theme.panelBackgroundAlt, 24f);
+        panelImg.type = Image.Type.Sliced;
+        var panelBtn = panelGo.AddComponent<Button>(); // sem onClick — só bloqueia o bubbling pro overlay
+        panelBtn.targetGraphic = panelImg;
+
+        var msgGo = new GameObject("Message");
+        msgGo.transform.SetParent(panelGo.transform, false);
+        var msgRt = msgGo.AddComponent<RectTransform>();
+        msgRt.anchorMin = new Vector2(0.08f, 0.30f); msgRt.anchorMax = new Vector2(0.92f, 0.92f);
+        msgRt.offsetMin = msgRt.offsetMax = Vector2.zero;
+        var msgTxt = msgGo.AddComponent<TextMeshProUGUI>();
+        msgTxt.text = $"Resetar {profile.profileName}?\n\n" +
+            $"Você vai PERDER todo o progresso de nível, status, skills, armas e pets deste " +
+            $"personagem, voltando ao Level 1.\n\n" +
+            $"Em troca, recebe {coinsReward} moedas (Level {profile.level} × {coinsPerLevel} moedas/nível).\n\n" +
+            $"Essa ação não pode ser desfeita.";
+        msgTxt.fontSize = 24;
+        msgTxt.color = _theme.textOnDark;
+        msgTxt.alignment = TextAlignmentOptions.Center;
+        msgTxt.enableWordWrapping = true;
+
+        var confirmGo = new GameObject("BtnConfirm");
+        confirmGo.transform.SetParent(panelGo.transform, false);
+        var confirmRt = confirmGo.AddComponent<RectTransform>();
+        confirmRt.anchorMin = confirmRt.anchorMax = new Vector2(0.73f, 0.14f);
+        confirmRt.sizeDelta = new Vector2(280f, 64f);
+        confirmRt.anchoredPosition = Vector2.zero;
+        var confirmImg = confirmGo.AddComponent<Image>();
+        confirmImg.sprite = UIShapeUtil.RoundedRect(_theme.danger, 14f);
+        confirmImg.type = Image.Type.Sliced;
+        var confirmBtn = confirmGo.AddComponent<Button>();
+        confirmBtn.targetGraphic = confirmImg;
+        confirmBtn.onClick.AddListener(() => { Destroy(canvasGo); ExecuteReset(profile, coinsReward); });
+        AddLabel(confirmGo, "RESETAR", 20, _theme.textOnDark).fontStyle = FontStyles.Bold;
+
+        var cancelGo = new GameObject("BtnCancel");
+        cancelGo.transform.SetParent(panelGo.transform, false);
+        var cancelRt = cancelGo.AddComponent<RectTransform>();
+        cancelRt.anchorMin = cancelRt.anchorMax = new Vector2(0.27f, 0.14f);
+        cancelRt.sizeDelta = new Vector2(280f, 64f);
+        cancelRt.anchoredPosition = Vector2.zero;
+        var cancelImg = cancelGo.AddComponent<Image>();
+        cancelImg.sprite = UIShapeUtil.RoundedRect(_theme.secondaryButtonAlt, 14f);
+        cancelImg.type = Image.Type.Sliced;
+        var cancelBtn = cancelGo.AddComponent<Button>();
+        cancelBtn.targetGraphic = cancelImg;
+        cancelBtn.onClick.AddListener(() => Destroy(canvasGo));
+        AddLabel(cancelGo, "CANCELAR", 20, _theme.textOnDark).fontStyle = FontStyles.Bold;
+    }
+
+    // Reseta o profile pro Level 1 — MESMA lógica de campos de
+    // Tools > AutoArms > Reset All Profiles to Level 1 (Assets/Editor/CharacterCreationEditor.cs,
+    // ferramenta de Editor já existente): level/xpCurrent/battlesRemaining/xpRequired +
+    // HP/STR/AGI/SPD re-sorteados via CharacterCreation.GenerateLevel1Stats() + skills/pets/armas
+    // zerados. Persistido de verdade via LocalSaveService.Save (local + Firestore, mesmo caminho
+    // de sempre — ver ApplyBonus em CombatResultPanel pro mesmo padrão de EditorUtility.SetDirty
+    // + LocalSaveService.Save). Moeda creditada em cima do saldo real (WalletService, mesmo
+    // documento users/{uid} da Loja) quando há conta logada; sem conta, cai no fake local de
+    // sempre (PlayerEconomyState.Coins), mesmo padrão de ShopController.OnBuyClicked.
+    private void ExecuteReset(PlayerProfile profile, int coinsReward)
+    {
+        profile.level = 1;
+        profile.xpCurrent = 0;
+        profile.battlesRemaining = 6;
+        profile.xpRequired = XpSystem.XpRequired(1);
+
+        CharacterStats resetStats = CharacterCreation.GenerateLevel1Stats();
+        profile.maxHealth = resetStats.maxHealth;
+        profile.str = resetStats.str;
+        profile.agility = resetStats.agility;
+        profile.speed = resetStats.speed;
+
+        profile.skills.Clear();
+        profile.pets.Clear();
+        profile.weapons.Clear();
+
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(profile);
+#endif
+        LocalSaveService.Save(profile);
+
+        if (AuthService.IsSignedIn) _ = WalletService.AddCoinsAsync(AuthService.CurrentUser.UserId, coinsReward);
+        else PlayerEconomyState.Coins += coinsReward;
+
+        RefreshAll();
     }
 
     private TMP_Text BuildPassiveRow(Transform parent, string label)

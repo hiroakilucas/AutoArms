@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a300e400553411d47a6fb0869eb89e15, type: 3}
+  m_Name: pet_mouse_t2
+  m_EditorClassIdentifier: 
+  petType: 1
+  tier: 2
+  previousTier: {fileID: 11400000, guid: 1fcf392a760fb614e847902c3279b133, type: 2}
+  nextTier: {fileID: 11400000, guid: 22f31d09ba4b675498bdc2afbd91dfb8, type: 2}
+  icon: {fileID: 21300000, guid: 5f36e09dab73dc7f6aacb6e8d00c5b4f, type: 3}
+  hpMalusPercent: 0.1
+  odds: 1.92
+  initiative: 0
+  str: 9
+  agility: 8
+  speed: 7
+  hp: 23
+  damage: 6
+  comboRate: 0.3
+  evasionBase: 0
+  accuracyBonus: 0
+  disarmRate: 0
+  comboDebuff: 0
+  blockDebuff: 0

@@ -1,19 +1,27 @@
 // Mutable snapshot of one pet's state inside CombatSimulator. Pure C# — no MonoBehaviour,
-// mesmo padrão do PlayerState. Cada PetType do PlayerProfile.pets vira uma instância
+// mesmo padrão do PlayerState. Cada PetData do PlayerProfile.pets vira uma instância
 // independente (sem restrição de duplicatas — 3 Ratos geram 3 PetState separados).
+//
+// Tiers T1/T2/T3 (2026-07-16) — stats vêm de um PetData (ScriptableObject) em vez do switch(type)
+// hardcoded de antes; ver PetTierGenerator.cs pra tabela de valores. `counter`/`reversal` do
+// Macaco (mecânica antiga) foram removidos por completo — não fazem parte da tabela nova
+// aprovada pelo usuário.
 public class PetState
 {
     public PetType type;
+    public int   tier;
     public int   hp;
     public int   maxHp;
     public float str;
     public int   agility;
     public int   speed;
+    public int   damage;
     public float comboRate;
     public float disarmRate;
     public float evasionBase;
-    public float counter;
-    public float reversal;
+    public float accuracyBonus;
+    public float comboDebuff;
+    public float blockDebuff;
 
     // false quando hp <= 0 — campo setado explicitamente em CombatSimulator.ApplyDamageToPet.
     // Pet cai e FICA NO LUGAR (GameObject nunca destruído) — carcaça disponível pro Tamer.
@@ -38,56 +46,26 @@ public class PetState
     // CombatSimulator.SimulatePetActions.
     public int speedDebt;
 
-    public static PetState Create(PetType type)
+    // Lê todos os stats de combate do PetData (tier já resolvido no asset) — substitui o antigo
+    // switch(PetType) hardcoded. `data` pode ser null (chamador decide o que fazer, mesmo padrão
+    // de tolerância a null do resto do arquivo).
+    public static PetState Create(PetData data)
     {
-        switch (type)
+        if (data == null) return null;
+        return new PetState
         {
-            case PetType.Mouse:
-                return new PetState
-                {
-                    type = type, hp = 25, maxHp = 25, str = 3f, agility = 8, speed = 10,
-                    comboRate = 0.20f, disarmRate = 0f, evasionBase = 0.10f, counter = 0f, reversal = 0f,
-                };
-            case PetType.Monkey:
-                return new PetState
-                {
-                    type = type, hp = 50, maxHp = 50, str = 5f, agility = 25, speed = 20,
-                    comboRate = 0.40f, disarmRate = 0f, evasionBase = 0.35f, counter = 0.15f, reversal = 0.20f,
-                };
-            case PetType.Boar:
-                return new PetState
-                {
-                    type = type, hp = 110, maxHp = 110, str = 15f, agility = 2, speed = 3,
-                    comboRate = 0f, disarmRate = 0.15f, evasionBase = 0.02f, counter = 0f, reversal = 0f,
-                };
-            default:
-                return null;
-        }
-    }
-
-    // Random.Range(min, max) (do chamador, com max+1 pra inclusivo) — ver tabela em CLAUDE.md:
-    // Rato 4-6, Macaco 9-12 (era 6-10, aumentado a pedido do usuário), Javali 18-27.
-    public static (int min, int max) DamageRange(PetType type)
-    {
-        switch (type)
-        {
-            case PetType.Mouse:  return (4, 6);
-            case PetType.Monkey: return (9, 12);
-            case PetType.Boar:   return (18, 27);
-            default: return (0, 0);
-        }
-    }
-
-    // HP perdido pelo dono (profile.maxHealth) ao escolher o pet no level-up.
-    public static int HpCost(PetType type)
-    {
-        switch (type)
-        {
-            case PetType.Mouse:  return 12;
-            case PetType.Monkey: return 36;
-            case PetType.Boar:   return 48;
-            default: return 0;
-        }
+            type = data.petType,
+            tier = data.tier,
+            hp = data.hp, maxHp = data.hp,
+            str = data.str, agility = data.agility, speed = data.speed,
+            damage = data.damage,
+            comboRate = data.comboRate,
+            disarmRate = data.disarmRate,
+            evasionBase = data.evasionBase,
+            accuracyBonus = data.accuracyBonus,
+            comboDebuff = data.comboDebuff,
+            blockDebuff = data.blockDebuff,
+        };
     }
 
     // Escala inicial ao instanciar o prefab em cena (CombatSceneLoader) — aumentada a pedido
@@ -108,7 +86,7 @@ public class PetState
     // PetState (CombatSimulator.BuildState/CombatSceneLoader.SpawnPets), nunca recalculado
     // depois — não tem relação com level-up de ATRIBUTO/skill/arma do personagem em si, só
     // lê `profile.level`. HP do bônus entra no maxHp do PET, nunca no maxHealth do dono (esse
-    // é fixo, perdido de uma vez ao escolher o pet — ver HpCost acima).
+    // é fixo, perdido de uma vez ao escolher o pet — ver PetData.hpMalusPercent/LevelUpEngine).
     public void ApplyLevelScaling(int ownerLevel)
     {
         int levelTiers = ownerLevel / 5; // divisão inteira == Floor(ownerLevel / 5f) p/ level >= 0

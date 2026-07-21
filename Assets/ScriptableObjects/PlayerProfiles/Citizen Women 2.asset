@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Citizen Women 2
   m_EditorClassIdentifier: 
   profileName: Citizen Women 2
+  characterId: 
   characterPrefab: {fileID: 8062785061663751732, guid: cec172eb662229a49b8d00ad5cde6c05, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: ca99e6c2a651ba7409d9296a205a3a69, type: 3}
   splashArt: {fileID: 21300000, guid: 356bd61700e7d8d4ea928f7713557068, type: 3}
+  rarity: 0
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 60
-  str: 5
+  maxHealth: 65
+  str: 3
   agility: 6
-  speed: 3
+  speed: 4
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

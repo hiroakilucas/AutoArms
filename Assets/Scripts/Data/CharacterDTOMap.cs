@@ -21,6 +21,10 @@ public static class CharacterDTOMap
         foreach (var s in dto.skills)
             skills.Add(new Dictionary<string, object> { { "name", s.name }, { "tier", s.tier } });
 
+        var pets = new List<object>();
+        foreach (var p in dto.pets)
+            pets.Add(new Dictionary<string, object> { { "type", p.type }, { "tier", p.tier } });
+
         return new Dictionary<string, object>
         {
             { "characterId", dto.characterId },
@@ -48,7 +52,7 @@ public static class CharacterDTOMap
             { "hitSpeed", dto.hitSpeed },
             { "weapons", weapons },
             { "skills", skills },
-            { "pets", new List<object>(dto.pets) },
+            { "pets", pets },
             // Timestamp do CLIENTE (não FieldValue.ServerTimestamp) — de propósito, pra comparar
             // direto com LocalSaveService.GetCachedUpdatedAtTicks (mesma unidade/relógio) na
             // reconciliação "último gravado ganha". Simplificação já assumida no plano (sem
@@ -100,7 +104,8 @@ public static class CharacterDTOMap
 
         if (map.TryGetValue("pets", out var pObj) && pObj is List<object> pList)
             foreach (var p in pList)
-                if (p != null) dto.pets.Add(p.ToString());
+                if (p is Dictionary<string, object> pMap)
+                    dto.pets.Add(new PetTierRef { type = GetString(pMap, "type"), tier = GetInt(pMap, "tier") });
 
         return dto;
     }

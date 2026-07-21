@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Medieval Thug
   m_EditorClassIdentifier: 
   profileName: Medieval Thug
+  characterId: 
   characterPrefab: {fileID: 1597340543112954, guid: ade59b7c8f31c1747a89562ec19aeb81, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: d62f9e0a2bba7c74bab294f97acd4d70, type: 3}
   splashArt: {fileID: 21300000, guid: 5d16ef80753e4ab418d023a40eb94a69, type: 3}
+  rarity: 0
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 60
-  str: 5
+  maxHealth: 65
+  str: 3
   agility: 4
-  speed: 5
+  speed: 6
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

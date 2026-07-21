@@ -372,6 +372,11 @@ MonoBehaviour:
   - {fileID: 11400000, guid: b5a031b4911d57e4f84ba9dd49ab2292, type: 2}
   - {fileID: 11400000, guid: a10b3e735c822e546b48d4829bda8065, type: 2}
   - {fileID: 11400000, guid: 7bf9a338a21e572498e6852fe433184c, type: 2}
+  petPool:
+  - {fileID: 11400000, guid: 1fcf392a760fb614e847902c3279b133, type: 2}
+  - {fileID: 11400000, guid: 817740ec61745a24789b8b0171ad9d99, type: 2}
+  - {fileID: 11400000, guid: cfa5ff0b867f9e6469200f7e61740ef4, type: 2}
+  theme: {fileID: 11400000, guid: ae33f2260edb6c9468a929a3eb2a84f5, type: 2}
   interTurnDelay: 0.2
 --- !u!4 &904002942
 Transform:

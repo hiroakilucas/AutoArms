@@ -13,18 +13,21 @@ MonoBehaviour:
   m_Name: Elementals 2
   m_EditorClassIdentifier: 
   profileName: Elementals 2
+  characterId: 
   characterPrefab: {fileID: 1580585431948764, guid: 8d210c0a4fac9564581fed8e6dfc7762, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: 4e5a235980d571c409eb3d5204fad38e, type: 3}
   splashArt: {fileID: 21300000, guid: aaff69038ba1d8e43993038e5b9198fb, type: 3}
+  rarity: 2
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
   maxHealth: 65
-  str: 3
-  agility: 6
+  str: 6
+  agility: 3
   speed: 4
   armor: 0
   evasion: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

@@ -13,17 +13,20 @@ MonoBehaviour:
   m_Name: Pirate
   m_EditorClassIdentifier: 
   profileName: Pirate
+  characterId: 
   characterPrefab: {fileID: 1333581319567344, guid: f8ec3a06025d84b4e8119b7cfcd1f0ed, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: cdc8eb3e591ac4e469cbf9ff5963b1d8, type: 3}
   splashArt: {fileID: 21300000, guid: 33eb59d88ae7f0741906b1e5baa067ed, type: 3}
+  rarity: 1
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 60
-  str: 5
+  maxHealth: 55
+  str: 6
   agility: 4
   speed: 5
   armor: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

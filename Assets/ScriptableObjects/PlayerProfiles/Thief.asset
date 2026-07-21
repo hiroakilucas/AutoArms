@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Thief
   m_EditorClassIdentifier: 
   profileName: Thief
+  characterId: 
   characterPrefab: {fileID: 1326694391652558, guid: 17cc1e88b06731945857b8d102feed54, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: bbfa6bb130d4f2045be70e3fae713eee, type: 3}
   splashArt: {fileID: 21300000, guid: a401a9df6d4e5e94ba835706b3127636, type: 3}
+  rarity: 0
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 70
-  str: 4
-  agility: 3
-  speed: 5
+  maxHealth: 60
+  str: 3
+  agility: 5
+  speed: 6
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

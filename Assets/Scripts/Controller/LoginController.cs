@@ -110,7 +110,48 @@ public class LoginController : MonoBehaviour
         ShowLoading(true);
         ShowForm(false);
         yield return StartCoroutine(SyncCharacterRoutine());
+        yield return StartCoroutine(LoadEconomyRoutine());
         yield return StartCoroutine(LoadMainMenuAsync());
+    }
+
+    // Carrega moeda/diamante (carteira por conta) + energia (por personagem, com regeneração já
+    // calculada — ver EnergyService) pra PlayerEconomyState ANTES de entrar em 01_MainMenu, pra
+    // o HUD (CharacterPanel/MainMenuCharacterPreview) já nascer com os números certos, sem um
+    // "pulo" de zero pro valor real logo após a cena carregar. Só roda no caminho de login de
+    // verdade (não em "Pular (offline)") — sem conta não existe wallet/energia na nuvem pra ler.
+    private IEnumerator LoadEconomyRoutine()
+    {
+        if (selectedProfileHolder == null || selectedProfileHolder.currentProfile == null) yield break;
+
+        string uid = AuthService.CurrentUser.UserId;
+        string characterId = selectedProfileHolder.currentProfile.OpponentId();
+        var energySettings = Resources.Load<EnergySettings>("EnergySettings");
+
+        var walletTask = WalletService.LoadAsync(uid);
+        yield return new WaitUntil(() => walletTask.IsCompleted);
+        var (coins, diamonds) = walletTask.Result;
+
+        // Bug real corrigido (2026-07-21, reportado pelo usuário: desbloqueios/passe/progressão
+        // comprados antes "não funcionavam" depois de reiniciar o app, mesmo a Loja mostrando o
+        // estado certo) — ShopStateService.LoadAsync só rodava dentro de ShopController.Start(),
+        // então PlayerUnlocksState/PlayerPassState/PlayerProgressionState ficavam no default
+        // (tudo desligado) em qualquer combate/level-up que acontecesse sem o jogador ter reaberto
+        // a Loja NESTA sessão — a Loja em si sempre mostrava certo porque ela mesma recarregava o
+        // estado ao abrir, mascarando o problema. Carregado aqui (mesmo ponto de wallet/energia,
+        // sempre roda antes de 01_MainMenu) pra já valer pra qualquer combate da sessão.
+        var shopStateTask = ShopStateService.LoadAsync(uid);
+        yield return new WaitUntil(() => shopStateTask.IsCompleted);
+
+        int energyCurrent = energySettings != null ? energySettings.maxEnergy : 10;
+        int energyMax = energySettings != null ? energySettings.maxEnergy : 10;
+        if (energySettings != null)
+        {
+            var energyTask = EnergyService.GetOrRegenAsync(uid, characterId, energySettings);
+            yield return new WaitUntil(() => energyTask.IsCompleted);
+            (energyCurrent, energyMax) = energyTask.Result;
+        }
+
+        PlayerEconomyState.Set(coins, diamonds, energyCurrent, energyMax);
     }
 
     // Compara o personagem local (SelectedProfileHolder.currentProfile) com o que existe na

@@ -13,19 +13,22 @@ MonoBehaviour:
   m_Name: Egyptian Sentry
   m_EditorClassIdentifier: 
   profileName: Egyptian Sentry
+  characterId: 
   characterPrefab: {fileID: 1435728539128650, guid: ce0caca0158a7b447a5cb216d3bf77ad, type: 3}
   isUnlockedForSelection: 1
   isPlayable: 0
+  isFavorite: 0
   previewIcon: {fileID: 21300000, guid: b8e20eebf7cbfa34a814dd567852fd92, type: 3}
   splashArt: {fileID: 21300000, guid: 5264a10eec013c9408f4d77198d20b68, type: 3}
+  rarity: 1
   attackSettings: {fileID: 11400000, guid: afcd04318c0e8f741bf29908dc5ad1be, type: 2}
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 60
-  str: 5
+  maxHealth: 55
+  str: 4
   agility: 6
-  speed: 3
+  speed: 5
   armor: 0
   evasion: 0
   accuracy: 0
@@ -37,7 +40,7 @@ MonoBehaviour:
   criticalChance: 0
   hitSpeed: 1
   skills: []
-  pets: 
+  pets: []
   level: 1
   winRate: 0
   xpCurrent: 0

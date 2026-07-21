@@ -92,3 +92,16 @@ MonoBehaviour:
   - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
   - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
   - {fileID: 11400000, guid: fcb3d4326a2a4f14b9f5de165814a1c6, type: 2}
+  botTemplates:
+  - {fileID: 11400000, guid: ad12969c5b53c69448673e810508f807, type: 2}
+  - {fileID: 11400000, guid: 9e12e4cf43137f24881953f4329271f1, type: 2}
+  - {fileID: 11400000, guid: b57654072e14b294fa10affe912ae361, type: 2}
+  - {fileID: 11400000, guid: 3c10be97e1454b8479976eecc4c49ad2, type: 2}
+  - {fileID: 11400000, guid: 2144214331a344041be7f89cc4983011, type: 2}
+  - {fileID: 11400000, guid: 93368e5a0031aa0468fa0386ecd3102d, type: 2}
+  - {fileID: 11400000, guid: 24dc476158b6ba54ca5733dc4a31f968, type: 2}
+  - {fileID: 11400000, guid: 7ba75c5a3fb413846abaf14a62242e22, type: 2}
+  - {fileID: 11400000, guid: 2114ae07743e1c348981739830bd2d2b, type: 2}
+  - {fileID: 11400000, guid: 71b96939c6251b74f8ddbd474509cf7d, type: 2}
+  - {fileID: 11400000, guid: 5c40542177d86ae45b497a2b646a09e6, type: 2}
+  - {fileID: 11400000, guid: f2f17e92c2efdba41a1f72848ba0b585, type: 2}

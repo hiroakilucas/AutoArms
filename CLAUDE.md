@@ -9,6 +9,7 @@
 - CHARACTER_IMPORT_CHECKLIST.md — ler antes de importar/processar qualquer personagem novo (pacote CraftPix) — problemas reais já encontrados (bone não portável entre pacotes, GUID duplicado em variantes numeradas, etc.) e as ferramentas de `Tools > AutoArms`
 - ARQUITETURA.md — regras arquiteturais **permanentes** (ex: diamante nunca é gravável direto pelo cliente no Firestore, sempre via Cloud Function) — ler antes de desenhar qualquer sistema com dinheiro real, conta de usuário ou persistência online
 - LIMPEZA_BASE.md — passo a passo pra zerar a base Firebase (Auth + Firestore) e o cache local (save.json, LevelDB, PlayerProfile.asset contaminado) — usar antes de uma rodada de testes que precise de estado limpo
+- MONETIZACAO.md — preços/itens da loja (Fase 4), referência oficial pra `ShopController`/`06_Loja` — ler antes de alterar qualquer aba/card/preço da Loja
 - CHANGELOG.md — histórico completo de atualizações
 - VISION.md — conceito do jogo, inspirações, progressão (raramente necessário)
 
@@ -56,10 +57,11 @@ This is a Unity project. All development happens inside the Unity Editor. There 
 
 - `01_MainMenu` — Play button (reposicionado no canto inferior direito, estilo Brawl Stars — verde, maior que os outros) navega pra `05_SelectOpponent`; a character must be selected first
 - `02_SelectCharacter` — Grid of characters from `CharacterDatabase.unlockedCharacters`; selection persists via `SelectedProfileHolder`
-- `03_SelectWeapons` — **Not yet created.** Referenced in `MainMenuController` (`selectWeapons` field, never actually called by any method) but absent from the build and the file system — reserved for a FUTURE pre-combat loadout picker (choosing which weapons to bring into a fight), a different purpose from `03_Arsenal` below — don't confuse/merge the two.
+- `03_SelectWeapons` — **Cancelado (2026-07-16).** Nunca foi criada; era reservada pra um FUTURO seletor de loadout pré-combate (escolher quais armas levar pra uma luta específica). Usuário decidiu cancelar o plano — `03_Arsenal` (catálogo/coleção informativa) cobre a necessidade de visualização de armas/skills. O campo `MainMenuController.selectWeapons` (nunca chamado por nenhum método) ficou como resíduo morto no código — remover se for mexer em `MainMenuController` por outro motivo.
 - `03_Arsenal` — **Criada (2026-07-14).** Tela informativa (não faz parte do fluxo de partida) — grid de TODAS as armas e skills do jogo (`WeaponDatabase`/`SkillDatabase`), mostrando o maior tier que o `SelectedProfileHolder.currentProfile` possui de cada uma (borda bronze/prata/ouro, `ArsenalSlotUI`) ou escurecido/bloqueado se não possuir nenhum. Só lê `PlayerProfile.weapons`/`skills`, nunca altera. Acessível pelo botão "Arsenal" em `01_MainMenu` (mesmo estilo card de `Btn_SelectCharacter`/"Chibers"). Ver `ArsenalController.cs`.
-- `05_SelectOpponent` — **Criada (2026-07-07).** Grid (até 6 cards, construídos 100% via código — mesmo padrão de `CombatResultPanel`/`CharacterPanel`, sem prefab de card) com `CharacterDatabase.opponentCharacters` (exclui o profile em uso pelo jogador). Cada card mostra nome/level/HP efetivo/barras STR-AGI-SPD/ícones de arma/histórico `PlayerPrefs` ("X batalhas · Y vitórias"). Escolher um card grava `SelectedOpponentHolder.currentOpponentProfile` e carrega `04_CombatScenePVP`. Ver `SelectOpponentController.cs`.
+- `05_SelectOpponent` — **Criada (2026-07-07).** Grid 2 colunas × 3 linhas (até 6 cards, `GridLayoutGroup.Constraint.FixedColumnCount`, 2026-07-16 — construídos 100% via código, mesmo padrão de `CombatResultPanel`/`CharacterPanel`, sem prefab de card). Ordem de preenchimento: (1) adversários reais via `OpponentSearchService` (`opponents_index`, priorizando `levelBucket` próximo do level do jogador); (2) completa com bots gerados em runtime a partir de personagens de raridade **Normal** em `CharacterDatabase.unlockedCharacters` (2026-07-16, pedido do usuário — substituiu a curadoria fixa por nome de `botTemplates`/`BotTemplateSetup.cs`, obsoleta agora que as 72 raridades estão preenchidas) via `BotProfileGenerator`, stats/skills/armas escalados pro level do jogador — ver `BotProfileGenerator.cs`/`LevelUpEngine.cs`/`SelectOpponentController.GenerateBotOpponents`; (3) só cai pro pool antigo `CharacterDatabase.opponentCharacters` (exclui o profile em uso pelo jogador) como fallback de ÚLTIMA instância, se nem os bots renderem nada. Card (820×320, 2026-07-16 — era 260×620, depois 820×640, altura reduzida à metade) com o retrato grande (260px) fixo na coluna esquerda e todo o resto numa coluna direita própria (`RightPanel`): nome, "Level X · HP Y" alinhado à ESQUERDA (2026-07-16 — colado na borda direita do retrato, lendo como parte do personagem, em vez de centralizado flutuando na largura toda), STR/AGI/SPD via `AttributePipBar` em 3 linhas empilhadas com o MESMO espaçamento vertical entre elas (`MakeAttributeRow`, chamado 3x — voltou de uma tentativa de 3 colunas lado a lado que espremia demais cada `AttributePipBar`, badge + 10 pips coloridos por tier, mesmo componente do `CharacterPanel`, precisa de `UITheme` wireado no Inspector) e uma linha única combinando ícones de skill (`LevelUpEngine.ResolveSkillIcon`), arma (`ResolveWeaponIcon`, ambos sobem a cadeia `previousTier` até achar sprite) **e pet** (`mousePetIcon`/`monkeyPetIcon`/`boarPetIcon`, sprites do frame `Idle_000` de cada pet em `Assets/Data/UI/Pets/`, wireados manualmente no Inspector — pets nunca apareciam antes de 2026-07-16 porque não existia nenhuma linha pra eles, não por falta de ícone), 56px cada, cada um com Button próprio: clicar abre o MESMO popup de detalhe de `01_MainMenu`/`03_Arsenal` (2026-07-16, substituiu um tooltip de hover só-com-nome da rodada anterior, que não reaproveitava nenhum padrão existente) — `SelectOpponentController.EnsureDetailPanel()` instancia um `CharacterPanel` "de cabeça" (mesmo truque de `ArsenalController.EnsureDetailPanel`: `Setup(selectedProfileHolder, theme)` + `HideRootPermanently()`, HUD nunca aparece, só o popup) e chama `ShowSkillDetail`/`ShowWeaponDetail` (nome, borda por tier, descrição+efeito ou stats completos — idêntico ao menu) ou `ShowPetDetail` (novo método `public` em `CharacterPanel.cs`, 2026-07-16 — pets não têm `PetData`/asset próprio, então monta um popup mínimo com a MESMA infraestrutura de overlay/painel/ícone-com-borda, corpo com stats de `PetState.Create`/`DamageRange` em vez de description/effectText). **Sem botão "Escolher" nem histórico de batalhas** (removidos 2026-07-16) — o card inteiro é clicável (`PressableCard.cs`: escurece no toque, escolhe no `OnPointerClick`, não no `OnPointerUp`, pra não roubar o gesto de rolar o `ScrollRect`), grava `SelectedOpponentHolder.currentOpponentProfile` e carrega `04_CombatScenePVP`. Ver `SelectOpponentController.cs`.
 - `04_CombatScenePVP` — Player1 **e** Player2 são ambos instanciados em runtime a partir do `PlayerProfile` selecionado (`SelectedProfileHolder`/`SelectedOpponentHolder`) — não há mais objeto pré-colocado na cena pro Player2 (era a Medieval Warrior Girl, hardcoded; ver histórico no CHANGELOG).
+- `06_Loja` — **Criada (2026-07-20), Fase 1/placeholder (ver MONETIZACAO.md).** Tela informativa/de compra (fora do fluxo de partida) construída 100% via código (mesmo padrão de `03_Arsenal`: só Main Camera + um GameObject com `ShopController`, sem hierarquia de UI pré-colocada). **Layout em sidebar (2026-07-20, revisado — era barra horizontal de abas + grid vertical no topo):** 5 abas (Diamantes/Desbloqueios/Passes/Progressão/Personagens) numa barra lateral VERTICAL à esquerda (`BuildSidebar`, `VerticalLayoutGroup`, estilo Brawl Stars); cards de cada aba rolam HORIZONTALMENTE à direita (`BuildScrollView`/`RebuildGrid`, `GridLayoutGroup.Constraint.FixedRowCount`) — **2 linhas** na aba Diamantes (8 pacotes), **1 linha** nas demais. Cards grandes, preenchendo quase toda a altura da região disponível — `ShopCardUI.Build` recebe a altura real do card (`cardHeight`) e escala ícone/paddings/fontes proporcionalmente (`scale = cardHeight/420`); a altura do subtítulo é calculada a partir do espaço realmente sobrante entre título e preço (não uma constante escalada — evita a caixa de subtítulo sobrepor o cluster de preço/status/comprar). Preços/itens hardcoded em `ShopController.BuildItemData`, espelhando MONETIZACAO.md seções 1-5. Cards (`ShopCardUI.cs`) usam retângulo cinza placeholder no lugar do ícone, exceto a aba Diamantes (usa `Diamond.png`, arte já final); aba Personagens usa as cores de raridade do `UITheme` (rarityRare/rarityLegendary/rarityImmortal) no placeholder. Clicar em "Comprar" **não** grava no Firestore nem toca `WalletService` — só loga no Console e incrementa um contador local em memória (`ShopItem.Purchased`, perdido ao sair da cena); aba Personagens desabilita o card ao esgotar o limite de compras (10/3/1 pra Raro/Legendary/Imortal). Acessível pelo botão "LOJA" em `01_MainMenu` (mesma coluna de atalhos de Chibers/Arsenal/Replay, ver `MainMenuController.BuildLojaMenuButton`).
 
 ## ScriptableObject Assets
 
@@ -68,7 +70,7 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 | Asset type | Location | Notes |
 |---|---|---|
 | `PlayerProfile` | `Assets/ScriptableObjects/PlayerProfiles/` | Assassin Guy, Medieval Warrior, Medieval Warrior Girl. Campos de progresso: `level`, `xpCurrent`, `xpRequired` (calculado por `XpSystem.XpRequired`), `battlesRemaining` (max 6), `str`, `agility`, `maxHealth` (padrão 50). `rarity` (`CharacterRarity` enum — Normal/Uncommon/Rare/Legendary/Immortal, 2026-07-14) — puramente cosmético, colore o fundo do `PortraitBox` em `02_SelectCharacter` (`CharacterCardUI`, cores em `UITheme.rarity*`, ver UI_PALETTE.md); não confundir com `level` (progressão/XP, sem teto). `isFavorite` (bool, 2026-07-14) — alternado pela estrela (★/☆) no canto superior direito do `PortraitBox` (`CharacterCardUI.OnFavoriteClicked`); favoritados aparecem primeiro na grade de `02_SelectCharacter`, antes da ordem alfabética por nome (`CharacterSelectController.CompareFavoriteThenName`) |
-| `CharacterDatabase` | `Assets/ScriptableObjects/Databases/` | `unlockedCharacters` — **Assassin Guy**, **Medieval Warrior** e **Medieval Warrior Girl** (2026-07-08: MWG adicionada só pra aparecer no grid de `02_SelectCharacter`, ver Characters abaixo — continua bloqueada/não clicável lá, e continua hardcoded como Player2 em `04_CombatScenePVP`, sem relação com este campo). `opponentCharacters` (até 6) — pool de oponentes de `05_SelectOpponent`; hoje são 6 entradas repetindo **Medieval Warrior Girl** como placeholder (só existem 3 `PlayerProfile` no projeto) — expandir esse campo à medida que novos personagens forem criados. |
+| `CharacterDatabase` | `Assets/ScriptableObjects/Databases/` | `unlockedCharacters` — os 72 `PlayerProfile` do projeto, cada um com `rarity` preenchida (2026-07-16). `botTemplates` (2026-07-15) — **obsoleto/não lido mais** (2026-07-16): eram 12 `PlayerProfile` curados por nome em `BotTemplateSetup.cs` só porque nenhuma raridade real existia ainda; `SelectOpponentController.GenerateBotOpponents` agora filtra `unlockedCharacters` por `rarity == Normal` direto, sem depender desta lista fixa nem de rodar `Tools > AutoArms > Setup Bot Templates`. Campo/asset/ferramenta deixados no projeto (não removidos), mas sem consumidor. `BotProfileGenerator` gera um `PlayerProfile` runtime por template sorteado com stats/skills/armas escalados pro level do jogador (ver `05_SelectOpponent` acima). `opponentCharacters` (até 6) — pool antigo de oponentes; 6 entradas repetindo **Medieval Warrior Girl** como placeholder, fallback de ÚLTIMA instância, só alcançado se nenhum personagem Normal existir. |
 | `SelectedProfileHolder` | `Assets/Resources/` | Cross-scene singleton (jogador) — read by `CombatSceneLoader` and `MainMenuCharacterPreview` |
 | `SelectedOpponentHolder` | `Assets/Resources/` | Cross-scene singleton (oponente) — campo `currentOpponentProfile`, gravado por `SelectOpponentController` ao escolher um card, lido por `CombatSceneLoader` pra instanciar Player2 dinamicamente (mesmo padrão do `SelectedProfileHolder`) |
 | `UITheme` | `Assets/ScriptableObjects/UITheme.asset` | Paleta de cores central de UI (fundo, botões, ícones/status, texto) — ver **UI_PALETTE.md** pro detalhe de cada campo/hex. Aplicado via `UIThemeApplier` (`Assets/Scripts/UI/`, `MonoBehaviour` com `enum ColorRole`) num `Image`/`TextMeshProUGUI` do mesmo GameObject. Primeiro uso real: botão "Jogar" de `01_MainMenu` (`ColorRole.PrimaryAction`) — resto das telas ainda não migrado (fundação, ver Fase 1 do roadmap). |
@@ -77,6 +79,7 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 | `WeaponData` (legados) | ~~`Assets/Data/UI/Weapons/<type>/`~~ | **Não existem mais no projeto** (verificado 2026-07-14 ao montar `WeaponDatabase` — os 5 assets originais citados aqui antes, Satyr1/Golem3/Succubus/VeryHeavyArmoredFrontierDefender/Zombie, e as referências em `Assets/Data/UI/Weapons/Loadout10Armas.asset`, um leftover do antigo sistema `WeaponLoadout`, todas resolvem pra GUID inexistente). Só os 26 assets de `Assets/Data/Weapons/` abaixo são reais hoje. |
 | `WeaponData` (My Brute) | `Assets/Data/Weapons/` | 26 armas organizadas em **3 tiers** (T1/T2/T3): Anchor, Axe, Baton, Bone, Book, Boomerang, Bottle, Bow, Branch, Broadsword, Bumps, Fan, Flail, Frying Pan, Hammer, Knife, Lance, Morning Star, Racquet, Reaper, Sai, Scimitar, Shuriken, Sword, Trident, Whip. T1 têm sprites (icon + inHandSprite) e stats base; muitos T2/T3 também já têm ícone próprio (nem todos herdam via `previousTier`). Dano multiplicado (T2 ×1.35, T3 ×1.75) via `WeaponTierGenerator`. **Precisam ser arrastados para `AttackSequencer.allWeapons` no Inspector da cena `04_CombatScenePVP` para entrar no pool de level-up.** |
 | `WeaponDatabase` | `Assets/ScriptableObjects/Databases/WeaponDatabase.asset` | Novo (2026-07-14) — lista os 26 `WeaponData` **T1** (raiz de cada família) acima, mesmo espírito de `SkillDatabase` (que já existia, mas nunca teve equivalente pra armas). Único consumidor até agora: `ArsenalController` (`03_Arsenal`), pra enumerar "toda arma que existe no jogo" sem depender de `Resources.LoadAll`/scan de pasta. Só T1 — T2/T3 são alcançados via `WeaponData.nextTier` a partir de cada T1, se algum consumidor futuro precisar. |
+| `EnergySettings` | `Assets/Resources/EnergySettings.asset` | Novo (2026-07-19) — balanceamento do sistema de energia (`maxEnergy`, `regenIntervalHours`, `diamondCostToRefill`), carregado via `Resources.Load<EnergySettings>("EnergySettings")` (não wireado por Inspector — evita precisar editar `01_MainMenu.unity` só pra isto). Ver **Sistema de Energia/Moeda** abaixo. |
 
 **AttackSettings — valores atuais (Player1 = Player2 exceto onde indicado):**
 | Campo | Valor |
@@ -265,7 +268,7 @@ Tela puramente informativa (fora do fluxo de partida) acessível pelo botão "Ar
 - **Bug real corrigido (2026-07-14)**: scroll só funcionava arrastando em cima de um ícone — o `Viewport` só tinha `RectMask2D` (sem `Image`), então o `GraphicRaycaster` não achava nenhum alvo nas áreas vazias entre/abaixo dos ícones pro `ScrollRect` receber o arraste ali. Corrigido com um `Image` quase invisível (alpha 0.001) cobrindo o Viewport inteiro — mesmo padrão do ScrollView default da própria Unity.
 - **Popup de detalhe** (2026-07-14, pedido do usuário — "deixar clicável mesmo bloqueado, pra ver os atributos", **igual ao popup do painel de informação do `01_MainMenu`**): em vez de um popup próprio, `ArsenalController.BuildDetailPanel()` instancia uma `CharacterPanel` real (mesmo componente do HUD lateral do menu principal), chama `Setup(selectedProfileHolder, theme)` e depois `HideRootPermanently()` (novo método público — move o Root/HUD Compact-Expanded pra fora da tela SEM desativar o Canvas, diferente de `HideSlideOut`, já que o popup é sibling do mesmo Canvas — `sortingOrder 20` — e precisa dele ativo). Clicar num slot chama `_detailPanel.ShowWeaponDetail(data)`/`ShowSkillDetail(data)` (ambos tornados `public`, sem nenhuma outra mudança de lógica) — popup 100% idêntico ao do menu principal, sem duplicar layout/tier/stats. Funciona também pra armas/skills bloqueadas (mostra os atributos da família/T1, já que `ShowWeaponDetail`/`ShowSkillDetail` não dependem de posse, só do `WeaponData`/`SkillData` passado).
 - **Bug real corrigido (2026-07-14)**: os slots não reagiam a clique nenhum — `ArsenalSlotUI` põe o `Button` no `Border`, mas `IconBg`/`Icon` (desenhados DEPOIS dele, por cima) tinham `raycastTarget=true` por padrão e absorviam o clique antes de chegar no `Border`. Corrigido com `raycastTarget=false` nos dois.
-- **Não confundir com `03_SelectWeapons`** (campo `MainMenuController.selectWeapons`, nunca usado por nenhum método) — esse nome/slot ficou reservado pra uma futura tela de escolha de LOADOUT pré-combate (decidir quais armas levar pra uma luta específica), propósito diferente do Arsenal (catálogo/coleção informativa, sem relação com uma partida em andamento). Por isso o Arsenal ganhou uma cena própria (`03_Arsenal`) em vez de reaproveitar o slot já reservado.
+- **`03_SelectWeapons` (campo `MainMenuController.selectWeapons`, nunca usado por nenhum método) foi cancelado (2026-07-16)** — era reservado pra uma futura tela de escolha de LOADOUT pré-combate (decidir quais armas levar pra uma luta específica), propósito diferente do Arsenal (catálogo/coleção informativa, sem relação com uma partida em andamento); o Arsenal já cobre a necessidade e ganhou cena própria (`03_Arsenal`) em vez de reaproveitar o slot cancelado.
 
 ## Sorting Layers
 
@@ -790,6 +793,195 @@ At the impact moment (after the first `slashHalf` wait), `HealthSystem.TakeDamag
 **Bug corrigido (Animator preso em `Throwing` entre arremessos do mesmo turno)**: este case fazia `SetTrigger("Throwing")` mas nunca chamava `animationController.SetIdle(true)` depois do voo da arma — só o `TurnEnd`, bem mais tarde, fazia isso (`Throwing → Idle` exige `Idle=true`, `CanTransitionToSelf=0` na transição de entrada, ver **Animator Controller Architecture**). Funcionava enquanto só existia 1 `ThrowWeapon` por turno, mas com o combo de arremessos da Hideaway (`SimulateHideawayThrowCombo`, múltiplos `ThrowWeapon` no mesmo turno, sem `TurnEnd` entre eles) o 2º `SetTrigger("Throwing")` disparava enquanto o Animator ainda estava preso no próprio estado `Throwing` do arremesso anterior — sem transição válida pra consumir o trigger, o personagem tremia entre poses (bug real reportado pelo usuário, "parece que está com parkinson"). Corrigido chamando `SetIdle(false)` antes do `SetTrigger` (mesmo padrão de `PlayCatchWeapon`) e `SetIdle(true)` depois do voo da arma, a cada `ThrowWeapon` — não só no `TurnEnd` final.
 
 
+## Sistema de Energia/Moeda (2026-07-19)
+
+HUD de moeda geral, diamante e energia, pedido do usuário. Duas cartas de dado diferentes:
+
+- **Moeda/diamante — POR CONTA** (compartilhada entre todos os personagens), campos `coins`/
+  `diamonds` direto em `users/{uid}` (`WalletService.cs`), incrementados/decrementados via
+  `FieldValue.Increment` (atômico, sem race de leitura+escrita).
+- **Energia — POR PERSONAGEM**, campos `energyCurrent`/`lastEnergyTimestamp` em
+  `users/{uid}/characters/{characterId}` (`EnergyService.cs`). Teto/intervalo/custo de reabastecer
+  vêm de `EnergySettings.asset` (`Assets/Resources/`, editável no Inspector sem código novo —
+  placeholder inicial: 10 energia, +1/2h, custo de reabastecer 20 diamantes).
+
+**Bug real corrigido (2026-07-20) — "energia sempre volta pro mesmo número"**: `energyCurrent`/
+`lastEnergyTimestamp` moram no MESMO documento (`characters/{characterId}`) que `FirestoreService.
+SaveCharacterAsync` grava a cada luta (XP ganho) — e esse save usava `SetAsync(map)` **sem
+merge**, uma sobrescrita TOTAL do documento com só os campos do `CharacterDTO`, que nunca incluem
+energia (de propósito, pra separar da lógica de progresso). Cada luta apagava os campos de energia
+gravados minutos antes; a próxima leitura achava "documento sem os campos" e reinicializava pra
+cheio. Corrigido trocando pra `SetAsync(map, SetOptions.MergeAll)` — ver `FirestoreService.cs`.
+**Qualquer save futuro que toque `characters/{characterId}` via `SetAsync` sem merge tem o mesmo
+risco** — sempre que algo mora nesse documento fora do `CharacterDTO` (energia hoje; potencialmente
+outros campos no futuro), usar merge ou seu próprio caminho de update ao mexer nesse doc.
+
+**Regeneração nunca usa o relógio do device** (pedido explícito — trapaça de adiantar a hora do
+celular): como não existe Cloud Function neste projeto ainda pra expor "hora do servidor" direto,
+`EnergyService.ReadServerNowAsync` grava um campo descartável com `FieldValue.ServerTimestamp` e lê
+de volta forçando `Source.Server` — o valor resolvido é a hora real do Firestore no momento da
+escrita, não a do device. A partir daí: `intervals = floor(horasPassadas / regenIntervalHours)`;
+se o resultado bate o teto, o timestamp é reancorado em "agora" (sem isso, um personagem parado
+muito tempo no teto reencheria instantaneamente de novo ao gastar 1 energia, porque o timestamp
+antigo geraria "intervals" suficientes pra pular direto de volta ao teto); abaixo do teto, o
+timestamp avança pelo tempo EXATO consumido (`intervals * regenIntervalHours`), preservando o
+progresso parcial rumo ao próximo tick, como pedido.
+
+**Conta obrigatória**: `MainMenuController.OnPlayButton()` (ponto exato onde o gate entra no fluxo
+de sempre) exige `AuthService.IsSignedIn` antes de checar energia — sem conta sincronizada não há
+wallet/energia nenhuma na nuvem pra ler, então "Pular (offline)" mostra um popup pedindo login em
+vez de jogar sem gate nenhum. Com energia em 0, o clique em Jogar abre um popup de confirmação
+(`MainMenuController.BuildPopup`, autocontido) oferecendo gastar `diamondCostToRefill` diamantes
+por +1 energia; sem diamante suficiente, mensagem clara e nenhuma batalha.
+
+**Consumo só acontece ao FIM da luta, não no clique de Jogar (bug real corrigido 2026-07-20)**:
+`OnPlayButton` só lê/regenera (`GetOrRegenAsync`) pra decidir se libera `05_SelectOpponent` ou
+abre o popup de reabastecer — nunca chama `ConsumeOneAsync` mais. O desconto de fato roda em
+`AttackSequencer.OnCombatEnd` (`ConsumeEnergyAfterCombatAsync`, fire-and-forget, guardado por
+`AuthService.IsSignedIn`, pulado no branch de replay/`player1Profile == null`), no mesmo instante
+em que XP/battlesRemaining são aplicados — ou seja, só quando a luta de fato termina em vitória
+ou derrota. Antes, o desconto acontecia no clique do botão, então desistir em
+`05_SelectOpponent` (ou fechar o jogo em pleno combate) já cobrava a energia sem nenhuma luta
+concluída. `SpendAndContinueRoutine` (popup de gastar diamante com energia em 0) também mudou:
+`RefillOneAsync` só reabastece pra 1 agora — o consumo desse 1 acontece no mesmo `OnCombatEnd`
+de sempre, não mais imediatamente em seguida no clique.
+
+**TODO de segurança (placeholder, decisão explícita do usuário 2026-07-19)**: a regra permanente
+do projeto (ver ARQUITETURA.md "Moeda premium") é diamante nunca ser client-writable — mas este
+projeto ainda não tem nenhuma Cloud Function implantada. `WalletService.SpendDiamondsAsync` grava
+diamante direto do cliente por enquanto (mesmo modelo "cliente confiável" de outros stats hoje),
+propositalmente isolado numa função só, pra trocar por uma Cloud Function callable no dia em que a
+Fase 4/Monetização for construída, sem precisar mudar a assinatura pro chamador.
+
+**HUD**: `MainMenuController.BuildCurrencyHud` — ícone+número de moeda/diamante no canto superior
+DIREITO da tela (era canto superior esquerdo do `CharacterPanel` — movido pra HUD próprio no
+redesenho mobile de 2026-07-20, ver seção **Redesenho Mobile do HUD Principal** abaixo, junto do
+motivo). `MainMenuCharacterPreview.BuildEnergyHud` — fileira de 10 ícones, o elemento mais no TOPO
+da pilha vertical acima do personagem (acima do "Level X"+barra de XP); ícone na posição visual i
+(0=esquerda) aparece cheio (`Color.white`) quando `i < EnergyCurrent`, senão acinzentado (tint
+escuro semi-transparente) — esvazia/reenche sempre da DIREITA pra ESQUERDA, como pedido.
+
+**Timer de "próxima energia" (2026-07-20, pedido do usuário)** — texto logo ACIMA da fileira de
+ícones (`BuildEnergyTimer` — era abaixo, reposicionado a pedido do usuário no mesmo dia) e, quando
+a energia está zerada, também dentro do popup de gastar diamante/mensagem de saldo insuficiente
+(`MainMenuController.BuildPopup`, parâmetro `showEnergyCountdown`) — mesmo texto/fonte de dados
+nos dois lugares (`PlayerEconomyState.FormatEnergyCountdown`), evitando duplicar a lógica de
+formatação. `CountdownLabel` (`Assets/Scripts/UI/CountdownLabel.cs`) é um componente genérico
+(`Init(TMP_Text, Func<string>, tickInterval)`) que só chama o formatter a cada 1s e aplica o
+texto — não sabe nada de energia/moeda, reaproveitável por qualquer outro timer futuro.
+`PlayerEconomyState` ganhou `LastEnergyTimestampUtc`/`RegenIntervalHours` (espelhados por
+`EnergyService.GetOrRegenAsync` a cada leitura) só pra UI computar a contagem regressiva
+localmente entre uma chamada e outra — **decorativo, não reabre a brecha de trapaça do relógio do
+device**: o valor de fato gasto/creditado sempre é revalidado contra o servidor em
+`GetOrRegenAsync`/`ConsumeOneAsync` (ver seção acima); adiantar o relógio do device só deixaria o
+TEXTO do timer errado até a próxima sincronização real, nunca dá energia de graça. Formato
+`HH:MM:SS` (`TotalHours`, não só `Hours` —
+continua correto mesmo se `regenIntervalHours` for ajustado pra mais de 24h no futuro); mostra
+"Energia cheia" quando `EnergyCurrent >= EnergyMax`.
+
+**Bug real corrigido (2026-07-20) — timer sempre em branco**: `PlayerEconomyState` só era
+populado por `LoginController.LoadEconomyRoutine` (roda só em `00_Login`) ou ao clicar Jogar
+(`OnPlayButton`) — abrir/testar `01_MainMenu` direto no Editor (sem passar pela cena de login,
+fluxo comum ao iterar em UI) deixava tudo no default de fábrica, então `FormatEnergyCountdown`
+sempre retornava `null` e o texto nunca era escrito (nem os ícones refletiam energia real).
+`MainMenuController.Start()` agora chama `RefreshEconomyOnMenuLoad()` — busca wallet (`WalletService.
+LoadAsync`) + energia (`EnergyService.GetOrRegenAsync`) via `Task.WhenAll` toda vez que o menu
+carrega, não só nesses dois pontos; no-op silencioso se não houver conta logada.
+
+Ícones em
+`Assets/Resources/UI/Economy/{Coin,Diamond,Energy}.png` (fornecidos pelo usuário via Leonardo AI/
+prototype folder, 2026-07-19) — mesmo padrão `Resources.Load<Sprite>("UI/Economy/...")` já usado
+por `AttributePipBar` pros ícones de STR/AGI/SPD/HP. Os 8 `SpriteRenderer` órfãos que existem em
+`01_MainMenu.unity` (`imgDiamond`/`imgBlackDiamond`/`imgPlusDiamond`/`imgEnergy`/`imgBlackEnergy`/
+`imgPlusEnergy`/`imgQuest`/`imgPass`, sobra de asset pack antigo, GUIDs de sprite quebrados — não
+resolvem mais pra nenhum asset do projeto) **continuam no projeto, não removidos** — uma tentativa
+de apagá-los via edição direta do `.unity` nesta sessão corrompeu a cena (um objeto real, "Panel"
+com Animator/filhos, estava intercalado no meio do intervalo de linhas apagado, sem ter sido
+conferido individualmente antes da exclusão em massa); a cena foi restaurada de um backup e o
+usuário decidiu deixar os 8 órfãos como estão — inofensivos (sprite quebrado só aparece sem imagem
+no Inspector, não trava nada) — em vez de arriscar editar o `.unity` de novo por texto. Se for
+limpá-los algum dia, fazer pelo próprio Editor da Unity (selecionar+deletar, com Undo de verdade),
+nunca por edição de texto em massa sem conferir CADA objeto do intervalo individualmente.
+
+## Redesenho Mobile do HUD Principal (2026-07-20)
+
+Reajuste pedido pelo usuário — elementos do HUD de `01_MainMenu` ficavam pequenos demais pra
+leitura confortável em celular. **Decisão explícita do usuário**: manter o `CanvasScaler` atual
+(`ScaleWithScreenSize`, `referenceResolution=1920×1080`, `matchWidthOrHeight=0`) e a orientação
+Auto Rotation do `ProjectSettings` — só aumentar/reposicionar os elementos deste HUD dentro do
+sistema existente, sem migrar o projeto pra retrato de verdade agora (dívida técnica registrada
+em ROADMAP_FUTURO.md, Fase 7, pra decisão deliberada futura).
+
+- **`SafeArea.cs`** (`Assets/Scripts/UI/`) — primeiro tratamento de safe area do projeto (notch/
+  câmera-furo/barra de gestos), escopado só aos elementos deste HUD ancorados em canto/borda de
+  tela (não é uma correção geral de todas as Canvas). Padrão Unity padrão: ajusta os próprios
+  `anchorMin/anchorMax` a partir de `Screen.safeArea`, reavaliado a cada frame (cobre rotação em
+  runtime/dobráveis). Uso: um GameObject full-screen recebe o componente; o conteúdo de verdade
+  fica dentro dele, ancorado em frações relativas a ESSE retângulo (já sem a área insegura), não
+  à tela crua.
+- **Moeda/diamante** — saiu do canto superior ESQUERDO do `CharacterPanel` (`WalletBar`, removido)
+  e virou HUD próprio no canto superior DIREITO da TELA (`MainMenuController.BuildCurrencyHud`,
+  envolvido em `SafeArea`) — ícone 52→104px, fonte 18→36pt.
+- **Energia** — ícones 44→88px (`MainMenuCharacterPreview.EnergyIconSize`), espaçamento reduzido
+  em 2 rodadas (6→2→**0px**, "agrupar mais", pedido do usuário nas duas vezes — a fileira de 10
+  ícones fica com os ícones colados uns nos outros, sem gap). Timer "próxima energia" 16→32pt.
+  Ordem de cima pra baixo continua: energia → Level/XP → personagem.
+- **Level/XP** (`MainMenuCharacterPreview.BuildLevelXpHud`) — 2 rodadas: 1ª (altura/fonte maiores,
+  280×76→320×130, texto "atual/necessário" ainda sobreposto DENTRO da barra grossa) revertida
+  parcialmente na 2ª rodada (pedido do usuário: barra mais fina de novo, texto reorganizado) —
+  caixa final 320×**90**, "Level X" e "atual/necessário" (`10/16`) viraram uma **linha única lado
+  a lado** (Level à esquerda, fração à direita, ambos 28pt) EM VEZ de "Level X" sozinho numa linha
+  com o texto de XP centralizado dentro da barra abaixo; a barra em si ficou fina (ocupa só
+  ~20% da altura da caixa, contra ~50% antes) e não tem mais texto por cima. `levelXpHalfHeight`
+  (usado por `BuildEnergyHud` pra posicionar a fileira de energia acima) precisa ser atualizado
+  junto sempre que essa altura mudar (38→65→**45**, sempre metade da altura atual) — os dois HUDs
+  são empilhados um em cima do outro, um não pode mudar de tamanho sem o outro saber.
+- **Painel de detalhes do personagem → gaveta inferior** — **2 tentativas**. A 1ª
+  (`MobileCharacterDrawer.cs`, componente novo reimplementando nome/HP/STR-AGI-SPD do zero,
+  ESCONDENDO skills/armas/pets atrás de um toque e sem incluí-los de verdade) ficou visualmente
+  ruim (usuário reportou) e não cobria skills/armas/pets — **removida por completo**. A 2ª
+  tentativa (atual) deu ao **`CharacterPanel`** um modo `bottomAnchored` (novo parâmetro em
+  `Setup(..., bottomAnchored: true)`) que reaproveita 100% da lógica já existente e testada —
+  `BuildInfoBlock` (nome/HP/STR/AGI/SPD, ícone+pips, NUNCA barras esticadas — é o mesmo componente
+  `AttributePipBar` de sempre, só a geometria de ancoragem do painel muda), `BuildSkillsAndWeapons`
+  (Skills+Armas+Pets em grade, mais o botão "VER DETALHES"/PASSIVAS já existente — o "nível 2 de
+  expansão" pedido pelo usuário já existia pronto aqui, não precisou de nada novo) — só a
+  geometria de ancoragem é diferente:
+  - Root: largura FIXA `PanelWidth` (450px, igual de sempre) **centralizada horizontalmente**
+    (não mais o painel vertical do lado direito) e **ancorada no rodapé** (`anchorMin/Max=(0.5,0)`,
+    `pivot=(0.5,0)`), dentro de `SafeArea`. 450px centralizado cabe confortavelmente no vão entre
+    a coluna Chibers/Arsenal/Replays (esquerda) e o botão Jogar (direita) sem precisar calcular a
+    posição exata desses dois — só centralizar já resolve.
+  - Compact (fechado) e o InfoBlock do Expanded ficam colados na BASE do Root (era o TOPO, no
+    modo painel-lateral) — é dali que a gaveta "cresce pra cima"; o Divider/ScrollArea (Skills/
+    Armas/Pets/Passivas) ficam ACIMA do InfoBlock (era ABAIXO) — todo o `BuildCompact`/
+    `BuildExpanded` tem um `if (_bottomAnchored)` espelhando cada offset verticalmente.
+  - `MainMenuController.Start()` chama `characterPanel.Setup(..., bottomAnchored: true)` **sem**
+    `HideRootPermanently()` (a tentativa anterior escondia o Root porque tinha um componente
+    separado cobrindo essa função; agora não tem mais separação nenhuma).
+  - **Se for mexer no HUD visível do menu principal, é no `CharacterPanel` mesmo** (com
+    `_bottomAnchored=true`) — não existe mais nenhum componente separado pra isso.
+
+**Ajustes finos (2026-07-20, mesmo dia)**: `BuildInfoBlock` ganhou um segundo `if (_bottomAnchored)`
+logo no início — pula o header (nome+winrate, sem função útil no estado fechado) e monta HP como
+uma 4ª fileira `AttributePipBar` (novo case `"HP"` em `AttributePipBar.IconForLabel`, reaproveita
+`HpIcon`) em vez do coração+número sobreposto (`BuildIconWithValue`, que o modo painel-lateral
+continua usando). `iconScale` das 4 fileiras: 2.5 (original) → 5 (1ª rodada, grande demais) →
+**3.75** (2ª rodada, meio-termo pedido pelo usuário) via parâmetro em `BuildPipRow`.
+
+**Ajustes finos, 2ª rodada (2026-07-20)** — bug real corrigido: Expanded ficava mais ESTREITO que
+o Compact, porque só o "Compact" tinha sido alargado manualmente (offsets) na 1ª rodada, sem o
+`Root` (que Expanded sempre preenche 100%) acompanhar. Fix: nova constante
+`BottomDrawerWidth=865.7f` no `Root` (em vez de `PanelWidth`) — mesma largura real que o Compact
+já tinha; "Compact" simplificado pra só preencher 100% do Root em X (`offsetMin/Max.x=0`), longe
+de extrapolar as bordas manualmente — os dois SEMPRE com a mesma largura agora, por construção.
+Também nessa rodada: `MakeIconGrid` deixou de ser `static` (célula 70→110px, spacing 8→12px
+quando `_bottomAnchored`); `SkillPopupWidth`/`SkillPopupMinHeight`/`WeaponPopupWidth`/
+`WeaponPopupMinHeight`/`WeaponPopupStatRowHeight`/`SkillPopupEffectLabelHeight` deixaram de ser
+`const` e viraram propriedades que variam por `_bottomAnchored` (popup de detalhe de skill/arma/
+pet maior + fontes de descrição/efeito/stat maiores) — `02_SelectCharacter`/`03_Arsenal`
+continuam exatamente nos valores originais em todos os casos.
+
 ## Skill System
 Documentação completa em SKILLS_SYSTEM.md / SKILLS_PASSIVE.md / SKILLS_ACTIVE.md.
 Antes de implementar ou alterar qualquer skill, leia SKILLS_SYSTEM.md / SKILLS_PASSIVE.md / SKILLS_ACTIVE.md.
@@ -930,7 +1122,12 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 - [x] Personagem central na tela inicial: barra de XP/level compacta acima do personagem — `MainMenuCharacterPreview.BuildLevelXpHud`, ancorada acima da cabeça do personagem (2026-07-07)
 - [x] Exibir status base na tela inicial e na seleção de personagem (HP, STR, AGI, SPD, armadura, skills equipadas) — HP/STR/AGI/SPD (sempre, estado Compact) e skills/armas equipadas (estado Expanded) já cobertos pelo `CharacterPanel` (2026-07-07). **Armadura** (verificado 2026-07-14 — a nota anterior aqui estava desatualizada) já aparece na seção PASSIVAS do Expanded (`CharacterPanel.SetPassive("Armor", ...)`, uma das 13 linhas fixas label:valor, junto de Evasion/Counter/Reversal/etc.) — mesmo padrão de "clique pra expandir/Ver Detalhes" já aceito pras skills/armas equipadas.
 - [x] Seta lateral no personagem central para troca rápida de personagem — `MainMenuCharacterPreview` (2026-07-14): setas `<`/`>` (ASCII puro, não Unicode — ver nota de fonte em CharacterCardUI) flanqueando o personagem, com pulso sutil de escala (`PulsingScale`); clicar ou arrastar o personagem (`CharacterSwipeInput`, mesmo Collider2D/OnMouse* de `CharacterPreviewReaction`) avança/volta em `CharacterDatabase.GetPlayableCharactersOrdered()` (mesma ordem do grid de `02_SelectCharacter`) e atualiza `SelectedProfileHolder.currentProfile` de verdade (equivalente a escolher em 02_SelectCharacter, sem navegar até lá) — `CharacterPanel.Refresh()` (novo método público) reflete a troca no painel lateral
-- [ ] HUD superior: moeda geral, diamante e energia do personagem
+- [x] HUD superior: moeda geral, diamante e energia do personagem — moeda/diamante no canto
+  superior esquerdo do `CharacterPanel` (`WalletBar`, por CONTA em `users/{uid}`), fileira de 10
+  ícones de energia acima do Level/XP (`MainMenuCharacterPreview.BuildEnergyHud`, por PERSONAGEM
+  em `users/{uid}/characters/{characterId}`, regeneração +1/2h via `EnergyService`, nunca lendo o
+  relógio local — ver seção **Sistema de Energia/Moeda** abaixo). Gasto de diamante pra
+  reabastecer é placeholder client-writable (TODO de segurança pra Fase 4, ver ARQUITETURA.md).
 - [x] Tela "Arsenal" (Armas & Skills) — nova cena `03_Arsenal` (2026-07-14), acessível por botão próprio em `01_MainMenu` (mesmo estilo card de "Chibers"); grid de 6 colunas com TODAS as armas/skills do jogo, borda por tier (bronze/prata/ouro) e estado bloqueado/escurecido por personagem — ver seção própria em Scene Flow/03_Arsenal acima. Não é o "mapa em árvore" ainda pendente em ROADMAP_FUTURO.md (Fase 12) — é uma grade plana do tier atual, não uma visualização de progressão.
 
 ### Fase 2 — Combate Robusto
@@ -956,8 +1153,10 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 
 ### Fase 3 — Armas & Pets
 - [x] Criar mais armas com sprites e stats — 26 assets criados em `Assets/Data/Weapons/` com stats T1 completos e sprites
-- [ ] Sistema de raridade de armas
+- [x] Sistema de raridade de armas — coberto pelo Sistema de Tiers T1/T2/T3 (`WeaponTierGenerator`, dano ×1.35/×1.75, borda bronze/prata/ouro no popup de detalhe e no Arsenal), tratado como a "raridade" de cada arma (confirmado pelo usuário 2026-07-16 — não é um campo `rarity` separado em `WeaponData`, é o tier mesmo).
 - [x] Pets: Rato (Mouse), Macaco (Monkey), Javali (Boar) — substituem o roster original (cachorro/lobo/águia/urso) do "Pets planejados" abaixo, que ficou desatualizado frente aos assets reais (Boar/Monkey/Mouse) já disponíveis em `Assets/Data/UI/Pets/`. Ver seção própria **Pets** em Combat Systems.
+- [ ] **Pets T2/T3** (2026-07-16, pedido do usuário) — **sub-fase A concluída** (dados/infra): `PetData : ScriptableObject` (`Assets/Scripts/Data/PetData.cs`, campos nomeados, `tier`/`previousTier`/`nextTier`) + `PetTierGenerator.cs` (`Tools > AutoArms > Generate Pet Tiers`) gerando `pet_<nome>_t1/t2/t3.asset` com a tabela real extraída do My Brute e aprovada pelo usuário (ver PETS.md); `PlayerProfile.pets` virou `List<PetData>` (era `List<PetType>`); `PetState.Create(PetData)` lê os stats do asset; Counter/Reversal do Macaco (mecânica antiga, não estava na tabela nova) removidos por completo, junto do método `SimulatePetRetaliation` (sem chamador depois disso); bug do Disarm do Javali corrigido (lia `Roll(0.15f)` fixo, agora lê `pet.disarmRate`, tier-escalável); dano de pet virou valor único por tier (era range aleatório). **Ainda faltam** (sub-fases D/E/F, plano revisado pelo usuário antes de codar): (1) duplicata evolui o pet em vez de somar cópia + filtro de elegibilidade no level-up (`AttackSequencer.petPool`/`SelectOpponentController.petPool`, novos campos, precisam ser wireados no Inspector com os assets T1 depois de rodar o gerador); (2) Initiative (ordena os próprios pets do mesmo dono); (3) Accuracy do Javali (reduz esquiva do personagem contra ele); (4) debuffs fixos de Combo/Block do Javali no oponente (aura passiva durante a luta). Campo `odds` existe em `PetData` mas não está conectado no sorteio ainda (aguardando o usuário passar os odds de skill/arma junto).
+- [x] **Achar os ícones dos pets** — 3 ícones "de skill" fornecidos pelo usuário (`Assets/Data/UI/Pets/<Nome>/<Nome>_Icon.png`), mesmo ícone nos 3 tiers do mesmo pet (não precisou variar por tier). Atribuídos a `PetData.icon` (por `PetTierGenerator`, sobrevive a regeneração futura); `SelectOpponentController` lê `petData.icon` direto em vez dos 3 campos fixos por tipo de antes.
 - [x] Sistema de Tiers T1/T2/T3 para Skills (mesmo padrão do `WeaponTierGenerator`) — valores movidos de literais hardcoded pro `SkillData` (`bonusValue1..7`), `SkillTierGenerator.cs` novo; valores exatos de balanceamento de 50 skills já implementados (tabela completa em SKILLS_SYSTEM.md); T2/T3 ainda não aparecem no level-up (wiring de progressão de tier fica pra depois). Ver **Sistema de Tiers (T1/T2/T3)** em SKILLS_SYSTEM.md.
 
 
@@ -965,9 +1164,12 @@ Ao concluir uma tarefa, troque [ ] por [x] e atualize o contador em Progresso.
 Ver ROADMAP_FUTURO.md — não carregar nesta sessão.
 
 ### Progresso
-- Total: 143 tarefas | Concluídas: 43
-- Contagem recalculada em 2026-07-15 (todo `- [ ]`/`- [x]` em CLAUDE.md Fase 0-3 + ROADMAP_FUTURO.md
-  Fase 4-13 — SKILLS_SYSTEM.md/PETS.md/etc. têm suas próprias listas de implementação, não contam
-  aqui). O número antigo (127/68) estava dessincronizado, provável resíduo da divisão dos docs em 8
-  arquivos — recontar do zero (mesmo método) sempre que suspeitar de nova divergência.
+- Total: 146 tarefas | Concluídas: 48
+- Contagem recalculada em 2026-07-16 (todo `- [ ]`/`- [x]` em CLAUDE.md Fase 0-3 + ROADMAP_FUTURO.md
+  Fase 4-13, qualquer nível de indentação — SKILLS_SYSTEM.md/PETS.md/etc. têm suas próprias listas
+  de implementação, não contam aqui). Mudanças desta sessão: Sistema de raridade de armas/Mapa de
+  skills/Mapa de armas marcados `[x]` (cobertos por Tiers T1/T2/T3 e pelo Arsenal, confirmado pelo
+  usuário); `Criar cena 03_SelectWeapons` removido (cancelado); 2 itens novos de Pets T2/T3
+  adicionados. Recontar do zero (mesmo método) sempre que suspeitar de nova divergência.
+- 2026-07-19: `HUD superior: moeda geral, diamante e energia` marcado `[x]` (+1 concluída).
 - Histórico completo em CHANGELOG.md

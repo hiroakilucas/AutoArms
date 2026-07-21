@@ -17,6 +17,11 @@ public class CombatSimulator
     public List<string> Player1SabotagedWeapons { get; private set; } = new List<string>();
     public List<string> Player2SabotagedWeapons { get; private set; } = new List<string>();
 
+    // Nº de rounds REAIS que a luta durou (não estimado a partir de eventCount) — lido por
+    // CombatSceneLoader depois de Simulate() só pra alimentar o replay (ReplayDTO.roundCount,
+    // exibido no popup de REPLAYS do CharacterPanel, 2026-07-18).
+    public int RoundCount { get; private set; }
+
     public List<CombatEvent> Simulate(PlayerProfile p1Profile, PlayerProfile p2Profile, int seed = -1)
     {
         Debug.Log("[CombatSimulator] Iniciando simulação...");
@@ -57,6 +62,8 @@ public class CombatSimulator
             SimulateRound(round);
             round++;
         }
+
+        RoundCount = round;
 
         int winnerIndex = _p1.isAlive ? 0 : 1;
         Emit(new CombatEvent { type = CombatEventType.CombatEnd, playerIndex = winnerIndex });
@@ -153,13 +160,13 @@ public class CombatSimulator
             foreach (var sk in profile.skills)
                 if (sk?.skillName != null) { s.skills.Add(sk.skillName); s.skillAssets.Add(sk); }
 
-        // Pets (Fase 3) — instâncias independentes a partir de PlayerProfile.pets, sem
-        // restrição de duplicatas (3 Ratos geram 3 PetState separados, cada um com seu
-        // próprio HP/estado).
+        // Pets (Fase 3, tiers 2026-07-16) — instâncias independentes a partir de
+        // PlayerProfile.pets (List<PetData>), sem restrição de duplicatas ainda (3 Ratos geram
+        // 3 PetState separados, cada um com seu próprio HP/estado).
         if (profile.pets != null)
-            foreach (var petType in profile.pets)
+            foreach (var petData in profile.pets)
             {
-                var pet = PetState.Create(petType);
+                var pet = PetState.Create(petData);
                 if (pet != null)
                 {
                     pet.ApplyLevelScaling(profile.level);
@@ -868,10 +875,11 @@ public class CombatSimulator
         Emit(new CombatEvent { type = CombatEventType.PetTurnEnd, playerIndex = petOwner.index, petIndex = petIndex });
     }
 
-    // Uma tentativa de ataque do pet (1ª do turno, ou hit extra de combo). Retorna `interrupted`
-    // = true só quando o Macaco alvo conta com sucesso (mesmo padrão do Counter de personagem:
-    // cancela o resto do combo deste pet no turno). comboCount == 0 identifica o 1º hit do
-    // turno — só nele o Javali pode desarmar (mesma regra "first hit only" do desarme normal).
+    // Uma tentativa de ataque do pet (1ª do turno, ou hit extra de combo). comboCount == 0
+    // identifica o 1º hit do turno — só nele o Javali pode desarmar (mesma regra "first hit
+    // only" do desarme normal). Counter/Reversal do Macaco (mecânica antiga) foram removidos —
+    // não fazem parte da tabela de tiers aprovada (2026-07-16); retorno sempre `false` agora
+    // (nada mais interrompe o combo deste pet).
     private bool SimulatePetHit(PlayerState petOwner, int petIndex, PlayerState enemyOwner, List<PetState> enemyPets, bool targetIsPet, int targetPetIdx, int comboCount)
     {
         var pet = petOwner.pets[petIndex];
@@ -881,22 +889,12 @@ public class CombatSimulator
         if (targetIsPet && (targetPet == null || !targetPet.isAlive)) return true;
         if (!targetIsPet && !enemyOwner.isAlive) return true;
 
-        var (minDmg, maxDmg) = PetState.DamageRange(pet.type);
-        int damage = _rng.Next(minDmg, maxDmg + 1);
+        int damage = pet.damage;
 
         // Esquiva: alvo personagem usa a fórmula normal de DodgeChance, mas sem o termo de
         // accuracy do atacante (pet não tem esse stat) — ver PetDodgeChanceOnCharacter. Alvo
         // pet usa só o próprio evasionBase, sem nenhum outro termo.
         bool isDodged = targetIsPet ? Roll(targetPet.evasionBase) : Roll(PetDodgeChanceOnCharacter(enemyOwner));
-
-        // Macaco sendo atacado: Counter cancela o hit antes de conectar (interrompe o resto do
-        // combo deste pet, mesmo padrão do Counter de personagem).
-        if (targetIsPet && targetPet.type == PetType.Monkey && Roll(targetPet.counter))
-        {
-            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, isDodged = true });
-            SimulatePetRetaliation(enemyOwner, targetPetIdx, petOwner, petIndex);
-            return true;
-        }
 
         if (isDodged)
         {
@@ -918,8 +916,6 @@ public class CombatSimulator
 
             if (!targetPet.isAlive)
                 Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = enemyOwner.index, petIndex = targetPetIdx });
-            else if (targetPet.type == PetType.Monkey && Roll(targetPet.reversal))
-                SimulatePetRetaliation(enemyOwner, targetPetIdx, petOwner, petIndex); // não interrompe o combo, mesmo padrão do Reversal de personagem
         }
         else
         {
@@ -928,8 +924,9 @@ public class CombatSimulator
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = enemyOwner.index, newHp = enemyOwner.hp, maxHp = enemyOwner.maxHp });
             CheckNetFreed(enemyOwner);
 
-            // Javali: 15% de desarme, só no 1º hit do turno (comboCount == 0), só contra personagem.
-            if (comboCount == 0 && pet.type == PetType.Boar && enemyOwner.currentWeaponData != null && Roll(0.15f))
+            // Javali: desarme (agora lê pet.disarmRate, tier-escalável — era Roll(0.15f) fixo),
+            // só no 1º hit do turno (comboCount == 0), só contra personagem.
+            if (comboCount == 0 && pet.type == PetType.Boar && enemyOwner.currentWeaponData != null && Roll(pet.disarmRate))
             {
                 string wn = enemyOwner.currentWeaponData.weaponName;
                 enemyOwner.weaponLoadout.Remove(enemyOwner.currentWeaponData);
@@ -939,35 +936,6 @@ public class CombatSimulator
         }
 
         return false;
-    }
-
-    // Macaco contra-atacando (Counter, antes do hit conectar, ou Reversal, depois de já ter
-    // tomado dano) — sempre o pet retaliador batendo no pet atacante original. "Simples" por
-    // pedido: sem checar esquiva do atacante além do evasionBase dele, sem recursão de
-    // Counter/Reversal (uma retaliação nunca é retaliada de novo).
-    private void SimulatePetRetaliation(PlayerState retaliatorOwner, int retaliatorPetIndex, PlayerState targetOwner, int targetPetIndex)
-    {
-        var retaliator = retaliatorOwner.pets[retaliatorPetIndex];
-        var targetPet  = targetOwner.pets[targetPetIndex];
-        if (!retaliator.isAlive || !targetPet.isAlive) return;
-
-        var (minDmg, maxDmg) = PetState.DamageRange(retaliator.type);
-        int dmg    = _rng.Next(minDmg, maxDmg + 1);
-        bool dodged = Roll(targetPet.evasionBase);
-
-        if (!dodged) ApplyDamageToPet(targetPet, dmg);
-
-        Emit(new CombatEvent
-        {
-            type = CombatEventType.PetAttack,
-            playerIndex = retaliatorOwner.index, petIndex = retaliatorPetIndex,
-            targetIsPet = true, targetIndex = targetOwner.index, targetPetIndex = targetPetIndex,
-            damage = dodged ? 0 : dmg, isDodged = dodged,
-            newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp,
-        });
-
-        if (!targetPet.isAlive)
-            Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = targetOwner.index, petIndex = targetPetIndex });
     }
 
     // Mirrors DodgeChance(attacker, defender), mas sem o termo `- attacker.accuracy` (pets não

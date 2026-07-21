@@ -118,31 +118,57 @@ public class CombatSceneLoader : MonoBehaviour
         if (sprite != null) renderer.sprite = sprite;
     }
 
+    // Preenchido no início de Initialize() — true quando esta luta é uma REPRODUÇÃO de um replay
+    // salvo (ver ReplayPlaybackState), não uma luta nova. Lido mais abaixo (bloco do simulador) e
+    // por AttackSequencer.OnCombatEnd (pula XP/save/histórico/gravação de outro replay).
+    private bool _isReplay;
+
     private IEnumerator Initialize()
     {
         RandomizeArenaBackground();
 
-        var profile = selectedProfileHolder.currentProfile;
-        if (profile == null)
-        {
-            Debug.LogError("[CombatSceneLoader] No PlayerProfile selected.");
-            yield break;
-        }
-        // Restaura o save local (2026-07-14, ver LocalSaveService.cs) ANTES de copiar qualquer
-        // stat pro PlayerCombat abaixo — este é o ponto mais crítico: sem isso, num build real,
-        // toda luta usaria os stats/armas/skills do ASSET original em vez do progresso salvo
-        // (XP/level/skills ganhos ficariam esquecidos a cada reinício do jogo).
-        LocalSaveService.ApplyIfSaved(profile);
+        _isReplay = ReplayPlaybackState.IsActive;
 
-        player2Profile = selectedOpponentHolder != null ? selectedOpponentHolder.currentOpponentProfile : null;
-        if (player2Profile == null)
-            player2Profile = LoadPlayer2ProfileFallback();
-        if (player2Profile == null)
+        PlayerProfile profile;
+        if (_isReplay)
         {
-            Debug.LogError("[CombatSceneLoader] No opponent PlayerProfile selected.");
+            // Personagens JÁ reconstruídos (ReplaySnapshotConverter) com os stats/loadout
+            // CONGELADOS no momento da luta gravada — nunca passam por LocalSaveService.ApplyIfSaved
+            // nem pelos holders normais (SelectedProfileHolder/SelectedOpponentHolder ficam
+            // intocados, então o personagem/oponente "de verdade" do jogador não é afetado).
+            profile = ReplayPlaybackState.P1Profile;
+            player2Profile = ReplayPlaybackState.P2Profile;
+        }
+        else
+        {
+            profile = selectedProfileHolder.currentProfile;
+            if (profile == null)
+            {
+                Debug.LogError("[CombatSceneLoader] No PlayerProfile selected.");
+                yield break;
+            }
+            // Restaura o save local (2026-07-14, ver LocalSaveService.cs) ANTES de copiar qualquer
+            // stat pro PlayerCombat abaixo — este é o ponto mais crítico: sem isso, num build real,
+            // toda luta usaria os stats/armas/skills do ASSET original em vez do progresso salvo
+            // (XP/level/skills ganhos ficariam esquecidos a cada reinício do jogo).
+            LocalSaveService.ApplyIfSaved(profile);
+
+            player2Profile = selectedOpponentHolder != null ? selectedOpponentHolder.currentOpponentProfile : null;
+            if (player2Profile == null)
+                player2Profile = LoadPlayer2ProfileFallback();
+            if (player2Profile == null)
+            {
+                Debug.LogError("[CombatSceneLoader] No opponent PlayerProfile selected.");
+                yield break;
+            }
+            LocalSaveService.ApplyIfSaved(player2Profile);
+        }
+
+        if (profile == null || player2Profile == null)
+        {
+            Debug.LogError("[CombatSceneLoader] Replay inválido — não foi possível reconstruir os personagens (ver ReplayPlaybackState/ReplaySnapshotConverter, provavelmente um personagem removido/renomeado desde que o replay foi gravado).");
             yield break;
         }
-        LocalSaveService.ApplyIfSaved(player2Profile);
 
         GameObject player1Obj = Instantiate(profile.characterPrefab);
         player1Obj.name = "Player1";
@@ -284,7 +310,22 @@ public class CombatSceneLoader : MonoBehaviour
 
         List<CombatEvent> events = null;
 
-        if (useSimulator)
+        if (_isReplay)
+        {
+            // Eventos já resolvidos de verdade (gravados na luta original) — não roda
+            // CombatSimulator nenhuma vez, só reproduz. Consumido (Clear()) aqui, não antes: até
+            // este ponto o restante do método ainda podia `yield break` num guard de erro, e um
+            // Clear() prematuro deixaria o estado inconsistente numa eventual nova tentativa.
+            events = ReplayPlaybackState.Events;
+            ReplayPlaybackState.Clear();
+
+            attackSequencer.player1Profile = profile;
+            attackSequencer.player2Profile = player2Profile;
+            attackSequencer.isReplayPlayback = true;
+
+            Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events, profile.pets, player2Profile.pets));
+        }
+        else if (useSimulator)
         {
             // Pré-calcula a luta inteira ANTES do EntryFall — não depende de nada que só existe
             // depois dele (transform/spawnPosition), só lê os PlayerProfile, e permite pintar os
@@ -295,7 +336,15 @@ public class CombatSceneLoader : MonoBehaviour
             attackSequencer.player2Profile = player2Profile;
 
             var simulator = new CombatSimulator();
-            events = simulator.Simulate(profile, player2Profile);
+            // Gerado explicitamente (em vez de deixar Simulate() cair no default -1/aleatório)
+            // pra sempre sabermos qual seed produziu esta luta — capturado no replay (ver
+            // ReplayRecorder/ReplayDTO.seed) por auditoria/debug, mesmo não sendo estritamente
+            // necessário pro replay em si (o log de eventos completo já é auto-suficiente).
+            int seed = UnityEngine.Random.Range(0, int.MaxValue);
+            events = simulator.Simulate(profile, player2Profile, seed);
+            attackSequencer.lastCombatSeed = seed;
+            attackSequencer.lastCombatRoundCount = simulator.RoundCount;
+            attackSequencer.lastCombatEvents = events;
 
             Debug.Log(CombatLogFormatter.Format(profile.profileName, player2Profile.profileName, events, profile.pets, player2Profile.pets));
 
@@ -695,17 +744,19 @@ public class CombatSceneLoader : MonoBehaviour
     // vários pets — ver investigação de stutter ao entrar na cena, CLAUDE.md/Pets). Chamada via
     // StartCoroutine em Initialize() (fire-and-forget, mesmo padrão de EntryFall) — o WaitUntil
     // final já tolera conclusão assíncrona/fora de ordem via petsDone.
-    private IEnumerator SpawnPets(List<PetType> petTypes, int ownerLevel, Vector3 ownerLand, bool isPlayer1, List<PetCombatController> outList, List<bool> doneFlags)
+    private IEnumerator SpawnPets(List<PetData> petDataList, int ownerLevel, Vector3 ownerLand, bool isPlayer1, List<PetCombatController> outList, List<bool> doneFlags)
     {
-        if (petTypes == null) yield break;
+        if (petDataList == null) yield break;
 
         // Rastreia posições de spawn já escolhidas pra evitar sobreposição entre pets do mesmo lado.
         var chosenPositions = new List<UnityEngine.Vector2>();
         const float SpawnMinSep = 1.5f;
         const int   SpawnTries  = 12;
 
-        foreach (var petType in petTypes)
+        foreach (var petData in petDataList)
         {
+            if (petData == null) continue;
+            var petType = petData.petType;
             var prefab = PetPrefabFor(petType);
             if (prefab == null)
             {
@@ -747,7 +798,7 @@ public class CombatSceneLoader : MonoBehaviour
             // Mesmo escalonamento por nível do dono aplicado em CombatSimulator.BuildState
             // (PetState.ApplyLevelScaling) — só pra essa preview (maxHp inicial da barra de
             // vida) não ficar desincronizada do maxHp real usado na simulação.
-            var preview = PetState.Create(petType);
+            var preview = PetState.Create(petData);
             preview?.ApplyLevelScaling(ownerLevel);
             petCombat.healthBar = HealthBarPet.Create(petObj.transform);
             if (preview != null)

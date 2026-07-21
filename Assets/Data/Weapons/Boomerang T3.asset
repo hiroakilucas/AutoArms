@@ -20,15 +20,18 @@ MonoBehaviour:
   attackRotationOffset: {x: 0, y: 0, z: 0}
   showAttackTipEffect: 0
   attackTipOffset: {x: 0, y: 0, z: 0}
+  projectileSprite: {fileID: 0}
   damage: 11
   speedModifier: 1
   types: 06000000
   scale: 1
   isBoomerang: 1
+  straightThrow: 0
   attackAnimation: 0
   tier: 3
   previousTier: {fileID: 11400000, guid: c2041a40106630e49bc5a567169c9034, type: 2}
-  dropOdds: 0
+  nextTier: {fileID: 0}
+  dropOdds: 0.04
   hitSpeed: 3.75
   drawChance: 0.38
   reach: 0

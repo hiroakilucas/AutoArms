@@ -18,6 +18,13 @@ public class CombatHUD : MonoBehaviour
     {
         if (_canvasObject == null || player == null) return;
 
+        // Replay (2026-07-21, pedido do usuário) — Skip/1.5x ficam SEMPRE habilitados durante a
+        // reprodução de um replay, mesmo sem os desbloqueios comprados na Loja (PlayerUnlocksState
+        // é global de conta, não deveria travar assistir a própria luta já resolvida de novo).
+        // `player.sequencer.isReplayPlayback` já vem setado (CombatSceneLoader.cs, antes de
+        // chamar PlayCombat/AddSpeedControls), então dá pra checar direto aqui.
+        bool isReplay = player.sequencer != null && player.sequencer.isReplayPlayback;
+
         var row = new GameObject("SpeedControls");
         row.transform.SetParent(_canvasObject.transform, false);
         var rowRt = row.AddComponent<RectTransform>();
@@ -31,15 +38,21 @@ public class CombatHUD : MonoBehaviour
         hlg.childControlWidth  = true;
         hlg.childControlHeight = true;
 
-        MakeSpeedToggleButton(row, player);
-        MakeSpeedButton(row, "Skip", () => player.RequestSkip());
+        MakeSpeedToggleButton(row, player, PlayerUnlocksState.Speed15xUnlocked || isReplay);
+        MakeSpeedButton(row, "Skip", () => player.RequestSkip(), PlayerUnlocksState.SkipUnlocked || isReplay);
     }
 
     private static readonly Color SpeedNormalBg   = new Color(0.1f, 0.1f, 0.1f, 0.85f);
     private static readonly Color SpeedActiveBg   = new Color(1f, 0.84f, 0f, 1f);
+    // Dim de "bloqueado" (2026-07-21, pedido do usuário — Skip/1.5x agora exigem compra na Loja,
+    // aba Desbloqueios, ver PlayerUnlocksState): mesmo espírito do tint cinza de item esgotado em
+    // ShopCardUI/ArsenalSlotUI — botão continua visível (pra o jogador saber que a feature existe
+    // e pode ser comprada), só fica opaco/não-clicável até liberado.
+    private const float LockedAlphaMultiplier = 0.4f;
+    private static readonly Color LockedTextColor = new Color(1f, 1f, 1f, 0.35f);
 
     // Toggle button: "1x" on dark gray normally, "1.5x" on gold when accelerated.
-    private static void MakeSpeedToggleButton(GameObject parent, CombatPlayer player)
+    private static void MakeSpeedToggleButton(GameObject parent, CombatPlayer player, bool unlocked)
     {
         var go = new GameObject("SpeedToggleBtn");
         go.transform.SetParent(parent.transform, false);
@@ -71,9 +84,20 @@ public class CombatHUD : MonoBehaviour
             txt.color = is2x ? Color.black : Color.white;
             txt.text  = is2x ? "1.5x" : "1x";
         });
+
+        // Travado até comprar "Velocidade 1.5x" (ou o Bundle) na Loja, EXCETO em replay (ver
+        // `unlocked` passado por AddSpeedControls) — `interactable=false` já impede o onClick
+        // acima de disparar; o dim é só pra deixar claro visualmente que está bloqueado, não
+        // simplesmente "sem efeito".
+        if (!unlocked)
+        {
+            btn.interactable = false;
+            img.color = new Color(SpeedNormalBg.r, SpeedNormalBg.g, SpeedNormalBg.b, SpeedNormalBg.a * LockedAlphaMultiplier);
+            txt.color = LockedTextColor;
+        }
     }
 
-    private static void MakeSpeedButton(GameObject parent, string label, System.Action onClick)
+    private static void MakeSpeedButton(GameObject parent, string label, System.Action onClick, bool unlocked = true)
     {
         var go = new GameObject(label + "Btn");
         go.transform.SetParent(parent.transform, false);
@@ -101,6 +125,15 @@ public class CombatHUD : MonoBehaviour
         txt.color     = Color.white;
         txt.fontStyle = FontStyles.Bold;
         txt.alignment = TextAlignmentOptions.Center;
+
+        // Travado até comprar "Skip de batalha" (ou o Bundle) na Loja — mesmo tratamento do botão
+        // de velocidade acima (ver PlayerUnlocksState).
+        if (!unlocked)
+        {
+            btn.interactable = false;
+            img.color = new Color(img.color.r, img.color.g, img.color.b, img.color.a * LockedAlphaMultiplier);
+            txt.color = LockedTextColor;
+        }
     }
 
     public void Initialize(HealthSystem health1, HealthSystem health2)
@@ -205,6 +238,11 @@ public class CombatHUD : MonoBehaviour
         lbl.alignment = TextAlignmentOptions.Center;
         lbl.outlineWidth = 0.35f;
         lbl.outlineColor = Color.black;
+        // Mesmo bug de HP com 3 dígitos quebrando em 2 linhas (2026-07-17) — aqui a barra é bem
+        // mais larga que os badges de CharacterPanel/SelectOpponentController, então dificilmente
+        // quebrava na prática, mas TMP tem `enableWordWrapping = true` por padrão e nada nesta
+        // caixa desabilitava isso — corrigido pra nunca quebrar linha, por segurança/consistência.
+        lbl.enableWordWrapping = false;
 
         return (fillRt, lbl);
     }

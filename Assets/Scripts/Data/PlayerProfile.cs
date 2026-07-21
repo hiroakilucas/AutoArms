@@ -1,8 +1,8 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-// Rato (Mouse, equivalente ao Dog), Macaco (Monkey, equivalente ao Wolf/Panther), Javali
-// (Boar, equivalente ao Bear) — ver stats completos em PetState.cs.
+// Rato (Mouse, equivalente ao Dog), Macaco (Monkey, equivalente ao Panther), Javali
+// (Boar, equivalente ao Bear) — ver stats completos (por tier) em PetData.cs/PetTierGenerator.cs.
 public enum PetType
 {
     None,
@@ -92,14 +92,13 @@ public class PlayerProfile : ScriptableObject
     [Header("Skills")]
     public List<SkillData> skills = new List<SkillData>();
 
-    // Pode ter múltiplos pets do mesmo tipo (ex: 3 Ratos) — sem restrição de duplicatas, cada
-    // entrada vira uma instância independente (PetState) com seu próprio HP/estado na luta.
-    // Stats efetivos de cada pet (já com o escalonamento por nível do dono — ver
-    // PetState.ApplyLevelScaling/CombatSimulator.BuildState) não têm exibição na UI ainda;
-    // intenção documentada pra uma futura GetEffectivePetStats(), mesmo padrão de
-    // GetEffectiveStats() abaixo, quando o CharacterPanel ganhar uma aba/seção própria de Pets.
+    // Cada entrada é um PetData (ScriptableObject com tier T1/T2/T3, 2026-07-16 — era
+    // List<PetType>, sem tier nenhum) e vira uma instância independente (PetState) com seu
+    // próprio HP/estado na luta. Duplicata do mesmo TIPO não é mais permitida a partir do
+    // level-up (evolui pro próximo tier em vez de somar uma cópia — ver LevelUpEngine.ApplyOption);
+    // esta lista em si continua sendo uma lista comum, só a lógica de escolha impede duplicar tipo.
     [Header("Pets")]
-    public List<PetType> pets = new List<PetType>();
+    public List<PetData> pets = new List<PetData>();
 
     [Header("Progresso")]
     [Tooltip("N�vel atual do personagem")]

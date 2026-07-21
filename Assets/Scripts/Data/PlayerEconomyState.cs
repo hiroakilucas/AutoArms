@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 // Canal cross-scene só pra exibição de moeda/diamante/energia — mesmo espírito de
 // ReplayPlaybackState: campo estático puro (não ScriptableObject), porque não é um dado editável
@@ -30,6 +31,13 @@ public static class PlayerEconomyState
     // isto pra decidir se já têm um número de verdade pra mostrar ou se ainda estão no valor
     // default de fábrica (zerado).
     public static bool IsLoaded;
+
+    // Pacotes de diamante (aba Diamantes da Loja) cujo bônus de 1ª compra já foi usado NESTA
+    // conta — 2026-07-21, persistência real (ver ShopStateService), chave = ShopItem.
+    // DiamondNormalAmount (30/80/170/360/950/2000/4100/6100). Populado por ShopStateService.
+    // LoadAsync ao abrir a Loja; ShopController.BuildItemData lê isto pra decidir se cada card já
+    // deve nascer sem o selo "1ª compra: N diamantes".
+    public static readonly HashSet<int> UsedFirstPurchaseBonusAmounts = new HashSet<int>();
 
     public static void Set(int coins, int diamonds, int energyCurrent, int energyMax)
     {

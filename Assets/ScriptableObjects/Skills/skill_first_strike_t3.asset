@@ -22,6 +22,7 @@ MonoBehaviour:
   usesPerFight: 1
   tier: 3
   previousTier: {fileID: 11400000, guid: 8ff16b3d8d0ec444e8c763524673a9c8, type: 2}
+  odds: 0.77
   bonusValue1: 500
   bonusValue2: 4
   bonusValue3: 0

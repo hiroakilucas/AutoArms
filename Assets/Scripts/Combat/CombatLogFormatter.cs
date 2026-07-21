@@ -6,7 +6,7 @@ using System.Text;
 public static class CombatLogFormatter
 {
     public static string Format(string p1Name, string p2Name, List<CombatEvent> events,
-        List<PetType> p1Pets = null, List<PetType> p2Pets = null)
+        List<PetData> p1Pets = null, List<PetData> p2Pets = null)
     {
         string Name(int idx) => idx == 0 ? p1Name : p2Name;
 
@@ -16,8 +16,8 @@ public static class CombatLogFormatter
         string PetName(int ownerIdx, int petIdx)
         {
             var list = ownerIdx == 0 ? p1Pets : p2Pets;
-            if (list != null && petIdx >= 0 && petIdx < list.Count)
-                return PetState.DisplayName(list[petIdx]);
+            if (list != null && petIdx >= 0 && petIdx < list.Count && list[petIdx] != null)
+                return PetState.DisplayName(list[petIdx].petType);
             return "Pet";
         }
 
