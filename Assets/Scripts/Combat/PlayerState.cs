@@ -117,11 +117,12 @@ public class PlayerState
     // aqui dentro. Populado por CombatSimulator.BuildState junto de `skills`.
     public List<SkillData> skillAssets = new List<SkillData>();
 
-    // Speed debt accumulation across rounds
+    // Contador de iniciativa do sistema ATB — soma `speed` a cada tick, dispara uma ação ao
+    // cruzar CombatSettings.initiativeThreshold. Ver CombatSimulator.RunInitiativeLoop.
     public int speedDebt;
 
     // Pets (Fase 3) — instâncias independentes, construídas em BuildState a partir de
-    // PlayerProfile.pets. Ver CombatSimulator.SimulatePetActions/SimulatePetTurn.
+    // PlayerProfile.pets. Ver CombatSimulator.RunInitiativeLoop/SimulatePetTurn.
     public List<PetState> pets = new List<PetState>();
 
     public bool isAlive => hp > 0;

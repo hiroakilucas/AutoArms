@@ -45,6 +45,13 @@ public enum CombatEventType
     TurnEnd,         // playerIndex = acting player (attacker returns to spawn)
     CombatEnd,       // playerIndex = winner
 
+    // Emitido 1x, logo no início de Simulate() (antes do 1º tick do sistema de iniciativa ATB) —
+    // só pra alimentar o log/debug (CombatLogFormatter), nenhum consumidor de gameplay lê este
+    // evento. p1Speed/p2Speed/p1PetSpeeds/p2PetSpeeds já são os valores EFETIVOS (pós-skills,
+    // pós-level-scaling de pet) — o que RunInitiativeLoop de fato soma no contador a cada tick,
+    // não o valor base do asset/profile. Ver CombatEvent.initiativeThreshold.
+    CombatStart,
+
     // Pets (Fase 3) — playerIndex sempre = índice do DONO do pet (0/1), petIndex = índice do
     // pet na lista PlayerState.pets/PlayerProfile.pets dele. Quando o alvo de um PetAttack é
     // outro pet (targetIsPet), targetIndex = índice do DONO do pet alvo (não do pet em si) e
@@ -120,6 +127,17 @@ public class CombatEvent
     // pets da rede (netEnsnared de pet é permanente) — sem lista de "netFreed" equivalente aqui.
     public List<int> bombPetIndexes;
     public List<int> bombPetHp;
+
+    // CombatStart only — ver comentário do enum acima. p1Initiative/p2Initiative só existem pra
+    // já deixar registrado no log o valor que decide o desempate da 1ª leva de cruzamentos da
+    // luta (ver CombatSimulator.OrderCrossings) — pets nunca tiveram stat de initiative.
+    public int       p1Speed;
+    public int       p2Speed;
+    public int       p1Initiative;
+    public int       p2Initiative;
+    public int       initiativeThreshold;
+    public List<int> p1PetSpeeds;
+    public List<int> p2PetSpeeds;
 
     // Pets (Fase 3) — ver CombatEventType.PetAttack/PetTurnStart/etc acima.
     public int  petIndex = -1;

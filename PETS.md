@@ -20,17 +20,22 @@ Tabela extraída manualmente da referência visual do My Brute e adaptada pro no
 pelo usuário 2026-07-16 — **substitui por completo** os valores antigos, incluindo a remoção do
 Counter/Reversal do Macaco, que não faz parte da tabela nova):
 
-| Pet | Odds* | HP malus** | Initiative** | STR | AGI | SPD | HP | Dano | Especial |
-|---|---|---|---|---|---|---|---|---|---|
-| Rato (Mouse) T1/T2/T3 | 1.92% | 10% | 0 | 7/9/11 | 6/8/10 | 5/7/9 | 21/23/25 | 3/6/9 | Combo 20%/30%/40% |
-| Macaco (Monkey) T1/T2/T3 | 0.10% | 25% | 1 | 24/29/34 | 17/21/25 | 25/29/33 | 34/38/42 | 3/6/9 | Evasão 20%/25%/30% · Combo 70%/75%/80% |
-| Javali (Boar) T1/T2/T3 | 0.10% | 40% | 4 | 46/51/56 | 3/5/7 | 2/4/6 | 140/150/160 | 5/10/15 | Evasão 10%/15%/20% · Precisão 20%/30%/40% · Desarme 5%/10%/15% · Combo do oponente -20% (fixo) · Block do oponente -25% (fixo) |
+| Pet | Odds* | HP malus** | Initiative** | STR | AGI | SPD | HP | Especial |
+|---|---|---|---|---|---|---|---|---|
+| Rato (Mouse) T1/T2/T3 | 1.92% | 10% | 0 | 7/9/11 | 6/8/10 | 5/7/9 | 21/23/25 | Combo 20%/30%/40% |
+| Macaco (Monkey) T1/T2/T3 | 0.10% | 25% | 1 | 24/29/34 | 17/21/25 | 25/29/33 | 34/38/42 | Evasão 20%/25%/30% · Combo 70%/75%/80% |
+| Javali (Boar) T1/T2/T3 | 0.10% | 40% | 4 | 46/51/56 | 3/5/7 | 2/4/6 | 140/150/160 | Evasão 10%/15%/20% · Precisão 20%/30%/40% · Desarme 5%/10%/15% · Combo do oponente -20% (fixo) · Block do oponente -25% (fixo) |
+
+**Dano = `Round(STR × 0.45)`** (não é mais uma coluna separada da tabela — ver "Dano do pet
+deriva de STR" logo abaixo). Com os valores de STR acima: Rato 3/4/5, Macaco 11/13/15, Javali
+21/23/25.
 
 \* **Odds** — chance deste pet aparecer como opção de level-up; campo existe em `PetData` mas
 **ainda não está conectado** no sorteio (`LevelUpEngine.DrawOption`) — aguardando o usuário
 passar os odds de skill/arma junto, pra conectar tudo de uma vez.
 \** **HP malus/Initiative são FIXOS por TIPO de pet, não escalam por tier** (confirmado pelo
-usuário) — só STR/AGI/SPD/HP/Dano e os bônus especiais escalam. HP malus agora é **% do HP
+usuário) — só STR/AGI/SPD/HP e os bônus especiais escalam (Dano escala junto, por ser derivado
+direto de STR — ver "Dano do pet deriva de STR" abaixo). HP malus agora é **% do HP
 máximo BASE do dono** (era valor fixo -12/-36/-48) e só é cobrado na 1ª aquisição (T1) — evoluir
 pra T2/T3 (mesmo tipo escolhido de novo no level-up) não cobra HP de novo.
 
@@ -41,40 +46,72 @@ fixos de Combo/Block do Javali no oponente (aura passiva durante a luta inteira)
 Desarme do próprio pet e Dano JÁ funcionam tier-a-tier desde esta sub-fase (BuildState/
 SimulatePetHit já leem os valores do `PetData`).
 
-**Decisão de design em aberto (2026-07-17, aguardando o usuário — NÃO implementada)**: dano do
-pet (`CombatSimulator.SimulatePetHit`, `int damage = pet.damage`) é hoje só o valor fixo da
-coluna "Dano" da tabela acima — STR do pet é independente, nunca somada ao próprio ataque
-(diferente do personagem principal, onde STR soma direto no dano da arma). STR do pet só
-alimenta a fórmula do Piledriver (`targetPet.str` como dano daquele golpe específico, quando o
-pet é agarrado) e o escalonamento por nível do dono (`ApplyLevelScaling`, Javali `+3 STR/tier`).
-Investigado a pedido do usuário (suspeita de bug — "Macaco causa só 3 de dano, ignora STR") e
-confirmado que NÃO é bug: tier-scaling do campo `damage` funciona corretamente (verificado nos
-assets em disco), a tabela aprovada trata STR e Dano como colunas separadas por design, e o
-sintoma reportado era de um save antigo com pet preso em T1 pelo bug de duplicação (já corrigido
-separadamente). Se STR vier a somar no dano do pet no futuro, os valores da coluna "Dano"
-precisam ser rebalanceados primeiro — somar direto (`damage + str`) infla o Javali de 5→51 (T1) e
-15→71 (T3), acima de qualquer arma T3 de personagem no jogo hoje.
+**Dano do pet deriva de STR — campo `damage` removido (2026-07-21, decisão final do usuário,
+substitui a "decisão em aberto" de 2026-07-17 registrada abaixo pra histórico)**: a investigação
+de 2026-07-17 (ver texto original preservado no parágrafo seguinte) tinha confirmado que dano
+fixo + STR separada não era bug, era design — mas o usuário decidiu nesta rodada que quer STR
+como ÚNICA fonte de dano do pet, sem uma coluna "Dano" independente pra manter balanceada à mão.
+`PetData.damage`/`PetState.damage` foram removidos por completo (classe, gerador
+`PetTierGenerator.cs` e os 9 `.asset` em `Assets/ScriptableObjects/Pets/`); `CombatSimulator.
+SimulatePetHit` agora calcula `int damage = Mathf.RoundToInt(pet.str * 0.45f)`. O multiplicador
+`0.45` foi calibrado pelo usuário contra teste real em jogo (não é um valor teórico) — bate com a
+faixa observada em combate pros 3 pets: Rato (STR 7/9/11) → 3/4/5 (teste real: 4-6), Macaco (STR
+24/29/34) → 11/13/15 (teste real: 10-14), Javali (STR 46/51/56) → 21/23/25, que fica alto por
+conta própria sem precisar inflar nada à mão — resolve de quebra o pedido separado do usuário de
+"Javali apelão por ser lento e sem agi" (compensação natural: STR alta dele já vira dano alto
+puro). **Não mexer nesse multiplicador sem re-validar contra teste real em jogo** — é o único
+valor deste sistema calibrado por observação direta, não por fórmula. Consequência collateral
+desejada: `PetState.ApplyLevelScaling` (Javali `+3 STR/tier` a cada 5 níveis do dono) agora
+também aumenta o dano do Javali automaticamente no late game, sem precisar de um termo de
+escalonamento próprio pra `damage` (que nunca existiu). Piledriver (`targetPet.str *
+piledriverDmgMult`, já lia `str` direto) não foi afetado por esta mudança.
+
+**Histórico da investigação original (2026-07-17, preservado — não é mais a decisão vigente)**:
+na época, dano do pet (`CombatSimulator.SimulatePetHit`, `int damage = pet.damage`) era só o
+valor fixo da coluna "Dano" da tabela — STR do pet era independente, nunca somada ao próprio
+ataque (diferente do personagem principal, onde STR soma direto no dano da arma). Investigado a
+pedido do usuário (suspeita de bug — "Macaco causa só 3 de dano, ignora STR") e confirmado que
+NÃO era bug: tier-scaling do campo `damage` funcionava corretamente, a tabela aprovada tratava
+STR e Dano como colunas separadas por design, e o sintoma reportado era de um save antigo com pet
+preso em T1 pelo bug de duplicação (já corrigido separadamente). Na época, alertou-se que somar
+`damage + str` direto infla o Javali de 5→51 (T1) e 15→71 (T3) — acima de qualquer arma T3 de
+personagem no jogo. Essa era exatamente a razão de não ter sido implementado ali; a decisão atual
+(usar só `str * 0.45`, sem somar a um `damage` fixo) evita esse problema porque não soma dois
+termos — substitui um pelo outro, com um multiplicador calibrado pra manter a faixa de dano
+parecida com a que já existia.
 
 `PlayerProfile.pets` (`List<PetData>`, era `List<PetType>`) — sem restrição de duplicatas ainda
 (evoluir em vez de somar cópia é a próxima sub-fase). `PlayerState.pets`/`PetState` (pure C#,
 mesmo padrão de `PlayerState`) guardam o estado de cada pet durante a simulação — `CombatSimulator.BuildState`
 constrói a lista a partir de `profile.pets`.
 
-**Speed System dos pets** (`CombatSimulator.SimulatePetActions`) — não compara speed contra um
-"oponente" 1:1 como os personagens fazem entre si (não existe par equivalente); usa uma
-baseline fixa de 10 como divisor do próprio `speedDebt` do pet, **sem mínimo forçado de 1 ação
-por round** (diferente do personagem): Rato (10) e Macaco (20) agem quase todo round (Macaco
-as vezes 2x); Javali (3) acumula devagar e só libera a 1ª ação por volta do 3º-4º round —
-aproxima a "demora 2-3 rounds pra atacar" pedida sem precisar de um sistema de par dedicado.
-Ordem simplificada por round: ações do Player1 → pets do Player1 → ações do Player2 → pets do
-Player2 (`SimulateRound`).
+**Speed System — sistema de iniciativa ATB (2026-07-21, substitui por completo os dois modelos
+anteriores)**: Player1, Player2 e cada pet vivo de cada lado entram na MESMA fila de iniciativa
+(`CombatSimulator.RunInitiativeLoop`) — não existe mais uma regra de pets separada da de
+personagem. Cada combatente tem um contador (`PlayerState.speedDebt`/`PetState.speedDebt`,
+reaproveitados) que soma a própria `speed` a cada tick de simulação; ao atingir/ultrapassar
+`CombatSettings.initiativeThreshold` (`Assets/Resources/CombatSettings.asset`, default 100), o
+combatente age e o limiar é subtraído do contador (overflow mantido — quem tem `speed` bem acima
+do limiar pode agir mais de 1x no mesmo tick). Quando mais de um combatente cruza no mesmo tick
+(pets e personagens juntos, sem distinção), a ordem é decrescente pelo valor do contador; empates
+exatos são resolvidos por sorteio — inclusive entre um pet e um personagem, se cruzarem com o
+mesmo valor. `initiative` (stat só de `PlayerState`, pets nunca tiveram) só entra como desempate
+na PRIMEIRA leva de cruzamentos da luta inteira, e só quando o grupo empatado é exatamente
+Player1×Player2. Ver CLAUDE.md → Sistema de Iniciativa (ATB) pro detalhe completo do algoritmo.
+
+**Tentativa revertida (2026-07-21, anterior a esta implementação)** — uma fila unificada
+diferente desta (`SpeedEntry`/`BuildSpeedRoster`/`ResolveRoundOrder`/`ExecuteCluster`, comparando
+cada combatente contra a MENOR speed do campo) foi testada e revertida a pedido do usuário
+("ta tudo errado e piorou"). O sistema acima é uma reimplementação do zero, com algoritmo
+diferente (contador vs. limiar fixo, não comparação relativa), validada numericamente contra 2
+exemplos fornecidos pelo usuário antes de codar — não reaproveita nada da tentativa revertida.
 
 **Turno do pet** (`CombatSimulator.SimulatePetTurn`/`SimulatePetHit`) — alvo decidido 1x por
 turno (não re-sorteado a cada hit de combo): usa `RollPetTarget(enemy)` (Javali=75%,
 Macaco=50%, Rato=50% de interceptar; pula pets `netEnsnared`) — se retornar `null`, ataca o
 personagem principal. Antes era `Roll(0.40f)` com pet aleatório, sem respeitar as chances
-por tipo nem excluir enredados. Dano `Random.Range(min, max+1)`
-da tabela acima. Esquiva contra personagem usa a mesma fórmula de `DodgeChance` mas sem o termo
+por tipo nem excluir enredados. Dano = `Round(STR × 0.45)` (ver "Dano do pet deriva de STR"
+acima) — valor único por hit, não é mais um range aleatório. Esquiva contra personagem usa a mesma fórmula de `DodgeChance` mas sem o termo
 `accuracy` do atacante (pet não tem esse stat, ver `PetDodgeChanceOnCharacter`); esquiva contra
 pet usa só o `evasionBase` do alvo. Combo do pet: `pet.comboRate × 0.5^comboCount`, decaimento
 igual ao personagem, mas com teto fixo de **3 hits extras** (sem decair até ficar irrelevante).
@@ -181,13 +218,28 @@ personagens principais terminam de pousar (`WaitUntil` combinado).
     `Vector Parts/<Tipo>.prefab`.
 - `PetCombatController.cs` — `RunToTarget`/`ReturnToSpawn` (reusa `MovementController.MoveTo`
   genérico, já existente, sem acoplamento a `PlayerCombat`), `FlipToward`/`FlipToInitial`
-  (mesmo mecanismo de flip por `localScale.x` já usado no projeto), `PlayAttackSequence`
-  (corotina completa: vira pro alvo → corre → ataca → `onImpact` callback → pausa → vira pra
-  trás → corre de volta → idle — `onImpact` é quem decide hit/dodge/dano, já que
-  `CombatPlayer`, que conhece os dois lados do evento, é quem a constrói), `PlayDeath` (toca
+  (mesmo mecanismo de flip por `localScale.x` já usado no projeto), `PlayDeath` (toca
   `Dying`, faz fade da `HealthBarPet`, adiciona à lista estática `deadPets` — **nunca destrói o
   GameObject**). `CleanupDeadPets()` (static) só limpa essa lista de rastreamento entre lutas —
   chamado por `AttackSequencer.OnCombatEnd`, junto de `PlayerCombat.CleanupFallenWeapons()`.
+  **`PlayAttackSequence` dividido em dois (2026-07-22)** — bug real reportado pelo usuário: o
+  pet voltava ao spawn e corria de novo a CADA hit de um combo (3-4 hits = 3-4 ciclos completos
+  de corrida+retorno), diferente do personagem, que só reposiciona SE precisar entre hits de
+  combo (`CombatPlayer.RepositionIfNeeded`) e só retorna ao spawn 1x, no fim do turno. Agora:
+  `PlayAttackHit(target, reposition, isDodged, damage, onImpact, ...)` — 1x por evento
+  `PetAttack` (1 por hit, inclusive combo); `reposition` (decidido por `CombatPlayer`: sempre
+  `true` no 1º hit do turno, `!evt.isCombo`; nos hits de combo seguintes, só `true` se a
+  distância atual até o alvo for > 0.3 unidades, mesmo threshold do personagem) decide se corre
+  até o alvo antes de atacar ou ataca do lugar onde já está — vira pro alvo, corre condicional,
+  ataca, `onImpact` callback, pausa; **sem retorno ao spawn nenhum aqui**. `PlayReturnToSpawn
+  (runSpeed, jumpHeight)` — extraído da cauda da função antiga (vira pro spawn → pula em arco →
+  idle → restaura direção), chamado 1x só, no `case PetTurnEnd` de `CombatPlayer` (não mais a
+  cada `PetAttack`) — só quando o pet realmente se moveu neste turno (`Vector2.Distance(pet.
+  transform.position, pet.spawnPosition) > 0.1f`; turnos pulados por morte/rede nunca tiram o
+  pet do lugar, então o retorno é pulado automaticamente sem precisar rastrear um flag à parte).
+  `CombatEvent.PetAttack` ganhou `isCombo` (true a partir do 1º hit EXTRA de combo,
+  `comboCount > 0` em `CombatSimulator.SimulatePetHit`) só pra alimentar essa decisão — não
+  afeta nenhum cálculo de combate.
 - `HealthBarPet.cs` (`Assets/Scripts/UI/`) — mesmo padrão world-space Canvas de `HealthBar.cs`
   (personagens principais), mas mais fino (80×8px), sem texto, verde pouco-visível
   (`Color(0.2, 0.8, 0.2, 0.7)`) sobre fundo preto semi-transparente, e `FadeOutAndDestroy(2s)`
@@ -369,7 +421,7 @@ Fix: `CombatPlayer._onPetImpact` — campo `readonly System.Action` inicializado
 group de `HandlePetImpact` (instância nunca recriada, sem closure) — e o estado que antes era
 capturado (`pet`/`evt`/alvo/posição) agora mora em campos de instância (`_petImpactPet`/
 `_petImpactEvt`/`_petImpactTargetPet`/`_petImpactTargetCharacter`/`_petImpactTargetPos`),
-setados no `case PetAttack` imediatamente antes de `StartCoroutine(PlayAttackSequence(...))` e
+setados no `case PetAttack` imediatamente antes de `StartCoroutine(PlayAttackHit(...))` e
 lidos por `HandlePetImpact()` (novo método privado, mesma lógica de antes, sem captura). Seguro
 porque os eventos do `CombatPlayer` são processados estritamente em sequência (1 única coroutine
 de replay, nunca 2 `PetAttack` concorrentes no mesmo `CombatPlayer`) — não há risco de um

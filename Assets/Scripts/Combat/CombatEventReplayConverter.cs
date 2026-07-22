@@ -51,6 +51,13 @@ public static class CombatEventReplayConverter
         newTargetMaxHp = e.newTargetMaxHp,
         shieldIntercept = e.shieldIntercept,
         petShieldAbsorb = e.petShieldAbsorb,
+        p1Speed = e.p1Speed,
+        p2Speed = e.p2Speed,
+        p1Initiative = e.p1Initiative,
+        p2Initiative = e.p2Initiative,
+        initiativeThreshold = e.initiativeThreshold,
+        p1PetSpeeds = e.p1PetSpeeds,
+        p2PetSpeeds = e.p2PetSpeeds,
     };
 
     public static List<CombatEvent> FromDTOList(List<ReplayEventDTO> dtos)
@@ -108,6 +115,13 @@ public static class CombatEventReplayConverter
             newTargetMaxHp = d.newTargetMaxHp,
             shieldIntercept = d.shieldIntercept,
             petShieldAbsorb = d.petShieldAbsorb,
+            p1Speed = d.p1Speed,
+            p2Speed = d.p2Speed,
+            p1Initiative = d.p1Initiative,
+            p2Initiative = d.p2Initiative,
+            initiativeThreshold = d.initiativeThreshold,
+            p1PetSpeeds = d.p1PetSpeeds,
+            p2PetSpeeds = d.p2PetSpeeds,
         };
     }
 }

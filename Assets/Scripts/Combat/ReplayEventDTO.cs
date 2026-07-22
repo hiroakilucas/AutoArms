@@ -60,4 +60,13 @@ public class ReplayEventDTO
     public int  newTargetMaxHp;
     public bool shieldIntercept;
     public bool petShieldAbsorb;
+
+    // CombatStart only (2026-07-21, sistema de iniciativa ATB) — ver CombatEvent.cs.
+    public int  p1Speed;
+    public int  p2Speed;
+    public int  p1Initiative;
+    public int  p2Initiative;
+    public int  initiativeThreshold;
+    public List<int> p1PetSpeeds;
+    public List<int> p2PetSpeeds;
 }

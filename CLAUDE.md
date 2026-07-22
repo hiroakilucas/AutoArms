@@ -81,6 +81,7 @@ All game data is ScriptableObjects. Cross-scene state flows through a Scriptable
 | `WeaponDatabase` | `Assets/ScriptableObjects/Databases/WeaponDatabase.asset` | Novo (2026-07-14) — lista os 26 `WeaponData` **T1** (raiz de cada família) acima, mesmo espírito de `SkillDatabase` (que já existia, mas nunca teve equivalente pra armas). Único consumidor até agora: `ArsenalController` (`03_Arsenal`), pra enumerar "toda arma que existe no jogo" sem depender de `Resources.LoadAll`/scan de pasta. Só T1 — T2/T3 são alcançados via `WeaponData.nextTier` a partir de cada T1, se algum consumidor futuro precisar. |
 | `EnergySettings` | `Assets/Resources/EnergySettings.asset` | Novo (2026-07-19) — balanceamento do sistema de energia (`maxEnergy`, `regenIntervalHours`), carregado via `Resources.Load<EnergySettings>("EnergySettings")` (não wireado por Inspector — evita precisar editar `01_MainMenu.unity` só pra isto). `diamondCostToRefill` (custo fixo único) substituído em 2026-07-21 por `refillCostTier1/2/3Plus` (10/20/40, progressivo por dia/personagem) — ver **Sistema de Energia/Moeda** abaixo. |
 | `CharacterResetSettings` | `Assets/Resources/CharacterResetSettings.asset` | Novo (2026-07-21) — `coinsPerLevel` (10), único campo, usado por `CharacterPanel.OnResetCharacterClicked`/`ExecuteReset` pro botão "Resetar Personagem" (reseta pro Level 1, credita `nível anterior × coinsPerLevel` moedas). Mesmo padrão de `EnergySettings` (`Resources.Load`, sem Inspector wiring). |
+| `CombatSettings` | `Assets/Resources/CombatSettings.asset` | Novo (2026-07-21) — `initiativeThreshold` (int, default 100), único campo, usado por `CombatSimulator.RunInitiativeLoop` (sistema de iniciativa ATB, ver **Sistema de Iniciativa (ATB)** em Combat Systems). Mesmo padrão de `EnergySettings`/`CharacterResetSettings` (`Resources.Load`, sem Inspector wiring — `CombatSimulator` é C# puro, sem MonoBehaviour). |
 
 **AttackSettings — valores atuais (Player1 = Player2 exceto onde indicado):**
 | Campo | Valor |
@@ -697,28 +698,63 @@ Every hit (including combo) pushes the defender by `settings.knockbackDistance` 
 
 **Limite da janela jogável**: `PlayerCombat.ClampToArena(pos)` (privado, estático) clampa `X` em `[-7.25, 7.25]` e `Y` em `[-3.90, -0.81]` — mesmos valores de `RandomSpawnPosition` (área visível da câmera). Aplicado no destino calculado por `Knockback()` e `DodgeLeap()` antes de mover o personagem. Sem isso, combos longos com vários hits/esquivas seguidas empurravam o personagem cada vez mais na mesma direção a cada evento, eventualmente saindo da área visível da câmera (sem limitador algum antes).
 
-### Speed System
-Speed determina quantas vezes um personagem age por round via acúmulo de debt. Implementado em `AttackSequencer.CombatLoop`.
+### Sistema de Iniciativa (ATB) — substitui por completo o antigo "Speed System" (2026-07-21)
 
-**Algoritmo por round:**
-1. `p1SpeedDebt += player1.speed` | `p2SpeedDebt += player2.speed`
-2. Enquanto `p1SpeedDebt >= player2.speed`: p1 age mais 1x, `p1SpeedDebt -= player2.speed`
-3. Enquanto `p2SpeedDebt >= player1.speed`: p2 age mais 1x, `p2SpeedDebt -= player1.speed`
-4. Mínimo garantido: 1 ação por player por round — **exceto se `speed <= 0`** (ex: Deity, -90% speed — ainda chega a 0 quando o speed base é baixo o suficiente pra arredondar pra zero): nesse caso 0 ações garantidas, o personagem nunca corre/ataca/pega arma por conta própria no round, só reage via Counter/Reversal nos turnos do oponente (`CombatSimulator.SimulateRound`, era `Mathf.Max(1, pXAct)` incondicional — forçava o personagem a atacar normalmente todo round mesmo com speed efetivo 0).
+**Histórico**: existiram DUAS implementações anteriores de ordenação de turnos por speed, ambas
+descartadas — (1) o modelo original de "débito relativo" (P1/P2 comparando `speedDebt` contra a
+speed um do outro, pets numa baseline fixa de 10, dependente de um loop de `SimulateRound`) e
+(2) uma tentativa de unificar personagem+pet numa fila só (`SpeedEntry`/`BuildSpeedRoster`/
+`ResolveRoundOrder`/`ExecuteCluster`, comparando `speedDebt` contra a MENOR speed do campo, com
+intercalamento entre empatados), revertida no mesmo dia por dar resultado errado em teste
+("ta tudo errado e piorou"). O sistema abaixo é uma reimplementação do zero, pedida
+explicitamente pelo usuário com um algoritmo diferente dos dois anteriores (contador vs. limiar
+fixo, não comparação relativa), validada numericamente contra 2 exemplos fornecidos por ele
+antes de codar — nenhum código das duas tentativas anteriores foi reaproveitado.
 
-**Exemplos:**
-- Speed 6 vs 2 → Round 1: P1 age 3x (6/2=3), P2 age 1x (2<6)
-- Speed 4 vs 3 → Maioria dos rounds 1x cada; a cada ~4 rounds P1 age 2x
+**Algoritmo**: Player1, Player2 e cada pet vivo dos dois lados entram todos na MESMA fila —
+não existe mais distinção "regra de personagem" vs. "regra de pet". Cada combatente tem um
+contador de iniciativa (`PlayerState.speedDebt`/`PetState.speedDebt`, reaproveitados — mesmo
+campo, papel novo — começando em 0). A cada **tick** de simulação:
+1. Soma-se a própria `speed` ao contador de cada combatente vivo com `speed > 0`.
+2. Sempre que o contador atinge/ultrapassa `CombatSettings.initiativeThreshold`
+   (`Assets/Resources/CombatSettings.asset`, default **100**, nunca hardcoded — ajustável no
+   Inspector), o combatente executa uma ação e o limiar é subtraído do contador (overflow
+   mantido, nunca zera) — em loop dentro do MESMO tick, cobrindo o caso de `speed` maior que o
+   limiar (ex: speed 250 com limiar 100 age 2x no mesmo tick: contador 250→150→50).
+3. Quando mais de um combatente cruza o limiar no mesmo tick (pets e personagens juntos, sem
+   distinção de categoria), a ordem de ação é decrescente pelo valor do contador NO MOMENTO do
+   cruzamento — quem tem mais overflow age primeiro.
+4. Empates EXATOS (mesmo valor de contador) são resolvidos por sorteio (Fisher-Yates,
+   `CombatSimulator._rng`, mesmo RNG do resto da simulação — preserva reprodutibilidade por
+   seed) — inclusive entre um pet e um personagem, se cruzarem com o mesmo valor no mesmo tick.
+5. Combatente com `speed <= 0` (ex: Deity, -100% speed) nunca acumula contador — nunca cruza o
+   limiar por conta própria, só reage via Counter/Reversal nos turnos de quem o ataca (mesmo
+   comportamento de antes).
 
-**Visual:** popup "RAPIDO!" amarelo aparece no início de cada ação extra (2ª em diante).
+**`initiative`** (stat só de `PlayerState` — pets nunca tiveram) só entra como desempate na
+**primeira leva de cruzamentos da luta inteira**, e só quando o grupo empatado é exatamente
+Player1×Player2 (pedido explícito do usuário: "a iniciativa só serve para o primeiro round, pra
+decidir quem vai atacar primeiro") — quem tem `initiative` maior age primeiro; sorteio normal se
+a `initiative` também empatar, ou se qualquer pet estiver no mesmo grupo empatado. Toda leva de
+cruzamentos SEGUINTE (mesmo que P1×P2 empatem de novo mais tarde na luta) cai sempre no sorteio.
+Skills que mexem em `initiative` (Reconnaissance, First Strike, Monk, Deity, Saboteur) continuam
+com o mesmo efeito de sempre sobre o STAT — só o ALCANCE de onde `initiative` é lido mudou (era
+usado em todo round; agora só no 1º cruzamento da luta).
 
-`CombatSimulator.SimulateRound` agora segue o mesmo modelo de **bloco** que `AttackSequencer.CombatLoop` ("primeiro jogador executa TODAS as suas ações do round, só então o segundo jogador age") em vez de intercalar ação-a-ação (1ª de cada, depois 2ª de cada...). O modelo intercalado tinha dois problemas:
-1. Emitia o evento `SpeedBonus` em bloco (`extraActions = pXAct - 1`) antes de qualquer ação do round, fazendo o popup aparecer junto da 1ª ação normal.
-2. Mesmo depois de corrigir (1) para emitir por ação, quando o jogador mais rápido também tinha iniciativa pra agir primeiro no round seguinte, sua última ação extra de um round ficava "colada" (sem nada no meio) à 1ª ação normal do round seguinte — visualmente parecia uma 2ª ação extra sem nenhum aviso, já que o intercalado só garante popup quando o índice da ação é > 0 *dentro do mesmo round*.
+**Visual**: popup "RAPIDO!" (`CombatEventType.SpeedBonus`) agora só aparece quando o MESMO
+personagem cruza o limiar mais de uma vez no MESMO tick (`speed` bem acima do limiar) — agir de
+novo num tick futuro não é mais tratado como "bônus", é só o ritmo normal de um personagem
+rápido, já refletido pela própria frequência das ações dele na fila.
 
-Com o modelo de bloco, o segundo jogador sempre age por último em cada round, então o primeiro jogador nunca emenda duas ações suas atravessando um round sem alguém no meio — `EmitSpeedBonus` continua sendo chamado só quando `i > 0`, mas agora isso cobre exatamente os casos certos.
-
-Initiative ainda determina quem age PRIMEIRO no round (maior initiative = `first`). Speed determina quantas vezes cada um age.
+**Implementação**: `CombatSimulator.RunInitiativeLoop` (chamado 1x por `Simulate()`, substitui o
+antigo loop `while (... round < maxRounds) SimulateRound(round)`) — usa a classe interna
+`InitiativeActor` pra unificar `PlayerState`/`PetState` só pro propósito de ordenação (
+`SimulateTurn`/`SimulatePetTurn` continuam recebendo os tipos concretos de sempre, nenhuma outra
+lógica de combate foi tocada). Teto de segurança de 200.000 ticks substitui o antigo
+`maxRounds = 300` (só alcançado num stalemate degenerado, ex: os 2 personagens com speed <= 0
+ao mesmo tempo). `CombatSimulator.RoundCount` (usado só pro popup de REPLAYS em `CharacterPanel`)
+passou a contar turnos de PERSONAGEM despachados (não pets), já que "round" não existe mais como
+conceito literal.
 
 ## CombatSimulator Architecture
 

@@ -17,9 +17,12 @@ public class CombatSimulator
     public List<string> Player1SabotagedWeapons { get; private set; } = new List<string>();
     public List<string> Player2SabotagedWeapons { get; private set; } = new List<string>();
 
-    // Nº de rounds REAIS que a luta durou (não estimado a partir de eventCount) — lido por
-    // CombatSceneLoader depois de Simulate() só pra alimentar o replay (ReplayDTO.roundCount,
-    // exibido no popup de REPLAYS do CharacterPanel, 2026-07-18).
+    // Nº de turnos de PERSONAGEM (Player1+Player2, sem contar pets) que a luta durou — desde a
+    // migração pro sistema de iniciativa ATB (ver RunInitiativeLoop) não existe mais um "round"
+    // literal pra contar; isso conta cada SimulateTurn despachado, incrementado ali mesmo, no
+    // lugar mais próximo do antigo significado (cada round tinha pelo menos 1 ação de cada
+    // personagem). Lido por CombatSceneLoader depois de Simulate() só pra alimentar o replay
+    // (ReplayDTO.roundCount, exibido no popup de REPLAYS do CharacterPanel, 2026-07-18).
     public int RoundCount { get; private set; }
 
     public List<CombatEvent> Simulate(PlayerProfile p1Profile, PlayerProfile p2Profile, int seed = -1)
@@ -54,16 +57,26 @@ public class CombatSimulator
         ApplySkillStats(_p1);
         ApplySkillStats(_p2);
 
-        const int maxRounds = 300;
-        int round = 0;
+        var combatSettings     = Resources.Load<CombatSettings>("CombatSettings");
+        int initiativeThreshold = combatSettings != null ? Mathf.Max(1, combatSettings.initiativeThreshold) : 100;
 
-        while (_p1.isAlive && _p2.isAlive && round < maxRounds)
+        // Só pra alimentar o log de debug (CombatLogFormatter) — mostra o speed EFETIVO (pós-
+        // skills/pós-level-scaling de pet) e o limiar usados pelo sistema de iniciativa ATB, sem
+        // precisar contar "--- Turno de ---" na mão pra perceber desequilíbrio de ritmo entre
+        // personagem e pet (ex: Monkey speed ~25-33 vs. personagem nível baixo speed ~2-11).
+        var startEvt = new CombatEvent
         {
-            SimulateRound(round);
-            round++;
-        }
+            type = CombatEventType.CombatStart,
+            p1Speed = _p1.speed, p2Speed = _p2.speed,
+            p1Initiative = _p1.initiative, p2Initiative = _p2.initiative,
+            initiativeThreshold = initiativeThreshold,
+            p1PetSpeeds = new List<int>(), p2PetSpeeds = new List<int>(),
+        };
+        foreach (var pet in _p1.pets) startEvt.p1PetSpeeds.Add(pet.speed);
+        foreach (var pet in _p2.pets) startEvt.p2PetSpeeds.Add(pet.speed);
+        Emit(startEvt);
 
-        RoundCount = round;
+        RunInitiativeLoop(initiativeThreshold);
 
         int winnerIndex = _p1.isAlive ? 0 : 1;
         Emit(new CombatEvent { type = CombatEventType.CombatEnd, playerIndex = winnerIndex });
@@ -357,103 +370,198 @@ public class CombatSimulator
         if (sk != null) setter(sk.usesPerFight);
     }
 
-    // --- Round / turn dispatch ---
+    // --- Sistema de Iniciativa (ATB) ---
+    //
+    // Substituiu por completo o antigo modelo de "débito relativo por round" (P1 vs P2
+    // comparando speed um do outro + pets numa baseline fixa de 10, dependente de um loop de
+    // rounds) — uma tentativa anterior de unificar tudo numa fila só (2026-07-21,
+    // SpeedEntry/BuildSpeedRoster/ResolveRoundOrder/ExecuteCluster) tinha sido revertida por dar
+    // resultado errado. Esta é a reimplementação do zero pedida explicitamente pelo usuário,
+    // validada tick a tick contra 2 exemplos numéricos fornecidos por ele antes de codar.
+    //
+    // Cada combatente (Player1, Player2, cada pet vivo dos dois lados) tem um contador de
+    // iniciativa próprio, começando em 0 (`PlayerState.speedDebt`/`PetState.speedDebt`,
+    // reaproveitados — mesmo campo, papel novo). A cada tick de simulação, soma-se a própria
+    // speed ao contador; sempre que o contador atinge/ultrapassa `CombatSettings.
+    // initiativeThreshold` (ScriptableObject, `Assets/Resources/CombatSettings.asset` — nunca
+    // hardcoded), o combatente age e o limiar é subtraído do contador (overflow mantido, nunca
+    // zera) — em loop dentro do mesmo tick, pra cobrir o caso de speed > limiar cruzando mais de
+    // 1x no mesmo tick (ex: speed 250 com limiar 100 age 2x no mesmo tick, contador 250→150→50).
+    //
+    // Quando mais de um combatente cruza no mesmo tick, a ordem de ação é decrescente pelo valor
+    // do contador no momento do cruzamento; empates EXATOS são resolvidos por sorteio — exceto o
+    // desempate Player1×Player2 na PRIMEIRA leva de cruzamentos da luta inteira, que usa
+    // `initiative` em vez de sorteio (pedido do usuário: "a iniciativa só serve para o primeiro
+    // round, pra decidir quem vai atacar primeiro"). Pets nunca tiveram stat de `initiative`
+    // (só existe em `PlayerState`), então esse desempate só entra quando o grupo empatado é
+    // EXATAMENTE os 2 personagens — qualquer pet no mesmo grupo empatado cai sempre no sorteio.
+    //
+    // Combatente com speed <= 0 (ex: Deity, -100% speed) nunca acumula contador — nunca cruza o
+    // limiar por conta própria, só reage via Counter/Reversal nos turnos de quem o ataca, mesmo
+    // comportamento de antes.
 
-    private void SimulateRound(int round)
+    // Representa um dos 4 papéis possíveis (Player1, Player2, ou um pet de qualquer um dos dois)
+    // dentro da fila de iniciativa — unifica PlayerState/PetState só pro propósito de ordenação;
+    // SimulateTurn/SimulatePetTurn continuam recebendo os tipos concretos de sempre.
+    private class InitiativeActor
     {
-        _p1.speedDebt += _p1.speed;
-        _p2.speedDebt += _p2.speed;
+        public readonly bool        IsPlayer;
+        public readonly PlayerState Player; // preenchido quando IsPlayer
+        public readonly PetState    Pet;    // preenchido quando !IsPlayer
+        public readonly PlayerState Owner;  // o próprio (IsPlayer) ou o dono do pet
+        public readonly PlayerState Enemy;  // lado oposto
 
-        int p1Act = 0, p2Act = 0;
-        while (_p2.speed > 0 && _p1.speedDebt >= _p2.speed) { p1Act++; _p1.speedDebt -= _p2.speed; }
-        while (_p1.speed > 0 && _p2.speedDebt >= _p1.speed) { p2Act++; _p2.speedDebt -= _p1.speed; }
-        // Speed 0 (ex: Deity, -100%) não age por conta própria — nunca corre/ataca, só reage
-        // via Counter/Reversal nos turnos do oponente. O mínimo garantido de 1 ação só vale
-        // pra quem tem speed > 0.
-        p1Act = _p1.speed > 0 ? Mathf.Max(1, p1Act) : 0;
-        p2Act = _p2.speed > 0 ? Mathf.Max(1, p2Act) : 0;
-
-        // Initiative decide quem age primeiro; em empate (default 0 pra todo personagem sem
-        // skill que a altere), quem tem mais speed age primeiro. Empate total continua P1.
-        bool p1First = _p1.initiative != _p2.initiative
-            ? _p1.initiative > _p2.initiative
-            : _p1.speed >= _p2.speed;
-
-        PlayerState firstAttacker  = p1First ? _p1 : _p2;
-        PlayerState firstDefender  = p1First ? _p2 : _p1;
-        int         firstActCount  = p1First ? p1Act : p2Act;
-
-        PlayerState secondAttacker = p1First ? _p2 : _p1;
-        PlayerState secondDefender = p1First ? _p1 : _p2;
-        int         secondActCount = p1First ? p2Act : p1Act;
-
-        // Mirrors AttackSequencer.CombatLoop: o primeiro jogador (por iniciativa) executa
-        // TODAS as suas ações do round, só então o segundo executa as dele — em vez de
-        // intercalar ação-a-ação. Intercalar fazia a última ação extra de um round (com o
-        // popup correto) ficar visualmente colada à 1ª ação normal do round seguinte quando
-        // o mesmo jogador agia primeiro nos dois rounds, parecendo uma 2ª ação extra sem aviso.
-        for (int i = 0; i < firstActCount; i++)
+        public InitiativeActor(PlayerState player, PlayerState enemy)
         {
-            if (!_p1.isAlive || !_p2.isAlive) return;
-            if (i > 0) EmitSpeedBonus(firstAttacker);
-            SimulateTurn(firstAttacker, firstDefender);
+            IsPlayer = true;
+            Player = player;
+            Owner = player;
+            Enemy = enemy;
         }
 
-        // Pets (Fase 3) — ordem simplificada: pets do atacante agem logo depois das ações
-        // principais dele, antes do segundo atacante (e dos pets dele) começarem. Não entram
-        // no sorteio de iniciativa acima — só seguem o jogador a quem pertencem.
-        if (!_p1.isAlive || !_p2.isAlive) return;
-        SimulatePetActions(firstAttacker, firstDefender);
-
-        for (int i = 0; i < secondActCount; i++)
+        public InitiativeActor(PetState pet, PlayerState owner, PlayerState enemy)
         {
-            if (!_p1.isAlive || !_p2.isAlive) return;
-            if (i > 0) EmitSpeedBonus(secondAttacker);
-            SimulateTurn(secondAttacker, secondDefender);
+            IsPlayer = false;
+            Pet = pet;
+            Owner = owner;
+            Enemy = enemy;
         }
 
-        if (!_p1.isAlive || !_p2.isAlive) return;
-        SimulatePetActions(secondAttacker, secondDefender);
+        public bool IsAlive => Owner.isAlive && Enemy.isAlive && (IsPlayer || Pet.isAlive);
+        public int  Speed   => IsPlayer ? Player.speed : Pet.speed;
+
+        public int Counter
+        {
+            get => IsPlayer ? Player.speedDebt : Pet.speedDebt;
+            set { if (IsPlayer) Player.speedDebt = value; else Pet.speedDebt = value; }
+        }
     }
 
-    // Speed debt PRÓPRIO de cada pet (não compara contra a speed de um "oponente" 1:1 como os
-    // personagens fazem entre si — não existe par equivalente pra pets). Usa uma baseline fixa
-    // de 10 (mesmo valor base de personagem comum) como divisor: Rato (10) e Macaco (20) agem
-    // pelo menos 1x por round quase sempre (Macaco às vezes 2x); Javali (3) acumula devagar e só
-    // libera a 1ª ação por volta do 3º-4º round — sem mínimo forçado de 1 ação por round (ao
-    // contrário do personagem) pra essa demora aparecer de verdade, conforme pedido.
-    private void SimulatePetActions(PlayerState owner, PlayerState enemyOwner)
+    private List<InitiativeActor> BuildInitiativeRoster()
     {
-        if (owner.pets.Count == 0) return;
-
-        foreach (var pet in owner.pets)
+        var actors = new List<InitiativeActor>
         {
-            if (!owner.isAlive || !enemyOwner.isAlive) return;
+            new InitiativeActor(_p1, _p2),
+            new InitiativeActor(_p2, _p1),
+        };
+        foreach (var pet in _p1.pets) actors.Add(new InitiativeActor(pet, _p1, _p2));
+        foreach (var pet in _p2.pets) actors.Add(new InitiativeActor(pet, _p2, _p1));
+        return actors;
+    }
 
-            if (!pet.isAlive)
+    private void RunInitiativeLoop(int threshold)
+    {
+        var actors = BuildInitiativeRoster();
+
+        // Só true até a 1ª leva de cruzamentos da luta ser resolvida — depois disso, todo
+        // empate (inclusive um futuro empate de novo entre os 2 personagens) cai no sorteio.
+        bool firstCrossingBatch = true;
+
+        // Teto de segurança — só alcançado num stalemate degenerado (os 2 personagens com
+        // speed <= 0 ao mesmo tempo, nunca cruzando o limiar por conta própria). Substitui o
+        // antigo `maxRounds = 300`; RunInitiativeLoop() já retorna assim que um lado morre.
+        const int maxTicks = 200000;
+
+        var crossings = new List<(InitiativeActor actor, int value)>();
+
+        for (int tick = 0; tick < maxTicks; tick++)
+        {
+            if (!_p1.isAlive || !_p2.isAlive) return;
+
+            crossings.Clear();
+            foreach (var actor in actors)
             {
-                // Pet caído ainda "ocupa" um turno por round (emite só os eventos de skip) —
-                // preparação pra Tamer futuramente poder interagir com ele fora de uma janela
-                // de ação específica não é necessária aqui, é só pra manter o log consistente.
-                SimulatePetTurn(pet, owner, enemyOwner, enemyOwner.pets);
-                continue;
+                if (!actor.IsAlive || actor.Speed <= 0) continue;
+
+                int counter = actor.Counter + actor.Speed;
+                while (counter >= threshold)
+                {
+                    crossings.Add((actor, counter));
+                    counter -= threshold;
+                }
+                actor.Counter = counter;
             }
 
-            pet.speedDebt += pet.speed;
-            int actions = 0;
-            while (pet.speedDebt >= 10) { actions++; pet.speedDebt -= 10; }
+            if (crossings.Count == 0) continue;
 
-            for (int i = 0; i < actions; i++)
+            OrderCrossings(crossings, firstCrossingBatch);
+            firstCrossingBatch = false;
+
+            var actionsThisTick = new Dictionary<InitiativeActor, int>();
+            foreach (var (actor, _) in crossings)
             {
-                if (!owner.isAlive || !enemyOwner.isAlive) return;
-                if (!pet.isAlive) break;
-                SimulatePetTurn(pet, owner, enemyOwner, enemyOwner.pets);
+                if (!_p1.isAlive || !_p2.isAlive) return;
+                if (!actor.IsAlive) continue; // morreu de uma ação anterior neste mesmo tick
+
+                actionsThisTick.TryGetValue(actor, out int countSoFar);
+                actionsThisTick[actor] = countSoFar + 1;
+
+                if (actor.IsPlayer)
+                {
+                    if (countSoFar > 0) EmitSpeedBonus(actor.Player);
+                    RoundCount++;
+                    SimulateTurn(actor.Player, actor.Enemy);
+                }
+                else
+                {
+                    SimulatePetTurn(actor.Pet, actor.Owner, actor.Enemy, actor.Enemy.pets);
+                }
             }
+        }
+    }
+
+    // Ordena os cruzamentos de um mesmo tick por valor decrescente. Empates EXATOS viram um
+    // sub-grupo resolvido por sorteio (Fisher-Yates) — exceto quando `useInitiativeTieBreak` é
+    // true (só na 1ª leva de cruzamentos da luta) e o grupo empatado é exatamente os 2
+    // personagens: aí quem tem `initiative` maior vai primeiro, sorteio só se a initiative
+    // também empatar. Qualquer pet dentro de um grupo empatado (mesmo na 1ª leva) sempre cai no
+    // sorteio — initiative nunca foi um stat de pet.
+    private void OrderCrossings(List<(InitiativeActor actor, int value)> crossings, bool useInitiativeTieBreak)
+    {
+        crossings.Sort((a, b) => b.value.CompareTo(a.value));
+
+        int i = 0;
+        while (i < crossings.Count)
+        {
+            int j = i;
+            while (j < crossings.Count && crossings[j].value == crossings[i].value) j++;
+
+            if (j - i > 1)
+            {
+                bool resolvedByInitiative = false;
+                if (useInitiativeTieBreak && j - i == 2
+                    && crossings[i].actor.IsPlayer && crossings[i + 1].actor.IsPlayer
+                    && _p1.initiative != _p2.initiative)
+                {
+                    bool wantP1First = _p1.initiative > _p2.initiative;
+                    bool isP1First   = crossings[i].actor.Player == _p1;
+                    if (isP1First != wantP1First)
+                        (crossings[i], crossings[i + 1]) = (crossings[i + 1], crossings[i]);
+                    resolvedByInitiative = true;
+                }
+
+                if (!resolvedByInitiative) ShuffleRange(crossings, i, j);
+            }
+
+            i = j;
+        }
+    }
+
+    private void ShuffleRange(List<(InitiativeActor actor, int value)> list, int start, int end)
+    {
+        for (int k = end - 1; k > start; k--)
+        {
+            int r = start + _rng.Next(k - start + 1);
+            (list[k], list[r]) = (list[r], list[k]);
         }
     }
 
     private void EmitSpeedBonus(PlayerState player)
     {
+        // "RAPIDO!" — só quando o mesmo personagem cruza o limiar mais de 1x no MESMO tick
+        // (speed > threshold, ver RunInitiativeLoop). Agir de novo num tick futuro não é mais
+        // "bônus" nenhum agora — é só o ritmo normal de um personagem rápido, já refletido pela
+        // própria frequência das ações dele na fila de iniciativa.
         Emit(new CombatEvent { type = CombatEventType.SpeedBonus, playerIndex = player.index, extraActions = 1 });
     }
 
@@ -889,16 +997,24 @@ public class CombatSimulator
         if (targetIsPet && (targetPet == null || !targetPet.isAlive)) return true;
         if (!targetIsPet && !enemyOwner.isAlive) return true;
 
-        int damage = pet.damage;
+        // Dano = Round(str * 0.45) (2026-07-21) — campo `damage` removido de PetData, dano
+        // derivado direto da STR (multiplicador calibrado contra teste real em jogo, ver PETS.md).
+        int damage = Mathf.RoundToInt(pet.str * 0.45f);
 
         // Esquiva: alvo personagem usa a fórmula normal de DodgeChance, mas sem o termo de
         // accuracy do atacante (pet não tem esse stat) — ver PetDodgeChanceOnCharacter. Alvo
         // pet usa só o próprio evasionBase, sem nenhum outro termo.
         bool isDodged = targetIsPet ? Roll(targetPet.evasionBase) : Roll(PetDodgeChanceOnCharacter(enemyOwner));
 
+        // isCombo (2026-07-22) — true a partir do 1º hit EXTRA de combo (comboCount > 0), mesma
+        // convenção do Hit de personagem. Consumido só por CombatPlayer (decide se o pet corre
+        // até o alvo de novo ou ataca do lugar — ver PetCombatController.PlayAttackHit); não
+        // afeta nenhuma decisão de combate aqui.
+        bool isCombo = comboCount > 0;
+
         if (isDodged)
         {
-            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = targetIsPet, targetIndex = enemyOwner.index, targetPetIndex = targetIsPet ? targetPetIdx : -1, isDodged = true });
+            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = targetIsPet, targetIndex = enemyOwner.index, targetPetIndex = targetIsPet ? targetPetIdx : -1, isDodged = true, isCombo = isCombo });
             return false;
         }
 
@@ -908,11 +1024,11 @@ public class CombatSimulator
             if (targetPet.shielded)
             {
                 targetPet.shielded = false;
-                Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, damage = 0, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp, petShieldAbsorb = true });
+                Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, damage = 0, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp, petShieldAbsorb = true, isCombo = isCombo });
                 return false;
             }
             ApplyDamageToPet(targetPet, damage);
-            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, damage = damage, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp });
+            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = true, targetIndex = enemyOwner.index, targetPetIndex = targetPetIdx, damage = damage, newTargetHp = targetPet.hp, newTargetMaxHp = targetPet.maxHp, isCombo = isCombo });
 
             if (!targetPet.isAlive)
                 Emit(new CombatEvent { type = CombatEventType.PetDeath, playerIndex = enemyOwner.index, petIndex = targetPetIdx });
@@ -920,7 +1036,7 @@ public class CombatSimulator
         else
         {
             enemyOwner.hp = ApplyDamage(enemyOwner, damage);
-            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = false, targetIndex = enemyOwner.index, damage = damage, newHp = enemyOwner.hp, maxHp = enemyOwner.maxHp });
+            Emit(new CombatEvent { type = CombatEventType.PetAttack, playerIndex = petOwner.index, petIndex = petIndex, targetIsPet = false, targetIndex = enemyOwner.index, damage = damage, newHp = enemyOwner.hp, maxHp = enemyOwner.maxHp, isCombo = isCombo });
             Emit(new CombatEvent { type = CombatEventType.HealthChanged, playerIndex = enemyOwner.index, newHp = enemyOwner.hp, maxHp = enemyOwner.maxHp });
             CheckNetFreed(enemyOwner);
 

@@ -15,7 +15,6 @@ public class PetState
     public float str;
     public int   agility;
     public int   speed;
-    public int   damage;
     public float comboRate;
     public float disarmRate;
     public float evasionBase;
@@ -42,8 +41,9 @@ public class PetState
     public bool poisoned;
     public int  poisonDamagePerTurn;
 
-    // Acúmulo de speed debt do pet, independente do speedDebt do dono — ver
-    // CombatSimulator.SimulatePetActions.
+    // Contador de iniciativa do sistema ATB, próprio do pet (independente do speedDebt do
+    // dono) — soma `speed` a cada tick, dispara uma ação ao cruzar
+    // CombatSettings.initiativeThreshold. Ver CombatSimulator.RunInitiativeLoop.
     public int speedDebt;
 
     // Lê todos os stats de combate do PetData (tier já resolvido no asset) — substitui o antigo
@@ -58,7 +58,6 @@ public class PetState
             tier = data.tier,
             hp = data.hp, maxHp = data.hp,
             str = data.str, agility = data.agility, speed = data.speed,
-            damage = data.damage,
             comboRate = data.comboRate,
             disarmRate = data.disarmRate,
             evasionBase = data.evasionBase,
@@ -116,7 +115,7 @@ public class PetState
 
     // Duração total do "swing" de Slashing (pré-impacto + pós-impacto, mesmo papel de
     // AttackSettings.slashingDuration pros personagens) — usada por CombatPlayer como
-    // comboDelay*2 em PetCombatController.PlayAttackSequence. Boar ajustado pra 0.85s a pedido
+    // comboDelay*2 em PetCombatController.PlayAttackHit. Boar ajustado pra 0.85s a pedido
     // do usuário (clip Slashing.anim do Boar tem ~0.83s a 30fps depois do fix de Sample Rate,
     // ver CLAUDE.md); Monkey/Mouse mantêm o default 0.4s já usado antes (sem reclamação
     // específica sobre esses dois).

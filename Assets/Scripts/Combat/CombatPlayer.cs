@@ -182,7 +182,7 @@ public class CombatPlayer : MonoBehaviour
     // Mesma fórmula de CalcAttackPosition (reach na direção do alvo), mas sem depender de arma
     // — usado em toda corrida pet↔personagem/pet↔pet (CombatPlayer corre o personagem até o pet
     // nos casos Hit/Dodge/RunToDefender/PlayPetTargetedSuper; PetCombatController.
-    // PlayAttackSequence corre o pet até o alvo dele, ver case PetAttack abaixo).
+    // PlayAttackHit corre o pet até o alvo dele, ver case PetAttack abaixo).
     private static Vector2 CalcPetStopPosition(Vector3 fromPos, Vector3 towardPos, float reach)
     {
         Vector2 from = fromPos, toward = towardPos;
@@ -2325,7 +2325,7 @@ public class CombatPlayer : MonoBehaviour
 
                 // Duração do swing varia por tipo de pet (PetState.SlashDuration — Boar 0.85s,
                 // ajustado a pedido do usuário; Monkey/Mouse mantêm o default 0.4s). comboDelay
-                // de PlayAttackSequence é metade da duração total (pré-impacto + pós-impacto,
+                // de PlayAttackHit é metade da duração total (pré-impacto + pós-impacto,
                 // mesmo papel de slashHalf nos personagens).
                 float petComboDelay = PetState.SlashDuration(pet.petType) * 0.5f * t;
 
@@ -2370,7 +2370,15 @@ public class CombatPlayer : MonoBehaviour
                 }
 
                 pet.spawnPosition = RollPetSpawnPosition(pet);
-                yield return StartCoroutine(pet.PlayAttackSequence(petRunPos, evt.isDodged, evt.damage, _onPetImpact, runSpeed: petRunSpeed, comboDelay: petComboDelay));
+
+                // Corre até o alvo no 1º hit do turno (!evt.isCombo, sempre) ou se um hit de
+                // combo anterior deixou o pet longe demais do alvo (mesmo threshold de 0.3
+                // unidades do RepositionIfNeeded do personagem) — 2026-07-22, corrige o pet
+                // voltando ao spawn e correndo de novo a CADA hit de um combo (bug real
+                // reportado pelo usuário: personagem só reposiciona se precisar entre hits de
+                // combo, pet devia fazer o mesmo em vez de sempre correr+voltar).
+                bool petReposition = !evt.isCombo || Vector2.Distance(pet.transform.position, petRunPos) > 0.3f;
+                yield return StartCoroutine(pet.PlayAttackHit(petRunPos, petReposition, evt.isDodged, evt.damage, _onPetImpact, runSpeed: petRunSpeed, comboDelay: petComboDelay));
                 break;
             }
 
@@ -2402,8 +2410,25 @@ public class CombatPlayer : MonoBehaviour
             }
 
             case CombatEventType.PetTurnEnd:
-                yield return null;
+            {
+                // Retorno ao spawn movido pra cá (2026-07-22, era dentro de cada PetAttack —
+                // ver PetCombatController.PlayAttackHit/PlayReturnToSpawn) — só anima se o pet
+                // realmente se moveu neste turno (atacou pelo menos 1x). Turnos pulados (morto/
+                // netEnsnared, só emitem PetNetSkip) nunca tiram o pet do spawn, então
+                // `transform.position` já está perto de `spawnPosition` sem precisar rastrear
+                // um flag "atacou neste turno" à parte.
+                var pet = GetPet(evt.playerIndex, evt.petIndex);
+                if (pet != null && Vector2.Distance(pet.transform.position, pet.spawnPosition) > 0.1f)
+                {
+                    float petRunSpeed = (GetCombat(evt.playerIndex)?.settings?.runSpeed ?? 35f) * t;
+                    yield return StartCoroutine(pet.PlayReturnToSpawn(runSpeed: petRunSpeed, jumpHeight: 1.2f));
+                }
+                else
+                {
+                    yield return null;
+                }
                 break;
+            }
 
             case CombatEventType.CryOfTheDamned:
             {
@@ -2659,7 +2684,7 @@ public class CombatPlayer : MonoBehaviour
     }
 
     // Callback de impacto do case PetAttack — lê só dos campos _petImpact* (setados ali,
-    // imediatamente antes de StartCoroutine(PlayAttackSequence(...))), nunca de uma closure, pra
+    // imediatamente antes de StartCoroutine(PlayAttackHit(...))), nunca de uma closure, pra
     // _onPetImpact poder ser cacheado 1x (ver campo acima) em vez de uma lambda nova por ataque.
     private void HandlePetImpact()
     {

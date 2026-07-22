@@ -3,6 +3,120 @@
 ### Progresso
 - Total: 144 tarefas | Concluídas: 52 (recontado em 2026-07-21 — ver nota em CLAUDE.md)
 
+- 2026-07-22: **Bug real corrigido — pet voltava ao spawn e corria de novo a CADA hit de combo**
+  (reportado pelo usuário testando o sistema de iniciativa ATB novo: "o macaco está voltando
+  para o ponto inicial e correndo novamente até o oponente 3 vezes"). Causa: `CombatPlayer`
+  chamava o ciclo completo de `PetCombatController` (corre → ataca → volta ao spawn em pêndulo)
+  uma vez POR HIT (`CombatEventType.PetAttack`), inclusive pra cada hit extra de combo dentro do
+  MESMO turno — diferente do personagem, que só reposiciona SE precisar entre hits de combo
+  (`RepositionIfNeeded`) e só retorna ao spawn 1x, no `TurnEnd`. Fix: `PlayAttackSequence`
+  dividido em `PlayAttackHit` (corre condicionalmente — sempre no 1º hit do turno, só se
+  necessário nos hits de combo seguintes — ataca, sem retorno) + `PlayReturnToSpawn` (só o
+  pêndulo de volta, chamado 1x no `PetTurnEnd`, não mais a cada hit). Novo campo
+  `CombatEvent.PetAttack.isCombo` (`comboCount > 0` em `SimulatePetHit`) alimenta a decisão —
+  puramente visual, não toca dano/combo/alvo. Ver PETS.md.
+  Instrumentação temporária `[INIT-DEBUG]` (adicionada no mesmo dia pra investigar uma sequência
+  de 2 turnos seguidos do mesmo pet, suspeita de bug de agendamento) removida depois que a causa
+  real acabou sendo esta — mesmo padrão de remoção de log temporário já usado antes no projeto
+  (ver Logging Policy no CLAUDE.md). `[Iniciativa]`/"Resumo de turnos" (ver entrada abaixo)
+  continuam no log — não eram debug temporário, são melhoria permanente de legibilidade.
+
+- 2026-07-21: **Log de combate ganhou cabeçalho de speeds/limiar + resumo de turnos por
+  combatente** — pedido do usuário depois de notar, testando o novo sistema de iniciativa ATB,
+  que um pet estava agindo bem mais que o próprio dono sem isso ser óbvio no log. Novo
+  `CombatEventType.CombatStart` (emitido 1x no início de `Simulate()`, só pra debug — nenhum
+  consumidor de gameplay lê) carrega speed/initiative efetivos de P1/P2 e speed de cada pet;
+  `CombatLogFormatter` imprime `[Iniciativa] limiar=... | ...` no topo e um bloco "Resumo de
+  turnos por combatente" antes do vencedor. Campos novos também persistidos em
+  `ReplayEventDTO`/`ReplayEventDTOMap`/`CombatEventReplayConverter` pra sobreviver ao replay
+  salvo (não só à luta ao vivo).
+
+- 2026-07-21: **Sistema de turnos reescrito do zero como iniciativa ATB** (contador por
+  combatente, soma `speed` a cada tick, age ao cruzar `CombatSettings.initiativeThreshold`,
+  default 100) — substitui as DUAS implementações anteriores de speed (o modelo original de
+  débito relativo P1×P2 + baseline fixa de pet, e a tentativa unificada revertida logo abaixo
+  neste changelog). Player1, Player2 e todos os pets vivos entram na mesma fila, sem distinção de
+  categoria; empates exatos no mesmo tick são resolvidos por sorteio, exceto o desempate
+  Player1×Player2 na 1ª leva de cruzamentos da luta inteira, que usa `initiative` (pedido do
+  usuário). Novo `CombatSettings` ScriptableObject (`Assets/Resources/CombatSettings.asset`).
+  Validado numericamente (script standalone, fora do Unity) contra 2 exemplos fornecidos pelo
+  usuário antes da implementação — resultado bate exatamente, inclusive um caso de empate triplo
+  (pet+pet+personagem) que a descrição inicial do usuário não cobria explicitamente, confirmado
+  com ele como comportamento correto antes de codar. Ver CLAUDE.md → Sistema de Iniciativa (ATB)
+  e PETS.md → Speed System.
+
+- 2026-07-21: **Revertida por completo a unificação de speed entre personagem e pet** (as 2 tarefas
+  anteriores neste changelog: "Combatentes empatados em speed agora intercalam..." e "Speed System
+  unificado — personagens e pets numa única corrida...") — pedido explícito do usuário depois de
+  testar em jogo ("ta tudo errado e piorou"). `CombatSimulator.cs` volta ao modelo de 2
+  personagens com `_speedTieFavorsP1` (bool, alterna empate P1/P2) + `SimulatePetActions` com
+  baseline fixa de 10 isolada por pet, sem intercalamento — removidos `SpeedEntry`,
+  `BuildSpeedRoster`, `ResolveRoundOrder`, `ExecuteCluster`, `EmitDeadPetSkipTurns`,
+  `PlayerState.speedTieWait`, `PetState.speedTieWait`. **Não revertido**: a fórmula de dano do pet
+  (`str * 0.45`, ver entrada "Dano do pet agora deriva de STR" abaixo) — mudança independente, sem
+  relação com speed. Sessão de design de speed de pet será refeita do zero. Ver CLAUDE.md/PETS.md
+  → Speed System pro estado restaurado e a nota de "tentativa revertida".
+
+- 2026-07-21: **Combatentes empatados em speed agora intercalam ações dentro do mesmo round**
+  (pedido do usuário) — `CombatSimulator.SimulateRound`/novo `ExecuteCluster` agrupam a fila em
+  clusters (mesma `initiative` E mesma `speed` exatas) e revezam 1 ação de cada membro por vez, em
+  vez de um fazer TODAS as ações antes do próximo começar. Reportado testando Macaco vs Macaco
+  (ambos 25 de speed): o Macaco do jogador matava o Macaco adversário no meio do próprio bloco
+  (mirando o pet inimigo via `RollPetTarget`) sem o outro nunca chegar a agir — agora ambos
+  revezam, e o que morre no meio da troca simplesmente para de ser chamado sem travar o resto do
+  cluster. Cluster de 1 membro (sem empate, inclusive qualquer luta sem pet) se reduz sozinho ao
+  comportamento de bloco de sempre — sem regressão. Ver CLAUDE.md → Speed System.
+
+- 2026-07-21: **Modo de teste do level-up religado (`CombatResultPanel.ShowAllOptionsForTesting =
+  true`), pedido do usuário pra testar skills** — próximo level-up mostra uma grade rolável com
+  TODAS as skills elegíveis (não sorteio ponderado), agora também sem o gate de ícone
+  (`BuildAvailableSkills(..., requireIcon: false)` — skill sem ícone re-adicionado ainda aparece,
+  com card placeholder + nome). Lembrar de desligar os dois de volta (`false`/`true`) quando
+  terminar de testar, pra voltar ao fluxo real de sorteio.
+
+- 2026-07-21: **Speed System unificado — personagens e pets numa única corrida de speed
+  compartilhada** (pedido do usuário, substitui de vez a baseline fixa de 10 isolada dos pets e o
+  `_speedTieFavorsP1` fixo P1/P2 da correção anterior). `CombatSimulator.SimulateRound` reescrito:
+  todo combatente vivo (2 personagens + todo pet vivo dos 2 lados) acumula o próprio `speedDebt` e
+  gasta contra a MENOR speed entre todos os OUTROS combatentes vivos do campo (comparação direta,
+  não média nem vizinho mais próximo) — generaliza o algoritmo de 2 partidas de sempre pra N
+  participantes. Personagem mantém o mínimo garantido de 1 ação/round; pet continua SEM esse
+  mínimo (só acumula puro, podendo ficar vários rounds sem agir). Novo `PlayerState.speedTieWait`/
+  `PetState.speedTieWait` (contador "rounds desde a última vitória em empate") generaliza o
+  tie-break pra qualquer grupo empatado, não só P1 vs P2 — 2 empatados alternam A,B,A,B..., 3+
+  viram um round-robin natural. Validado (script isolado, não só cálculo manual) contra: luta sem
+  pet (idêntico ao algoritmo antigo), Javali(2)/Rato(9)/Personagem(10)/Macaco(30) e
+  Personagem(20)/Pet(2) — números batendo com o esperado nos 3 casos, incluindo o efeito colateral
+  intencional (pet lento em campo acelera as ações de AMBOS os personagens, não só do pet). Ver
+  CLAUDE.md → Speed System e PETS.md pro detalhe completo.
+
+- 2026-07-21: **Popup de detalhe do pet reescrito — formato "card de referência" My Brute**
+  (`CharacterPanel.ShowPetDetail`) — antes mostrava só o tier atual num parágrafo corrido, sem
+  Odds/HP malus/Initiative; agora mesmo layout do popup de arma (ícone+nome+linhas de stat, sem
+  scroll), com STR/AGI/SPD/HP em tripla `[T1/T2/T3]` (tier atual destacado, reaproveitando
+  `ResolveTierFamily`/`FormatTierTriplet`/`AddTieredBonusRow` já existentes pra arma) e Odds/HP
+  malus/Initiative como valor único (fixos por tipo, não escalam por tier). Bônus especiais
+  nomeados (Combo/Evasão/Precisão/Desarme/Combo do oponente/Block do oponente) só aparecem se o
+  pet realmente usar aquele campo. Sem linha "Dano" (campo removido, ver acima). Sem prefab novo.
+
+- 2026-07-21: **Bug real corrigido — empate de speed/initiative entre P1 e P2 sempre favorecia
+  P1 em todo round da luta** (reportado como "pets com Speed igual/próxima não alternam ataques,
+  um lado bate várias vezes seguidas antes do outro agir uma vez") — `CombatSimulator.
+  SimulateRound` usava `_p1.speed >= _p2.speed` só nos casos DE VERDADE empatados (não em
+  qualquer desempate); como esse empate não muda durante o combate, o mesmo lado sempre agia
+  primeiro round após round, e como pets seguem a mesma ordem `firstAttacker`/`secondAttacker`
+  do dono, o efeito cascateava pra eles também. Novo `_speedTieFavorsP1` (bool, determinístico —
+  sem RNG, preserva replay) alterna a cada round genuinamente empatado; desempates por
+  initiative/speed diferentes continuam idênticos a antes. Ver CLAUDE.md → Speed System.
+
+- 2026-07-21: **Dano do pet agora deriva de STR, campo `damage` removido de `PetData`/`PetState`**
+  (pedido do usuário) — `CombatSimulator.SimulatePetHit` calcula `Round(str * 0.45)` em vez de
+  ler um valor fixo por tier; multiplicador `0.45` calibrado contra teste real em jogo (Rato
+  3/4/5, Macaco 11/13/15, Javali 21/23/25 — resolve de quebra o Javali "fraco" no late game, já
+  que `ApplyLevelScaling` escala STR dele automaticamente). `PetTierGenerator.cs` e os 9 assets
+  em `Assets/ScriptableObjects/Pets/` também tiveram o campo `damage` removido. Ver PETS.md pro
+  histórico completo (substitui a decisão em aberto registrada em 2026-07-17).
+
 - 2026-07-21: **Docs sincronizados com o roadmap** — `ROADMAP_FUTURO.md` Fase 4: marcados `[x]`
   Sistema de diamantes, Sistema de energia com limite diário, Precificação dos pacotes e Reset de
   Level Up (com nota de divergência de cada um — desenho final ficou diferente do texto original);

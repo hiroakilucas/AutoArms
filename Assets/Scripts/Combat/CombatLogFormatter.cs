@@ -13,16 +13,45 @@ public static class CombatLogFormatter
         // Pets (Fase 3) — nome de exibição (Rato/Macaco/Javali) resolvido pelo tipo na lista do
         // dono (p1Pets/p2Pets, passadas pelo CombatSceneLoader a partir de profile.pets); sem
         // essas listas (chamadas antigas, sem os 2 parâmetros novos) cai no fallback "Pet".
+        //
+        // Sufixo "[Dono]" (2026-07-22, pedido do usuário investigando o sistema de iniciativa
+        // ATB) — sem isso, "Macaco" sozinho é ambíguo sempre que os 2 lados têm o mesmo tipo de
+        // pet (ex: P1 e P2 com Macaco): impossível saber pelo texto, numa linha como "[Macaco]
+        // 11 de dano em Macaco", qual dos dois atacou e qual foi o alvo. É só identificação no
+        // log de debug/console — não é o nome de exibição do jogo (WeaponHUD/popups/etc não
+        // usam este método).
         string PetName(int ownerIdx, int petIdx)
         {
             var list = ownerIdx == 0 ? p1Pets : p2Pets;
-            if (list != null && petIdx >= 0 && petIdx < list.Count && list[petIdx] != null)
-                return PetState.DisplayName(list[petIdx].petType);
-            return "Pet";
+            string baseName = (list != null && petIdx >= 0 && petIdx < list.Count && list[petIdx] != null)
+                ? PetState.DisplayName(list[petIdx].petType)
+                : "Pet";
+            return $"{baseName}[{Name(ownerIdx)}]";
         }
 
         var sb = new StringBuilder();
         sb.AppendLine($"========== LOG DE COMBATE: {p1Name} (P1) vs {p2Name} (P2) ==========");
+
+        // Contagem de turnos REAIS por combatente (personagem + cada pet) — pedido do usuário
+        // depois de notar, num teste manual do sistema de iniciativa ATB (2026-07-21), que um
+        // pet estava agindo bem mais que o próprio dono sem isso ficar óbvio sem contar as
+        // linhas "--- Turno de ---" na mão. Impressa como resumo antes do vencedor (ver
+        // CombatEventType.CombatEnd abaixo). Não altera nada da simulação em si — só leitura do
+        // mesmo `events` que já seria formatado de qualquer forma.
+        var turnCounts = new List<KeyValuePair<string, int>>();
+        void AddTurn(string key)
+        {
+            for (int k = 0; k < turnCounts.Count; k++)
+            {
+                if (turnCounts[k].Key == key) { turnCounts[k] = new KeyValuePair<string, int>(key, turnCounts[k].Value + 1); return; }
+            }
+            turnCounts.Add(new KeyValuePair<string, int>(key, 1));
+        }
+        foreach (var ev in events)
+        {
+            if (ev.type == CombatEventType.TurnStart) AddTurn(Name(ev.playerIndex));
+            else if (ev.type == CombatEventType.PetTurnStart) AddTurn(PetName(ev.playerIndex, ev.petIndex));
+        }
 
         for (int i = 0; i < events.Count; i++)
         {
@@ -66,7 +95,7 @@ public static class CombatLogFormatter
                     if (e.targetIsPet)
                     {
                         string petTargetName = PetName(e.targetIndex, e.targetPetIndex);
-                        sb.AppendLine($"  {Name(e.playerIndex)} acerta [{petTargetName}] (pet de {Name(e.targetIndex)}): {e.damage} dano{tag} (HP: {e.newTargetHp}/{e.newTargetMaxHp})");
+                        sb.AppendLine($"  {Name(e.playerIndex)} acerta [{petTargetName}]: {e.damage} dano{tag} (HP: {e.newTargetHp}/{e.newTargetMaxHp})");
                         break;
                     }
 
@@ -101,7 +130,7 @@ public static class CombatLogFormatter
 
                 case CombatEventType.Dodge:
                     sb.AppendLine(e.targetIsPet
-                        ? $"  [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)}) esquiva do ataque de {Name(e.playerIndex)}"
+                        ? $"  [{PetName(e.targetIndex, e.targetPetIndex)}] esquiva do ataque de {Name(e.playerIndex)}"
                         : $"  {Name(e.targetIndex)} esquiva do ataque de {Name(e.playerIndex)}");
                     break;
 
@@ -113,7 +142,7 @@ public static class CombatLogFormatter
 
                 case CombatEventType.Miss:
                     sb.AppendLine(e.targetIsPet
-                        ? $"  {Name(e.playerIndex)} erra o arremesso contra [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)})"
+                        ? $"  {Name(e.playerIndex)} erra o arremesso contra [{PetName(e.targetIndex, e.targetPetIndex)}]"
                         : $"  {Name(e.playerIndex)} erra o arremesso contra {Name(e.targetIndex)}");
                     break;
 
@@ -175,7 +204,7 @@ public static class CombatLogFormatter
 
                 case CombatEventType.HasteAttack:
                 {
-                    string hasteTargetName = e.targetIsPet ? $"[{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)})" : Name(e.targetIndex);
+                    string hasteTargetName = e.targetIsPet ? $"[{PetName(e.targetIndex, e.targetPetIndex)}]" : Name(e.targetIndex);
                     if (e.isDodged)
                         sb.AppendLine($"  {Name(e.playerIndex)} ativa HASTE — {hasteTargetName} esquiva do dash");
                     else if (e.isBlocked)
@@ -189,7 +218,7 @@ public static class CombatLogFormatter
 
                 case CombatEventType.PiledriverAttack:
                     sb.AppendLine(e.targetIsPet
-                        ? $"  {Name(e.playerIndex)} ativa PILEDRIVER e acerta [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)}): {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newTargetHp}/{e.newTargetMaxHp})"
+                        ? $"  {Name(e.playerIndex)} ativa PILEDRIVER e acerta [{PetName(e.targetIndex, e.targetPetIndex)}]: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newTargetHp}/{e.newTargetMaxHp})"
                         : $"  {Name(e.playerIndex)} ativa PILEDRIVER e acerta {Name(e.targetIndex)}: {e.damage} dano{(e.isCrit ? " [CRÍTICO]" : "")} (HP: {e.newHp}/{e.maxHp})");
                     break;
 
@@ -252,16 +281,38 @@ public static class CombatLogFormatter
 
                 case CombatEventType.VampirismAttack:
                     sb.AppendLine(e.targetIsPet
-                        ? $"  {Name(e.playerIndex)} ativa VAMPIRISM e morde [{PetName(e.targetIndex, e.targetPetIndex)}] (pet de {Name(e.targetIndex)}, mordida garantida): {e.damage} dano (HP: {e.newTargetHp}/{e.newTargetMaxHp}) e cura {e.healAmount} HP (HP: {e.newAttackerHp})"
+                        ? $"  {Name(e.playerIndex)} ativa VAMPIRISM e morde [{PetName(e.targetIndex, e.targetPetIndex)}] (mordida garantida): {e.damage} dano (HP: {e.newTargetHp}/{e.newTargetMaxHp}) e cura {e.healAmount} HP (HP: {e.newAttackerHp})"
                         : $"  {Name(e.playerIndex)} ativa VAMPIRISM e morde {Name(e.targetIndex)} (mordida garantida): {e.damage} dano (HP: {e.newDefenderHp}) e cura {e.healAmount} HP (HP: {e.newAttackerHp})");
                     break;
 
+                case CombatEventType.CombatStart:
+                {
+                    var parts = new List<string>
+                    {
+                        $"{p1Name} speed={e.p1Speed} (initiative={e.p1Initiative})",
+                        $"{p2Name} speed={e.p2Speed} (initiative={e.p2Initiative})",
+                    };
+                    if (e.p1PetSpeeds != null)
+                        for (int j = 0; j < e.p1PetSpeeds.Count; j++)
+                            parts.Add($"{PetName(0, j)} (pet de {p1Name}) speed={e.p1PetSpeeds[j]}");
+                    if (e.p2PetSpeeds != null)
+                        for (int j = 0; j < e.p2PetSpeeds.Count; j++)
+                            parts.Add($"{PetName(1, j)} (pet de {p2Name}) speed={e.p2PetSpeeds[j]}");
+                    sb.AppendLine($"[Iniciativa] limiar={e.initiativeThreshold} | {string.Join(" | ", parts)}");
+                    break;
+                }
+
                 case CombatEventType.CombatEnd:
+                    sb.AppendLine("--- Resumo de turnos por combatente ---");
+                    foreach (var kv in turnCounts)
+                        sb.AppendLine($"  {kv.Key}: {kv.Value} turno(s)");
                     sb.AppendLine($"========== VENCEDOR: {Name(e.playerIndex)} ==========");
                     break;
 
                 case CombatEventType.PetTurnStart:
-                    sb.AppendLine($"--- Turno de {PetName(e.playerIndex, e.petIndex)} (pet de {Name(e.playerIndex)}) ---");
+                    // "(pet de {Name})" removido (2026-07-22) — redundante desde que PetName já
+                    // embute "[Dono]" no próprio nome.
+                    sb.AppendLine($"--- Turno de {PetName(e.playerIndex, e.petIndex)} ---");
                     break;
 
                 case CombatEventType.PetAttack:

@@ -57,6 +57,16 @@ public static class ReplayEventDTOMap
         if (e.shieldIntercept) map["shieldIntercept"] = true;
         if (e.petShieldAbsorb) map["petShieldAbsorb"] = true;
 
+        // CombatStart only (2026-07-21, sistema de iniciativa ATB) — só emitido 1x por luta,
+        // então o custo de sempre checar != 0 aqui é irrelevante.
+        if (e.p1Speed != 0) map["p1Speed"] = e.p1Speed;
+        if (e.p2Speed != 0) map["p2Speed"] = e.p2Speed;
+        if (e.p1Initiative != 0) map["p1Initiative"] = e.p1Initiative;
+        if (e.p2Initiative != 0) map["p2Initiative"] = e.p2Initiative;
+        if (e.initiativeThreshold != 0) map["initiativeThreshold"] = e.initiativeThreshold;
+        if (e.p1PetSpeeds != null && e.p1PetSpeeds.Count > 0) map["p1PetSpeeds"] = IntListToObjects(e.p1PetSpeeds);
+        if (e.p2PetSpeeds != null && e.p2PetSpeeds.Count > 0) map["p2PetSpeeds"] = IntListToObjects(e.p2PetSpeeds);
+
         return map;
     }
 
@@ -97,6 +107,13 @@ public static class ReplayEventDTOMap
         newTargetMaxHp = GetInt(map, "newTargetMaxHp"),
         shieldIntercept = GetBool(map, "shieldIntercept"),
         petShieldAbsorb = GetBool(map, "petShieldAbsorb"),
+        p1Speed = GetInt(map, "p1Speed"),
+        p2Speed = GetInt(map, "p2Speed"),
+        p1Initiative = GetInt(map, "p1Initiative"),
+        p2Initiative = GetInt(map, "p2Initiative"),
+        initiativeThreshold = GetInt(map, "initiativeThreshold"),
+        p1PetSpeeds = GetIntList(map, "p1PetSpeeds"),
+        p2PetSpeeds = GetIntList(map, "p2PetSpeeds"),
     };
 
     // Mesmos helpers defensivos de CharacterDTOMap — valores vindos do Firestore chegam como

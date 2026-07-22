@@ -144,30 +144,46 @@ public class PetCombatController : MonoBehaviour
         transform.localScale = scale;
     }
 
-    // Sequência completa de ataque do pet: corre até o alvo, ataca, e volta ao spawn em
-    // pêndulo. `onImpact` é invocado uma única vez no momento de impacto/esquiva — quem chama
+    // Um hit de ataque do pet — 1x por evento PetAttack (1º hit do turno OU hit extra de
+    // combo). `onImpact` é invocado uma única vez no momento de impacto/esquiva — quem chama
     // (CombatPlayer) já sabe se foi hit ou dodge (via CombatEvent) e decide ali dentro: aplicar
     // dano + popup + Hurt no alvo (hit) ou PlayJump + SpawnDodge no alvo (dodge). Knockback do
     // alvo (0.3f, metade do normal) também é responsabilidade do chamador, que tem a
     // referência do alvo.
-    public IEnumerator PlayAttackSequence(Vector3 target, bool isDodged, int damage, System.Action onImpact, float runSpeed = 6f, float comboDelay = 0.2f, float jumpHeight = 1.2f)
+    //
+    // `reposition` (2026-07-22, substitui a versão anterior que SEMPRE corria até o alvo e
+    // voltava ao spawn a cada hit, inclusive hits de combo dentro do MESMO turno — bug real
+    // reportado pelo usuário: "o macaco volta pro ponto inicial e corre de novo" a cada hit de
+    // um combo de 3-4, em vez de ficar parado batendo, como o personagem já faz via
+    // CombatPlayer.RepositionIfNeeded). Quando `false` (hit de combo já perto o suficiente do
+    // alvo — decidido pelo chamador, mesmo threshold de 0.3 unidades do personagem), pula a
+    // corrida e ataca do lugar onde já está. O retorno ao spawn NÃO acontece mais aqui — ver
+    // PlayReturnToSpawn, chamado 1x só por turno, no PetTurnEnd.
+    public IEnumerator PlayAttackHit(Vector3 target, bool reposition, bool isDodged, int damage, System.Action onImpact, float runSpeed = 6f, float comboDelay = 0.2f)
     {
         FlipToward(target);
-        animController.PlayRun(true);
-        yield return RunToTarget(target, runSpeed);
+        if (reposition)
+        {
+            animController.PlayRun(true);
+            yield return RunToTarget(target, runSpeed);
+            animController.PlayRun(false);
+        }
 
-        animController.PlayRun(false);
         animController.PlaySlash();
         yield return new WaitForSeconds(comboDelay);
 
         onImpact?.Invoke();
 
         yield return new WaitForSeconds(comboDelay);
+    }
 
-        // Retorno em pêndulo (mesmo padrão visual do jump-back dos personagens no TurnEnd) —
-        // vira pra direção do spawn (de costas pro alvo que acabou de atacar), salta em arco
-        // com a animação Jumping, e só ao pousar restaura a direção de descanso original
-        // (FlipToInitial) — sem isso o pet ficava de costas indefinidamente depois do 1º ataque.
+    // Retorno ao spawn em pêndulo (2026-07-22, extraído de PlayAttackSequence) — chamado 1x por
+    // turno, no PetTurnEnd, em vez de a cada hit (ver PlayAttackHit acima). Mesmo padrão visual
+    // de sempre: vira pra direção do spawn (de costas pro alvo que acabou de atacar), salta em
+    // arco com a animação Jumping, e só ao pousar restaura a direção de descanso original
+    // (FlipToInitial) — sem isso o pet ficava de costas indefinidamente depois do último ataque.
+    public IEnumerator PlayReturnToSpawn(float runSpeed = 6f, float jumpHeight = 1.2f)
+    {
         FlipToward(spawnPosition);
         animController.PlayJump();
         yield return ReturnToSpawn(runSpeed, jumpHeight);
