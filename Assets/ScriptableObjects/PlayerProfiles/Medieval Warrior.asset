@@ -25,8 +25,8 @@ MonoBehaviour:
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 65
-  str: 4
+  maxHealth: 70
+  str: 3
   agility: 4
   speed: 5
   armor: 0
@@ -41,6 +41,7 @@ MonoBehaviour:
   hitSpeed: 1
   skills: []
   pets: []
+  caseUnlocksResolved: 0
   level: 1
   winRate: 0
   xpCurrent: 0

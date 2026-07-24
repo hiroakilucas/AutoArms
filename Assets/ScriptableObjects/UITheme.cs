@@ -47,4 +47,20 @@ public class UITheme : ScriptableObject
         ColorUtility.TryParseHtmlString(hex, out var color);
         return color;
     }
+
+    // Helper (2026-07-23, sistema de compra de personagens/case opening) — centraliza o mapeamento
+    // CharacterRarity → cor, em vez de cada tela repetir o próprio switch (mesmo espírito do
+    // ShopController.BuildItemData, que já lê rarityRare/Legendary/Immortal diretamente).
+    public Color RarityColor(CharacterRarity rarity)
+    {
+        switch (rarity)
+        {
+            case CharacterRarity.Normal: return rarityNormal;
+            case CharacterRarity.Uncommon: return rarityUncommon;
+            case CharacterRarity.Rare: return rarityRare;
+            case CharacterRarity.Legendary: return rarityLegendary;
+            case CharacterRarity.Immortal: return rarityImmortal;
+            default: return rarityNormal;
+        }
+    }
 }

@@ -1772,16 +1772,49 @@ public class CharacterPanel : MonoBehaviour
     // formatados em vez de description/effectText, já que não existe `description`/`effectText`
     // em `PetData` (pet não tem texto temático, só números). `icon` vem de quem chama
     // (`SelectOpponentController` tem os sprites de pet, `CharacterPanel` não).
+    // Reescrito (2026-07-21, pedido do usuário — formato "card de referência" My Brute). Mesmo
+    // layout/constantes do popup de arma (ícone+nome+linhas de stat, sem scroll, altura dinâmica
+    // calculada pela contagem real de linhas) em vez do parágrafo corrido de antes — reaproveita
+    // ResolveTierFamily/FormatTierTriplet/AddPopupStatRow/AddTieredBonusRow (este último já era
+    // 100% genérico, sem nenhuma referência a WeaponData no corpo, então serve pra pet sem
+    // duplicar nada). Odds/HP malus/Initiative são FIXOS por TIPO de pet — não escalam por tier
+    // (ver PETS.md), por isso aparecem como valor único, não tripla `[T1/T2/T3]` (diferente de
+    // STR/AGI/SPD/HP, que escalam de verdade). Sem linha "Dano" — campo `damage` removido de
+    // `PetData` (dano deriva de STR direto, ver PETS.md). Bônus especiais nomeados
+    // (comboRate/evasionBase/accuracyBonus/disarmRate/comboDebuff/blockDebuff) só aparecem se
+    // != 0 pra esse pet (`AddTieredBonusRow`) — mesma regra "só o que esse pet realmente usa"
+    // (Javali mostra os 6, Macaco 2, Rato 1), sem precisar checar `petType` explicitamente.
     public void ShowPetDetail(PetData data, Sprite icon)
     {
         ClearPopupContent();
         _popupOverlayGo.SetActive(true);
 
-        float contentWidthPx = SkillPopupWidth * SkillPopupContentWidthFraction;
+        if (data == null)
+        {
+            BuildPopupIcon(icon, 3);
+            var missingGo = new GameObject("Body");
+            missingGo.transform.SetParent(_popupContentRoot, false);
+            missingGo.AddComponent<RectTransform>();
+            var missingTxt = missingGo.AddComponent<TextMeshProUGUI>();
+            missingTxt.text = "Sem dados disponíveis.";
+            missingTxt.fontSize = _bottomAnchored ? 35 : 20;
+            missingTxt.color = TextColor;
+            missingTxt.alignment = TextAlignmentOptions.Center;
+            _popupPanelRt.sizeDelta = new Vector2(WeaponPopupWidth, WeaponPopupMinHeight);
+            _popupPanelRt.anchoredPosition = Vector2.zero;
+            return;
+        }
 
-        // Tier de verdade agora (2026-07-16) — antes era hardcoded em 3 (só pra pegar a borda
-        // dourada), já que não existia tier real nenhum pra pet.
-        BuildPopupIcon(icon, data != null ? data.tier : 3);
+        var (t1, t2, t3) = ResolveTierFamily(data);
+
+        int rowCount = 7 + CountActivePetBonusRows(data); // Odds/HP malus/Initiative/STR/AGI/SPD/HP + bônus condicionais
+        float statsHeight = rowCount * WeaponPopupStatRowHeight + Mathf.Max(0, rowCount - 1) * WeaponPopupStatRowSpacing;
+        float contentHeight = WeaponPopupHeaderHeight + statsHeight + 56f;
+        float panelHeight = Mathf.Max(contentHeight / 0.86f, WeaponPopupMinHeight);
+        _popupPanelRt.sizeDelta = new Vector2(WeaponPopupWidth, panelHeight);
+        _popupPanelRt.anchoredPosition = Vector2.zero;
+
+        BuildPopupIcon(icon, data.tier);
 
         var nameGo = new GameObject("Name");
         nameGo.transform.SetParent(_popupContentRoot, false);
@@ -1791,42 +1824,69 @@ public class CharacterPanel : MonoBehaviour
         nrt.anchoredPosition = new Vector2(0f, SkillPopupNameOffsetY);
         nrt.sizeDelta = new Vector2(0f, SkillPopupNameHeight);
         var nameTxt = nameGo.AddComponent<TextMeshProUGUI>();
-        nameTxt.text = data != null ? PetState.DisplayName(data.petType) : "?";
+        nameTxt.text = PetState.DisplayName(data.petType);
         nameTxt.fontSize = _bottomAnchored ? 40 : 28; nameTxt.fontStyle = FontStyles.Bold;
         nameTxt.color = _theme.currencyGold;
         nameTxt.alignment = TextAlignmentOptions.Center;
 
-        string desc = data == null
-            ? "Sem dados disponíveis."
-            : $"HP {data.hp}   ·   STR {data.str:F0}   ·   AGI {data.agility}   ·   SPD {data.speed}\n\n" +
-              $"Dano por golpe: {data.damage}\n" +
-              $"Chance de combo: {data.comboRate:P0}   ·   Evasão: {data.evasionBase:P0}" +
-              (data.accuracyBonus > 0f ? $"   ·   Precisão: {data.accuracyBonus:P0}" : "") +
-              (data.disarmRate > 0f ? $"   ·   Desarme: {data.disarmRate:P0}" : "") +
-              (data.comboDebuff < 0f ? $"\nCombo do oponente: {data.comboDebuff:P0}" : "") +
-              (data.blockDebuff < 0f ? $"   ·   Block do oponente: {data.blockDebuff:P0}" : "");
+        var statsAreaGo = new GameObject("StatsArea");
+        statsAreaGo.transform.SetParent(_popupContentRoot, false);
+        var saRt = statsAreaGo.AddComponent<RectTransform>();
+        saRt.anchorMin = new Vector2(0f, 0f); saRt.anchorMax = new Vector2(1f, 1f);
+        saRt.offsetMin = Vector2.zero; saRt.offsetMax = new Vector2(0f, -WeaponPopupHeaderHeight);
+        var vlg = statsAreaGo.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = WeaponPopupStatRowSpacing;
+        vlg.childControlWidth = true; vlg.childControlHeight = true;
+        vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
+        Transform statsContent = statsAreaGo.transform;
 
-        var bodyGo = new GameObject("Body");
-        bodyGo.transform.SetParent(_popupContentRoot, false);
-        bodyGo.AddComponent<RectTransform>();
-        var bodyTxt = bodyGo.AddComponent<TextMeshProUGUI>();
-        bodyTxt.enableWordWrapping = true;
-        bodyTxt.fontSize = _bottomAnchored ? 35 : 20;
-        bodyTxt.color = TextColor;
-        bodyTxt.alignment = TextAlignmentOptions.TopLeft;
-        bodyTxt.text = desc;
-        float descHeight = bodyTxt.GetPreferredValues(contentWidthPx, 0f).y;
+        Color orange = _theme.primaryActionAlt;
 
-        float contentHeight = SkillPopupHeaderHeight + descHeight + SkillPopupBottomPadding;
-        float panelHeight = Mathf.Max(contentHeight / SkillPopupContentHeightFraction, SkillPopupMinHeight);
-        _popupPanelRt.sizeDelta = new Vector2(SkillPopupWidth, panelHeight);
-        _popupPanelRt.anchoredPosition = Vector2.zero;
+        // Odds já vem armazenado em pontos percentuais no asset (1.92 = "1.92%", não 0.0192 —
+        // confirmado nos 9 .asset em disco), diferente de HP malus (fração 0-1, :P0 correto).
+        AddPopupStatRow(statsContent, "Odds", $"{data.odds:0.##}%");
+        AddPopupStatRow(statsContent, "HP malus", $"{data.hpMalusPercent:P0}");
+        AddPopupStatRow(statsContent, "Initiative", $"{data.initiative:0}");
+        AddPopupStatRow(statsContent, "Strength",
+            FormatTierTriplet(t1?.str, t2?.str, t3?.str, data.tier, v => $"{v:0}", orange));
+        AddPopupStatRow(statsContent, "Agility",
+            FormatTierTriplet(NullableInt(t1?.agility), NullableInt(t2?.agility), NullableInt(t3?.agility), data.tier, v => $"{v:0}", orange));
+        AddPopupStatRow(statsContent, "Speed",
+            FormatTierTriplet(NullableInt(t1?.speed), NullableInt(t2?.speed), NullableInt(t3?.speed), data.tier, v => $"{v:0}", orange));
+        AddPopupStatRow(statsContent, "HP",
+            FormatTierTriplet(NullableInt(t1?.hp), NullableInt(t2?.hp), NullableInt(t3?.hp), data.tier, v => $"{v:0}", orange));
 
-        var brt = bodyGo.GetComponent<RectTransform>();
-        brt.anchorMin = new Vector2(0f, 1f); brt.anchorMax = new Vector2(1f, 1f);
-        brt.pivot = new Vector2(0.5f, 1f);
-        brt.anchoredPosition = new Vector2(0f, -SkillPopupHeaderHeight);
-        brt.sizeDelta = new Vector2(0f, descHeight);
+        AddTieredBonusRow(statsContent, "Combo",              data.comboRate,    t1?.comboRate,    t2?.comboRate,    t3?.comboRate,    data.tier);
+        AddTieredBonusRow(statsContent, "Evasão",             data.evasionBase,  t1?.evasionBase,  t2?.evasionBase,  t3?.evasionBase,  data.tier);
+        AddTieredBonusRow(statsContent, "Precisão",           data.accuracyBonus,t1?.accuracyBonus,t2?.accuracyBonus,t3?.accuracyBonus,data.tier);
+        AddTieredBonusRow(statsContent, "Desarme",            data.disarmRate,   t1?.disarmRate,   t2?.disarmRate,   t3?.disarmRate,   data.tier);
+        AddTieredBonusRow(statsContent, "Combo do oponente",  data.comboDebuff,  t1?.comboDebuff,  t2?.comboDebuff,  t3?.comboDebuff,  data.tier);
+        AddTieredBonusRow(statsContent, "Block do oponente",  data.blockDebuff,  t1?.blockDebuff,  t2?.blockDebuff,  t3?.blockDebuff,  data.tier);
+    }
+
+    // Quantos dos 6 bônus nomeados esse pet vai realmente mostrar (!= 0) — mesmo espírito de
+    // CountActiveBonusRows (armas), usado só pra calcular a altura dinâmica do popup.
+    private static int CountActivePetBonusRows(PetData d)
+    {
+        int count = 0;
+        if (d.comboRate != 0f) count++;
+        if (d.evasionBase != 0f) count++;
+        if (d.accuracyBonus != 0f) count++;
+        if (d.disarmRate != 0f) count++;
+        if (d.comboDebuff != 0f) count++;
+        if (d.blockDebuff != 0f) count++;
+        return count;
+    }
+
+    // Sobe previousTier até achar o T1, desce por nextTier até o T3 — mesmo padrão de
+    // ResolveTierFamily(WeaponData) acima, PetData tem os mesmos dois campos.
+    private static (PetData t1, PetData t2, PetData t3) ResolveTierFamily(PetData p)
+    {
+        PetData t1 = p;
+        while (t1.previousTier != null) t1 = t1.previousTier;
+        PetData t2 = t1.nextTier;
+        PetData t3 = t2 != null ? t2.nextTier : null;
+        return (t1, t2, t3);
     }
 
     // Colore cada valor dentro de "[v1/v2/v3]" no effectText — o segmento do tier atualmente
@@ -2116,7 +2176,18 @@ public class CharacterPanel : MonoBehaviour
     private void RefreshAll()
     {
         var p = _overrideProfile != null ? _overrideProfile : _holder?.currentProfile;
-        if (p == null) { _compactInfo.name.text = "—"; _expandedInfo.name.text = "—"; return; }
+        if (p == null)
+        {
+            // Bug real corrigido (2026-07-25, NullReferenceException reportada pelo usuário) —
+            // no modo `_bottomAnchored` (gaveta mobile, único uso: MainMenuController) `refs.name`
+            // fica intencionalmente null (ver BuildInfoBlock, "sem nome/winrate" nesse modo) - o
+            // guard antigo assumia `_compactInfo.name`/`_expandedInfo.name` sempre existirem,
+            // travando aqui sempre que currentProfile chegasse nulo (ver SelectedProfileHolder -
+            // instância runtime de case opening sem referência estável entre sessões).
+            if (_compactInfo.name != null) _compactInfo.name.text = "—";
+            if (_expandedInfo.name != null) _expandedInfo.name.text = "—";
+            return;
+        }
 
         // Placeholder simbólico (2026-07-07): profile.winRate nunca é escrito em lugar nenhum
         // hoje — não existe contador de vitórias/batalhas totais no projeto ainda. Usuário

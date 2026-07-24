@@ -125,6 +125,13 @@ public class CombatResultPanel : MonoBehaviour
     private static void ApplyBonus(LevelUpOption opt, PlayerProfile profile)
     {
         LevelUpEngine.ApplyOption(opt, profile);
+
+        // Resiliência (2026-07-25, bug real corrigido) — limpa a escolha pendente só AGORA, que
+        // o jogador de fato escolheu; ver PlayerProfile.hasPendingLevelUpChoice/
+        // AttackSequencer.OnCombatEnd/ResumePendingLevelUpChoiceIfAny abaixo.
+        profile.hasPendingLevelUpChoice = false;
+        profile.pendingLevelUpBoxes.Clear();
+        profile.pendingLevelUpRerollsUsed = 0;
 #if UNITY_EDITOR
         UnityEditor.EditorUtility.SetDirty(profile);
 #endif
@@ -134,23 +141,125 @@ public class CombatResultPanel : MonoBehaviour
         LocalSaveService.Save(profile);
     }
 
+    // Converte um LevelUpOption (sorteado agora, ou já resolvido de volta de um rascunho salvo)
+    // pro shape serializável persistido em PlayerProfile.pendingLevelUpBoxes — mesmo espírito de
+    // CharacterUnlockEngine.ToServerShape, mas cobrindo também Kind.Attribute (que os unlocks do
+    // case opening nunca produzem).
+    private static PendingLevelUpBoxRef ToPendingBoxRef(LevelUpOption opt)
+    {
+        switch (opt.kind)
+        {
+            case LevelUpOption.Kind.Attribute:
+                return new PendingLevelUpBoxRef { kind = "attribute", attrIndex = opt.attrIndex };
+            case LevelUpOption.Kind.Skill:
+                return new PendingLevelUpBoxRef
+                {
+                    kind = "skill",
+                    name = opt.skill != null ? opt.skill.skillName : "",
+                    tier = opt.skill != null ? opt.skill.tier : 1,
+                };
+            case LevelUpOption.Kind.Weapon:
+                return new PendingLevelUpBoxRef
+                {
+                    kind = "weapon",
+                    name = opt.weapon != null ? WeaponNameUtil.StripWeaponTierSuffix(opt.weapon.weaponName) : "",
+                    tier = opt.weapon != null ? opt.weapon.tier : 1,
+                };
+            case LevelUpOption.Kind.Pet:
+                return new PendingLevelUpBoxRef
+                {
+                    kind = "pet",
+                    name = opt.petData != null ? opt.petData.petType.ToString() : "",
+                    tier = opt.petData != null ? opt.petData.tier : 1,
+                };
+            default:
+                return new PendingLevelUpBoxRef { kind = "" };
+        }
+    }
+
+    // Caminho inverso — resolve um PendingLevelUpBoxRef salvo de volta pro LevelUpOption real
+    // (com referência de asset), usando os mesmos databases/pool já carregados por quem chama
+    // (ShowLevelUpChoice em fluxo normal, ou ResumePendingLevelUpChoiceIfAny ao retomar).
+    private static LevelUpOption? ResolvePendingBox(PendingLevelUpBoxRef box, SkillDatabase skillDb,
+        WeaponData[] allWeaponsPool, PetData[] petPool)
+    {
+        if (box == null) return null;
+        switch (box.kind)
+        {
+            case "attribute":
+                return new LevelUpOption { kind = LevelUpOption.Kind.Attribute, attrIndex = box.attrIndex };
+            case "skill":
+            {
+                var skill = skillDb != null ? skillDb.FindByFamilyNameAndTier(box.name, box.tier) : null;
+                return skill != null ? new LevelUpOption { kind = LevelUpOption.Kind.Skill, skill = skill } : (LevelUpOption?)null;
+            }
+            case "weapon":
+            {
+                WeaponData found = null;
+                if (allWeaponsPool != null)
+                    foreach (var w in allWeaponsPool)
+                        if (w != null && w.tier == box.tier && WeaponNameUtil.StripWeaponTierSuffix(w.weaponName) == box.name) { found = w; break; }
+                return found != null ? new LevelUpOption { kind = LevelUpOption.Kind.Weapon, weapon = found } : (LevelUpOption?)null;
+            }
+            case "pet":
+            {
+                PetData found = null;
+                if (petPool != null)
+                    foreach (var p in petPool)
+                        if (p != null && p.tier == box.tier && p.petType.ToString() == box.name) { found = p; break; }
+                return found != null ? new LevelUpOption { kind = LevelUpOption.Kind.Pet, petData = found } : (LevelUpOption?)null;
+            }
+            default:
+                return null;
+        }
+    }
+
+    // Persiste o rascunho ATUAL das N caixas (chamado logo após sortear ou resortear via "Novo
+    // Sorteio", ANTES de mostrar/atualizar os cards) — sobrevive a fechar o app antes do jogador
+    // escolher. Não chamado ao reconstruir a partir de um rascunho JÁ salvo (ver
+    // ResumePendingLevelUpChoiceIfAny) — nesse caso não há nada novo pra persistir.
+    private static void PersistPendingLevelUpBoxes(PlayerProfile profile, List<LevelUpOption> options, int rerollsUsed)
+    {
+        profile.hasPendingLevelUpChoice = true;
+        profile.pendingLevelUpBoxes = new List<PendingLevelUpBoxRef>();
+        foreach (var opt in options)
+            profile.pendingLevelUpBoxes.Add(ToPendingBoxRef(opt));
+        profile.pendingLevelUpRerollsUsed = rerollsUsed;
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(profile);
+#endif
+        LocalSaveService.Save(profile);
+    }
+
     // TESTE: mostra todas as skills/armas/atributos disponíveis em vez de sortear as caixas reais.
-    // Desligado (2026-07-21, pedido do usuário) — necessário pra ver a diferenciação Caixa 1
-    // (status base) vs. Caixas 2+ (pool ponderado por odds) implementada em ShowLevelUpChoice
-    // abaixo. Religar só temporariamente se for voltar a testar ícone de skill um por um (ver
-    // CLAUDE.md "Testando skills uma a uma").
+    // Desligada de novo (2026-07-25, pedido do usuário) — precisava estar `false` pra testar a
+    // resiliência do level-up a fechamento abrupto do app (item 3 do plano de teste: progressão
+    // de custo do "Novo Sorteio" sobrevivendo a fechar/reabrir), que só existe na tela real em
+    // pirâmide (ShowLevelUpChoice), não nesta grade de teste. Religar (`true`) se precisar
+    // testar skill nova sem ícone/tier de novo (ver histórico acima).
     private const bool ShowAllOptionsForTesting = false;
 
+    // resumeOptions/resumeRerollsUsed (2026-07-25, bug real corrigido) — preenchidos só por
+    // ResumePendingLevelUpChoiceIfAny, quando o app fechou com esta mesma tela aberta antes do
+    // jogador escolher: reconstrói as MESMAS N caixas (resolvidas de volta de
+    // PlayerProfile.pendingLevelUpBoxes) em vez de sortear de novo, e continua a progressão real
+    // de custo do "Novo Sorteio" (não reinicia pra 50 diamantes de novo). null/0 em todo o resto
+    // do jogo (fluxo normal pós-combate) — comportamento inalterado nesse caminho.
     private static void ShowLevelUpChoice(Transform canvasRoot, PlayerProfile profile,
-        SkillDatabase skillDb, WeaponData[] allWeaponsPool, PetData[] petPool, UITheme theme, System.Action onChosen)
+        SkillDatabase skillDb, WeaponData[] allWeaponsPool, PetData[] petPool, UITheme theme, System.Action onChosen,
+        List<LevelUpOption> resumeOptions = null, int resumeRerollsUsed = 0)
     {
         // Build available option pools
         if (skillDb == null || skillDb.skills == null || skillDb.skills.Count == 0)
             Debug.LogError("[LevelUp] ERRO: SkillDatabase não encontrado ou vazio");
 
-        // requireIcon:true preserva o gate de teste atual (skill só aparece pro jogador se a
-        // raiz T1 já tiver um ícone re-adicionado em Assets/Data/UI/Skills/, ver CLAUDE.md).
-        var availableSkills  = LevelUpEngine.BuildAvailableSkills(profile, skillDb?.skills, requireIcon: true);
+        // requireIcon:false (2026-07-21, pedido do usuário — "libere todas as skills pra eu
+        // testar") — derruba temporariamente o gate de ícone (skill só aparecia se a raiz T1 já
+        // tivesse um ícone re-adicionado em Assets/Data/UI/Skills/, ver CLAUDE.md); skill sem
+        // ícone mostra card com cor placeholder + nome (MakeLevelUpCard já trata `icon == null`
+        // sem erro, mesmo fallback que os bots usam com requireIcon:false). Voltar pra `true`
+        // junto de ShowAllOptionsForTesting=false quando terminar de testar.
+        var availableSkills  = LevelUpEngine.BuildAvailableSkills(profile, skillDb?.skills, requireIcon: false);
         var availableWeapons = LevelUpEngine.BuildAvailableWeapons(profile, allWeaponsPool);
         // Filtro de elegibilidade (2026-07-17): T1 só se não possui nenhum tier deste pet; T2/T3
         // só o `nextTier` do que já possui — mesmo padrão de BuildAvailableSkills/Weapons.
@@ -165,7 +274,12 @@ public class CombatResultPanel : MonoBehaviour
         // N = PlayerProgressionState.LevelUpBoxCount() (2 base + 1 por Slot de Skill comprado na
         // Loja, até 5). Caixa 1 sempre status base (HP/STR/AGI/SPD); Caixas 2..N sorteio ponderado
         // — ver DrawAndBuildCards (local, abaixo) pra regra completa de sorteio/no-repeat.
-        int boxCount = Mathf.Clamp(PlayerProgressionState.LevelUpBoxCount(), 2, 5);
+        // Retomando (resumeOptions != null): usa a contagem REAL salva, não recalcula — evita um
+        // mismatch se PlayerProgressionState mudou entre fechar e reabrir (ex: comprou um slot
+        // novo nesse meio-tempo).
+        int boxCount = resumeOptions != null
+            ? resumeOptions.Count
+            : Mathf.Clamp(PlayerProgressionState.LevelUpBoxCount(), 2, 5);
 
         // Root container covers the whole canvas (renders above result panel as last sibling)
         var root = new GameObject("LevelUpChoiceRoot");
@@ -407,7 +521,9 @@ public class CombatResultPanel : MonoBehaviour
         // (mesmo padrão de WalletService/ShopController, ver ARQUITETURA.md "Moeda premium"):
         // gasto client-writable, placeholder de Fase 1.
         int[] RerollCosts = { 50, 100, 200 };
-        int rerollCount = 0;
+        // Retomando (resumeRerollsUsed): continua do custo real já pago antes de fechar o app,
+        // em vez de voltar pra 50 diamantes de graça (ver comentário de resumeOptions acima).
+        int rerollCount = resumeRerollsUsed;
         // MakeButton sempre registra um listener que invoca `onClick()` sem checar nulo — passar
         // um no-op aqui (em vez de null) evita NullReferenceException nesse listener; o handler
         // de verdade é registrado como um 2º listener via resetBtn.onClick.AddListener abaixo.
@@ -439,9 +555,14 @@ public class CombatResultPanel : MonoBehaviour
             if (spinsRemaining <= 0) resetBtn.interactable = rerollCount < RerollCosts.Length;
         }
 
-        // Sorteia e monta as N caixas do zero — chamado na abertura da tela E a cada clique em
-        // "Novo Sorteio". Caixa 1: sempre status base (HP/STR/AGI/SPD), nunca skill/arma/pet
-        // (pedido do usuário). Caixas 2..N: sorteio ponderado pelos odds reais (LevelUpEngine.
+        // Consumido na 1ª chamada de DrawAndBuildCards (seja usando resumeOptions, seja sorteando
+        // fresco) — toda chamada SEGUINTE (sempre vinda de "Novo Sorteio") sorteia fresco, nunca
+        // mais reaproveita resumeOptions.
+        bool resumeOptionsConsumed = false;
+
+        // Sorteia e monta as N caixas — chamado na abertura da tela E a cada clique em "Novo
+        // Sorteio". Caixa 1: sempre status base (HP/STR/AGI/SPD), nunca skill/arma/pet (pedido do
+        // usuário). Caixas 2..N: sorteio ponderado pelos odds reais (LevelUpEngine.
         // DrawWeightedOption), SEM REPETIR skill/arma/pet já sorteado NESTA MESMA sequência
         // (pedido do usuário, 2026-07-21 — "veio dois feline agility na mesma escolha, não deve
         // se repetir na mesma sequência"; reverte a permissão de repetição da versão anterior) —
@@ -449,26 +570,42 @@ public class CombatResultPanel : MonoBehaviour
         // A fatia residual do sorteio ponderado ainda cai pro mesmo pool de status base da Caixa 1
         // (nenhuma caixa fica vazia); atributos podem repetir entre caixas (não são "itens", só
         // bônus numéricos — fora do escopo do pedido).
+        //
+        // Resiliência (2026-07-25, bug real corrigido): logo após decidir as N caixas (sorteadas
+        // OU herdadas de resumeOptions na 1ª chamada), persiste o rascunho ANTES de montar
+        // qualquer card na tela — sobrevive a fechar o app nesse meio-tempo. Retomar
+        // (resumeOptions != null, só na 1ª chamada) usa o mesmo resultado de antes em vez de
+        // sortear de novo, então não persiste de novo (já está salvo).
         void DrawAndBuildCards()
         {
+            List<LevelUpOption> options;
+            if (!resumeOptionsConsumed && resumeOptions != null)
+            {
+                options = resumeOptions;
+            }
+            else
+            {
+                var usedSkills = new HashSet<SkillData>();
+                var usedWeapons = new HashSet<WeaponData>();
+                var usedPets = new HashSet<PetData>();
+                options = new List<LevelUpOption> { LevelUpEngine.DrawBaseAttributeOption() };
+                for (int i = 1; i < boxCount; i++)
+                {
+                    var skillsPool = availableSkills.FindAll(s => !usedSkills.Contains(s));
+                    var weaponsPool = availableWeapons.FindAll(w => !usedWeapons.Contains(w));
+                    var petsPool = availablePets.FindAll(p => !usedPets.Contains(p));
+                    var opt = LevelUpEngine.DrawWeightedOption(skillsPool, weaponsPool, petsPool);
+                    if (opt.kind == LevelUpOption.Kind.Skill) usedSkills.Add(opt.skill);
+                    else if (opt.kind == LevelUpOption.Kind.Weapon) usedWeapons.Add(opt.weapon);
+                    else if (opt.kind == LevelUpOption.Kind.Pet) usedPets.Add(opt.petData);
+                    options.Add(opt);
+                }
+                PersistPendingLevelUpBoxes(profile, options, rerollCount);
+            }
+            resumeOptionsConsumed = true;
+
             for (int i = cardsRow.transform.childCount - 1; i >= 0; i--)
                 Object.Destroy(cardsRow.transform.GetChild(i).gameObject);
-
-            var usedSkills = new HashSet<SkillData>();
-            var usedWeapons = new HashSet<WeaponData>();
-            var usedPets = new HashSet<PetData>();
-            var options = new List<LevelUpOption> { LevelUpEngine.DrawBaseAttributeOption() };
-            for (int i = 1; i < boxCount; i++)
-            {
-                var skillsPool = availableSkills.FindAll(s => !usedSkills.Contains(s));
-                var weaponsPool = availableWeapons.FindAll(w => !usedWeapons.Contains(w));
-                var petsPool = availablePets.FindAll(p => !usedPets.Contains(p));
-                var opt = LevelUpEngine.DrawWeightedOption(skillsPool, weaponsPool, petsPool);
-                if (opt.kind == LevelUpOption.Kind.Skill) usedSkills.Add(opt.skill);
-                else if (opt.kind == LevelUpOption.Kind.Weapon) usedWeapons.Add(opt.weapon);
-                else if (opt.kind == LevelUpOption.Kind.Pet) usedPets.Add(opt.petData);
-                options.Add(opt);
-            }
 
             spinsRemaining = options.Count;
             resetBtn.interactable = false;
@@ -526,6 +663,119 @@ public class CombatResultPanel : MonoBehaviour
         });
 
         DrawAndBuildCards();
+    }
+
+    // ── Resiliência: retomar escolha de level-up pendente ───────────────────────
+    // (2026-07-25, bug real corrigido — fechar o app com a tela "Escolha 1 bônus" aberta perdia
+    // XP/level/battlesRemaining/bônus da luta inteira, sem chance de retomar. Ver CHANGELOG.md/
+    // ARQUITETURA.md pro desenho completo.)
+    //
+    // Chamado por MainMenuController.Start() a cada carregamento do menu principal — se o
+    // profile do jogador tem uma escolha pendente (AttackSequencer.OnCombatEnd seta
+    // hasPendingLevelUpChoice=true assim que detecta level-up, ANTES de qualquer UI aparecer),
+    // reabre a MESMA tela de escolha agora, fora do contexto de qualquer combate ao vivo. O
+    // overlay opaco que ShowLevelUpChoice/ShowAllOptionsChoice já constroem (raycastTarget=true,
+    // cobre a tela inteira) sozinho já bloqueia clique em QUALQUER botão do menu atrás dele
+    // (Jogar/Chibers/Arsenal/etc.) — não precisa desabilitar cada botão individualmente.
+    //
+    // Não é uma instância viva de CombatResultPanel (não roda ShowRoutine, sem título de vitória/
+    // derrota nem animação de barra de XP) — chama ShowLevelUpChoice diretamente (mesma classe,
+    // método privado acessível), com resumeOptions/resumeRerollsUsed reconstruídos a partir de
+    // PlayerProfile.pendingLevelUpBoxes/pendingLevelUpRerollsUsed.
+    public static void ResumePendingLevelUpChoiceIfAny(PlayerProfile profile, UITheme theme)
+    {
+        if (profile == null || !profile.hasPendingLevelUpChoice) return;
+
+        EnsureEventSystem();
+
+        // Canvas PRÓPRIO/dedicado (2026-07-25, bug real corrigido — reportado pelo usuário: o
+        // painel de detalhe do personagem aparecia aberto no centro da tela em vez do botão "i"
+        // colapsado no canto superior direito) — `FindScreenCanvas()` (usado pelo fluxo normal em
+        // ShowRoutine) devolve literalmente o PRIMEIRO Canvas ScreenSpaceOverlay que
+        // `FindObjectsOfType` encontrar, sem ordem garantida; isso é seguro em 04_CombatScenePVP
+        // (só o Canvas do CombatHUD existe), mas em 01_MainMenu (onde este método roda) já existem
+        // vários Canvas ScreenSpaceOverlay concorrentes (CharacterPanel bottomAnchored,
+        // CurrencyHud, Level/XP e Energia do MainMenuCharacterPreview) — reusar QUALQUER um deles
+        // como pai da tela de escolha inteira (overlay+cards) fazia a ordem de desenho depender de
+        // sibling index dentro de um Canvas alheio, em vez de um sortingOrder próprio e
+        // determinístico. Um Canvas raiz dedicado, criado aqui, elimina essa ambiguidade — mesmo
+        // padrão do `detailPanelGo` (canvas raiz próprio, sortingOrder alto) já usado logo abaixo
+        // dentro de ShowLevelUpChoice.
+        var resumeCanvasGo = new GameObject("LevelUpResumeCanvas");
+        var canvas = resumeCanvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 1000;
+        // Bug real corrigido (2026-07-25, reportado pelo usuário — as 5 caixas de escolha
+        // "estouraram" a tela) — faltava o CanvasScaler aqui. Sem ele, este Canvas cai no modo
+        // default "Constant Pixel Size" (270-405px de card em pixels BRUTOS de tela, sem
+        // escalar), diferente de TODO outro Canvas do projeto (sempre ScaleWithScreenSize +
+        // referenceResolution 1920x1080, ver LoginController/MainMenuController/CharacterPanel/
+        // etc.) — o Canvas que `FindScreenCanvas()` encontrava antes desta correção (Bug 1)
+        // sempre tinha essa configuração "de graça" por ser um Canvas já existente da cena; o
+        // Canvas dedicado criado aqui não herda nada automaticamente.
+        var resumeScaler = resumeCanvasGo.AddComponent<CanvasScaler>();
+        resumeScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        resumeScaler.referenceResolution = new Vector2(1920, 1080);
+        resumeCanvasGo.AddComponent<GraphicRaycaster>();
+
+        // Mesmos databases que AttackSequencer normalmente wireia via Inspector (04_CombatScenePVP)
+        // — aqui, fora da cena de combate, resolvidos via Resources.Load (mesmo padrão de
+        // PlayerProfileConverter/CharacterUnlockEngine). allWeapons/petPool precisam ser um array
+        // FLAT com TODOS os tiers (T1+T2+T3), não só os T1 raiz que os databases guardam — mesmo
+        // formato que AttackSequencer.allWeapons/petPool já usam (Tools > AutoArms > Assign All
+        // Weapon Tiers to AttackSequencer), senão BuildAvailableWeapons/Pets nunca ofereceria T2/T3
+        // pra upgrade num futuro "Novo Sorteio" depois de retomar.
+        var skillDb = Resources.Load<SkillDatabase>("SkillDatabase");
+        var weaponDb = Resources.Load<WeaponDatabase>("WeaponDatabase");
+        var petDb = Resources.Load<PetDatabase>("PetDatabase");
+        var allWeapons = FlattenAllWeaponTiers(weaponDb);
+        var petPool = FlattenAllPetTiers(petDb);
+
+        List<LevelUpOption> resumeOptions = null;
+        if (profile.pendingLevelUpBoxes != null && profile.pendingLevelUpBoxes.Count > 0)
+        {
+            resumeOptions = new List<LevelUpOption>();
+            foreach (var box in profile.pendingLevelUpBoxes)
+            {
+                var opt = ResolvePendingBox(box, skillDb, allWeapons, petPool);
+                if (opt.HasValue) resumeOptions.Add(opt.Value);
+            }
+            // Dado inconsistente (ex: catálogo mudou entre fechar e reabrir) — não arrisca
+            // mostrar menos caixas do que o esperado; cai pro sorteio fresco de novo dentro de
+            // ShowLevelUpChoice (mesma rede de segurança usada em CharacterUnlockEngine).
+            if (resumeOptions.Count != profile.pendingLevelUpBoxes.Count) resumeOptions = null;
+        }
+
+        ShowLevelUpChoice(canvas.transform, profile, skillDb, allWeapons, petPool, theme,
+            // Destrói o Canvas dedicado criado acima junto da escolha (ShowLevelUpChoice só
+            // destrói "root", filho dele — sem isso o GameObject do Canvas ficaria pra sempre na
+            // cena, vazio, depois da escolha feita).
+            onChosen: () => { if (resumeCanvasGo != null) Object.Destroy(resumeCanvasGo); },
+            resumeOptions: resumeOptions, resumeRerollsUsed: profile.pendingLevelUpRerollsUsed);
+    }
+
+    private static WeaponData[] FlattenAllWeaponTiers(WeaponDatabase db)
+    {
+        var list = new List<WeaponData>();
+        if (db?.weapons != null)
+            foreach (var root in db.weapons)
+            {
+                var w = root;
+                while (w != null) { list.Add(w); w = w.nextTier; }
+            }
+        return list.ToArray();
+    }
+
+    private static PetData[] FlattenAllPetTiers(PetDatabase db)
+    {
+        var list = new List<PetData>();
+        if (db?.pets != null)
+            foreach (var root in db.pets)
+            {
+                var p = root;
+                while (p != null) { list.Add(p); p = p.nextTier; }
+            }
+        return list.ToArray();
     }
 
     // Sprites de TODAS as skills/armas/pets do jogo (não só das opções sorteadas) — usado só pra

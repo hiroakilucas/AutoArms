@@ -34,6 +34,30 @@ public class PlayerProfile : ScriptableObject
     [Tooltip("ID estavel de save (2026-07-14). Vazio nos assets pre-autorados de hoje (sem conta ainda) - OpponentId()/LocalSaveService caem pro nome do asset Unity (name) quando vazio, retrocompativel. Passa a ser preenchido de verdade quando existir personagem por conta (Firestore).")]
     public string characterId = "";
 
+    // Marca instancias runtime (ScriptableObject.CreateInstance, nunca um asset do projeto) -
+    // 2026-07-24, sistema de compra de personagens/case opening. Setado por
+    // PlayerProfileConverter.FromOpponentIndexMap/FromCharacterDTO logo apos CreateInstance.
+    // [NonSerialized] pra nunca vazar num asset serializado (nao faz sentido nele, so existe pra
+    // instancias em memoria). Usado por PlayerProfileConverter.CapturePristineIfNeeded/
+    // MarkOwnerScope pra pular o rastreamento de "dono"/snapshot de fabrica nessas instancias -
+    // sem isso, cada instancia runtime (uma por fetch de oponente/roster) vira uma entrada nova
+    // e permanente num Dictionary<PlayerProfile,...> estatico, sem teto (essas instancias nunca
+    // sao reaproveitadas entre contas por construcao, entao nao precisam da protecao cross-conta
+    // que esses dicionarios existem pra dar aos ~72 assets pre-autorados compartilhados).
+    [System.NonSerialized] public bool isRuntimeInstance = false;
+
+    // Nome do asset "molde" de origem (2026-07-25, ver PlayerProfileConverter.FromCharacterDTO) -
+    // só preenchido em instâncias runtime concedidas via case opening (personagem de roster, não
+    // o "original" da conta). [NonSerialized] pelo mesmo motivo de isRuntimeInstance acima - usado
+    // por CharacterSelectController.PopulateCharacterGridRoutine pra NÃO mostrar o card travado do
+    // molde (characterDatabase.unlockedCharacters) quando a conta já possui uma instância jogável
+    // deste mesmo characterTypeId no roster - sem isso, comprar "Anubis" via case exibia DOIS
+    // cards "Anubis" lado a lado (o molde travado + a instância jogável), visualmente idênticos e
+    // fáceis de confundir (bug real reportado pelo usuário: "os chibers que eu comprei vieram
+    // desabilitados" - na verdade era o molde travado, a instância jogável estava em outro lugar
+    // da grade).
+    [System.NonSerialized] public string characterTypeId = "";
+
     [Header("Prefab e Imagem")]
     [Tooltip("Prefab do personagem (deve conter todos os componentes necess�rios para o combate)")]
     public GameObject characterPrefab;
@@ -99,6 +123,63 @@ public class PlayerProfile : ScriptableObject
     // esta lista em si continua sendo uma lista comum, só a lógica de escolha impede duplicar tipo.
     [Header("Pets")]
     public List<PetData> pets = new List<PetData>();
+
+    // Unlocks progressivos de skill/arma/pet concedidos ao ganhar este personagem via case
+    // opening (2026-07-25) - ver CharacterUnlockEngine. Marca que a sequencia de N sorteios
+    // (CharacterUnlockEngine.UnlockCountForRarity) ja rodou por completo pra esta instancia -
+    // impede CharacterSelectController.ResolveCaseUnlocksAsync de rodar de novo (e conceder itens
+    // duplicados) toda vez que o detalhe deste personagem for reaberto. Persistido via
+    // CharacterDTO/CharacterDTOMap (Firestore) - default false pros ~72 assets pre-autorados
+    // (nunca passam por esse fluxo, o campo simplesmente nunca importa pra eles).
+    public bool caseUnlocksResolved = false;
+
+    // Quantos unlocks já foram ACEITOS ("Continuar" clicado) nesta sequência (2026-07-25) - não
+    // dá pra usar skills.Count+weapons.Count+pets.Count como proxy, porque um unlock que evolui
+    // uma família já possuída (ex: 2º unlock repete a mesma skill do 1º, virando T2) NÃO aumenta
+    // esse total. Usado por CharacterSelectController.ResolveCaseUnlocksAsync como ponto de
+    // retomada (`for (i = caseUnlocksAcceptedCount + 1; i <= total; i++)`) - sem isso, fechar o
+    // app no meio da sequência (antes de aceitar o 1º unlock, por exemplo) fazia os unlocks
+    // restantes se perderem pra sempre (reabrir o personagem depois nunca tentava de novo) ou, se
+    // o fluxo reiniciasse do zero sem essa contagem, duplicava os já aceitos. Persistido via
+    // CharacterDTO/CharacterDTOMap (Firestore) - default 0 pros ~72 assets pre-autorados (nunca
+    // passam por esse fluxo, o campo nunca importa pra eles).
+    public int caseUnlocksAcceptedCount = 0;
+
+    // Rascunho do unlock ATUAL, ainda NÃO aceito (2026-07-25, 2ª rodada de bug real corrigido) —
+    // fechar o app enquanto um unlock estava sendo revelado (ex: "Book" sorteado, ainda sem
+    // clicar "Continuar") sorteava um resultado DIFERENTE ao reabrir ("Vampirismo"), em vez de
+    // continuar mostrando o mesmo rascunho — reportado pelo usuário. `pendingUnlockIndex == 0`
+    // = nenhum rascunho pendente (unlock ainda nem foi sorteado desta vez, ou já foi aceito).
+    // kind/name/tier usam o MESMO shape do servidor (rerollUnlock — "skill"/"weapon"/"pet" +
+    // nome de família + tier), resolvido de volta pro LevelUpOption real via
+    // CharacterUnlockEngine.ResolveServerResult (funciona igual pra um resultado vindo do
+    // servidor ou de um sorteio local, ver CharacterUnlockEngine.ToServerShape).
+    public int pendingUnlockIndex = 0;
+    public string pendingUnlockKind = "";
+    public string pendingUnlockName = "";
+    public int pendingUnlockTier = 0;
+
+    // Espelha o contador SERVER-AUTHORITATIVE (`unlockRerollCounts`, ver rerollUnlock.ts) pro
+    // MESMO índice de pendingUnlockIndex — sem isso, retomar sempre reiniciava a UI mostrando "2
+    // refreshes disponíveis" mesmo que o servidor já tivesse contado uso(s) de uma sessão
+    // anterior, causando um "resource-exhausted" inesperado (limite já batido) no refresh
+    // seguinte, com o botão ainda aparecendo habilitado. Atualizado toda vez que um refresh bem-
+    // sucedido muda o rascunho.
+    public int pendingUnlockRerollsUsed = 0;
+
+    // Escolha de level-up de COMBATE ainda NÃO confirmada (2026-07-25, bug real corrigido —
+    // fechar o app com a tela de "Escolha 1 bônus" aberta perdia XP/level/battlesRemaining/bônus
+    // inteiros, sem chance de retomar; ver AttackSequencer.OnCombatEnd/CombatResultPanel).
+    // Sistema DIFERENTE do unlock do case opening acima — este é o sorteio de skill/arma/pet/
+    // status que acontece a cada level-up em combate normal. `hasPendingLevelUpChoice` é setado
+    // (e salvo) já em OnCombatEnd, assim que um level-up é detectado, ANTES até de
+    // CombatResultPanel mostrar qualquer UI; `pendingLevelUpBoxes`/`pendingLevelUpRerollsUsed`
+    // são preenchidos logo depois, quando as N caixas são sorteadas (ou resorteadas via "Novo
+    // Sorteio") — mesmo padrão de rascunho-persistido-antes-de-aceitar dos campos acima. Limpo
+    // só em CombatResultPanel.ApplyBonus, quando o jogador de fato escolhe uma caixa.
+    public bool hasPendingLevelUpChoice = false;
+    public List<PendingLevelUpBoxRef> pendingLevelUpBoxes = new List<PendingLevelUpBoxRef>();
+    public int pendingLevelUpRerollsUsed = 0;
 
     [Header("Progresso")]
     [Tooltip("N�vel atual do personagem")]

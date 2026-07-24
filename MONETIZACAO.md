@@ -130,11 +130,60 @@ Level 1 (não mantém o nível atual) e GERA `nível anterior × CharacterResetS
 (10) moedas, em vez de custar diamante. Popup de confirmação explícita antes de executar (ação
 destrutiva).
 
+## 13. Case opening (compra de personagens, cash + moeda) — implementado 2026-07-23
+
+Reverte a nota "NÃO FAZER AINDA" que existia aqui desde 2026-07-21 — o usuário pediu a
+implementação real da persistência de personagens comprados, com uma tela de "abertura de case"
+estilo CS:GO (roleta horizontal desacelerando até parar no personagem sorteado, sorteado no
+servidor). Ver `ARQUITETURA.md` ("Modelo de roster multi-personagem") pro desenho completo.
+
+- As 3 raridades cash da seção 5 (Raro/Legendary/Imortal) agora compram de verdade — sorteio
+  server-side (Cloud Function `purchaseCase`), sem repetição (exclui personagens já possuídos),
+  concede um documento novo em `users/{uid}/characters`. Limite de compras (10/3/1) continua **por
+  jogador** (`users/{uid}/casePurchases/{packageId}`), não um estoque global.
+- **Novo 4º pacote "Case Geral"** (moeda/diamante, `case_moeda_geral`): pool = todos os
+  personagens de todas as raridades, sorteados pelas `tierWeights` da seção 7 (Normal 68% /
+  Uncommon 20% / Raro 8% / Legendary 3,5% / Imortal 0,5%). Sem limite de compras. Preço em
+  diamantes ajustável em `functions/src/scripts/seedCasePackages.ts` (`currencyCost`).
+  **Distinto** do card "Próximo Personagem" da seção 6 (liberação de slot por moeda escalando
+  100/200/400...) — esse mecanismo continua intocado, sem relação com odds de raridade.
+- Validação de recibo IAP (cash): **mock** por enquanto — a function aceita qualquer
+  `paymentReceipt` não vazio. `// TODO` explícito no código (`purchaseCase.ts`) marcando onde a
+  validação real (App Store Server API / Google Play Developer API) deve entrar antes de
+  produção.
+- Personagem concedido fica persistido de verdade (Firestore), mas ainda **não é jogável** — as
+  telas que listam/selecionam personagem (`02_SelectCharacter`, troca rápida do menu) continuam
+  só lendo os assets pré-autorados do projeto, não o roster do Firestore. Ver a lista de telas
+  pendentes em `ARQUITETURA.md`.
+- **Unlocks progressivos de skill/arma/pet (2026-07-25, corrigido no mesmo dia)** — ao abrir o
+  detalhe do personagem recém-concedido (dentro do mesmo overlay de `02_SelectCharacter`, antes
+  de liberar Selecionar/Fechar), a raridade dele concede N sorteios sequenciais de skill/arma/pet:
+  Normal 1, Uncommon 2, Rare 3, Legendary 4, Immortal 5 (`CharacterUnlockEngine.
+  UnlockCountForRarity`). Cada sorteio escolhe uma FAMÍLIA usando os odds REAIS já existentes por
+  item (`SkillData.odds`/`WeaponData.dropOdds`/`PetData.odds`, mesmos do level-up de combate) —
+  sem escolha do jogador, tudo automático. **Tier concedido é sempre por POSSE, nunca por posição
+  do unlock** (correção de um bug real da 1ª versão, que dava T2/T3 de item nunca possuído em T1):
+  `1 + maior tier que o personagem já possui daquela família` (considerando os unlocks já
+  aplicados na mesma sequência); família já no tier máximo não desperdiça o unlock, sorteia outra
+  — ver `CharacterUnlockEngine.cs`. `PlayerProfile.caseUnlocksResolved` marca a sequência como
+  concluída (nunca reconcede). Ver `CharacterUnlockRevealPanel.cs` pro card de reveal.
+- **Refresh dos unlocks (2026-07-25, mesmo dia)** — cada unlock revelado pode ser resorteado até
+  2 vezes antes de aceitar ("Continuar"), custo FIXO de 15 diamantes por uso (não escala/dobra —
+  diferente do "Novo Sorteio" do level-up de combate, seção 11, que dobra a cada uso; são dois
+  sistemas econômicos deliberadamente separados). Diamante e limite de 2 refreshes são validados/
+  decididos 100% pela Cloud Function `rerollUnlock` (nunca pelo cliente — mesma regra
+  inegociável de `ARQUITETURA.md` "Moeda premium"), que resorteia com as MESMAS regras do sorteio
+  original (odds real por família + tier por posse). O resultado de um unlock só é aplicado ao
+  personagem quando aceito com "Continuar" — enquanto isso é só um rascunho, substituível pelo
+  refresh sem tocar no personagem de verdade. Botão de refresh some quando os 2 usos acabam, ou
+  fica desabilitado (com aviso de saldo insuficiente) sem travar o fluxo. Ver
+  `UnlockRerollService.cs`/`functions/src/rerollUnlock.ts`.
+
 ## Itens em aberto
 - ~~Definir se skip/1.5x/passe é debitado em diamante ou pago direto em cash~~ — resolvido: cash
   direto (IAP), não gasta diamante. O que ERA fake (o estado da compra em si, não o valor gasto)
   passou a persistir de verdade em 2026-07-21 — ver seção Status.
 - Confirmar arte de ícones de raridade (caixa/baú por cor, seção 8).
-- Personagens (seção 5/aba Personagens da Loja) continuam sem persistência real e sem opção de
-  compra com diamante — só R$ (raridades) e moeda (card "Próximo Personagem", também sem persistir
-  ainda). Fora do escopo até agora ("NÃO FAZER AINDA", pedido explícito do usuário 2026-07-21).
+- ~~Personagens (seção 5/aba Personagens da Loja) continuam sem persistência real...~~ — resolvido
+  2026-07-23, ver seção 13 acima. Falta só a migração de `02_SelectCharacter` pra tornar o
+  personagem concedido jogável (fora do escopo desta rodada, ver `ARQUITETURA.md`).

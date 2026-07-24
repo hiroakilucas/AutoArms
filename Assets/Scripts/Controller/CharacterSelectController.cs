@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -33,10 +34,24 @@ public class CharacterSelectController : MonoBehaviour
 
     private PlayerProfile selectedProfile;
     private CharacterPanel characterPanel;
+
+    // Roster real (2026-07-24, sistema de compra de personagens/case opening — ver
+    // ARQUITETURA.md "Modelo de roster multi-personagem"). Populado por
+    // LoadRosterAndRefreshGridAsync, mesclado com os assets pré-autorados em
+    // PopulateCharacterGridRoutine. Vazio até o fetch assíncrono completar (ou pra sempre, sem
+    // conta logada) — o grid nasce só com os assets legados, igual sempre foi, e é reconstruído
+    // quando o roster chega.
+    private readonly List<PlayerProfile> _rosterProfiles = new List<PlayerProfile>();
     private GameObject btnSelecionarGo;
     private GameObject btnFecharGo;
     private GameObject selectionOverlayGo;
     private Image frameImage;
+
+    // Unlocks progressivos de skill/arma/pet do case opening (2026-07-25) - ver
+    // CharacterUnlockEngine/ResolveCaseUnlocksAsync. Instanciado uma única vez em Start() e
+    // reaproveitado a cada personagem recém-concedido que passar por
+    // ResolvePendingCharacterSelectionAsync.
+    private CharacterUnlockRevealPanel unlockRevealPanel;
 
     // Preview "ao vivo" do personagem selecionado (2026-07-08, substitui o ícone estático
     // `previewIcon`) — Idle contínuo, reage a clique com Hurt/Slashing. Como `SelectionOverlay`
@@ -111,7 +126,335 @@ public class CharacterSelectController : MonoBehaviour
         BuildSelectionOverlay();
         BuildDetailUI();
         BuildBackButton();
+        BuildUnlockRevealPanel();
+
+        // Bug real corrigido (2026-07-25 — reportado pelo usuário: "Continuar" do case opening
+        // caía na grade completa em vez de ir direto pro detalhe do personagem recém-ganho).
+        // PendingCharacterSelection.PendingCharacterId já está disponível de forma SÍNCRONA aqui
+        // (setado por CaseOpeningPopup antes do SceneManager.LoadScene) — se presente, cobre a
+        // grade ATÉ resolver a seleção (fetch assíncrono do roster, ver
+        // LoadRosterAndRefreshGridAsync/ResolvePendingCharacterSelection abaixo), pra o usuário
+        // nunca ver nem um flash da grade inteira antes do overlay de detalhe cobrir a tela —
+        // "SEM passar pela grade completa antes", pedido explícito do usuário.
+        //
+        // Bug real corrigido (2ª rodada, 2026-07-25) — a 1ª versão fazia isso desativando
+        // `gridPanel` (`SetActive(false)`) em vez de só cobrir visualmente: `PopulateCharacterGrid`
+        // (chamada logo abaixo, e de novo em `LoadRosterAndRefreshGridAsync` quando o roster
+        // chega) constrói os cards com `gridPanel` ainda INATIVO nesse caminho — `GridLayoutGroup`/
+        // `ContentSizeFitter` nunca recalculam layout de uma hierarquia inativa (a Unity só
+        // processa esses rebuilds quando o Canvas de fato renderiza), deixando a grade presa num
+        // estado quebrado (card cortado/mal posicionado) que NÃO se autocorrige de forma
+        // confiável mesmo depois de `gridPanel` ser reativado — reportado pelo usuário como "uma
+        // caixinha pequena" ao fechar o overlay de detalhe. Fix definitivo: `gridPanel` nunca mais
+        // é desativado — fica sempre ativo (constrói normalmente, IGUAL ao fluxo de clique manual
+        // num card, que nunca teve esse bug) e o "esconder até resolver" agora é um painel opaco
+        // temporário próprio (`ShowPendingSelectionCover`/`HidePendingSelectionCover`), puramente
+        // visual, sem nunca desativar a hierarquia da grade.
+        bool hasPendingSelection = !string.IsNullOrEmpty(PendingCharacterSelection.PendingCharacterId);
+        if (hasPendingSelection) ShowPendingSelectionCover();
+
         PopulateCharacterGrid();
+
+        // Roster real (2026-07-24) — grid acima já nasce só com os assets legados (0 latência,
+        // comportamento de sempre); se logado, busca o roster do Firestore e reconstrói o grid
+        // mesclado quando chegar (mesmo padrão "mostra default, atualiza quando os dados reais
+        // chegam" de ShopController.LoadPersistedShopStateAsync). Sem conta, mantém o
+        // comportamento de sempre (só os assets).
+        if (AuthService.IsSignedIn)
+        {
+            _ = LoadRosterAndRefreshGridAsync();
+        }
+        else if (hasPendingSelection)
+        {
+            // Defensivo (2026-07-25) — não deveria acontecer na prática (comprar um case exige
+            // estar logado), mas sem isso uma seleção pendente sem sessão ativa deixaria a grade
+            // coberta pra sempre (LoadRosterAndRefreshGridAsync, o único lugar que remove a
+            // cobertura, nunca rodaria) e o PendingCharacterId nunca seria limpo.
+            PendingCharacterSelection.PendingCharacterId = null;
+            HidePendingSelectionCover();
+        }
+    }
+
+    // Painel opaco temporário (mesma cor do overlay de detalhe, `theme.panelBackgroundAlt`) que
+    // cobre a tela enquanto uma seleção pendente do case opening é resolvida — ver comentário em
+    // Start(). Deliberadamente SEPARADO de `selectionOverlayGo` (que só é populado com o
+    // personagem certo depois que `match` é resolvido) e NUNCA desativa `gridPanel` — a grade
+    // constrói/permanece corretamente laid out por baixo o tempo todo, igual ao fluxo normal de
+    // clique manual num card.
+    private GameObject pendingSelectionCoverGo;
+
+    private void ShowPendingSelectionCover()
+    {
+        // Sibling logo ACIMA de gridPanel (não o último da lista) — cobre só a grade, sem tapar
+        // o botão "Voltar" fixo nem qualquer outro elemento construído depois em Start() (mesmo
+        // escopo visual que `gridPanel.SetActive(false)` tinha antes, só sem desativar a
+        // hierarquia).
+        if (pendingSelectionCoverGo != null)
+        {
+            pendingSelectionCoverGo.SetActive(true);
+            pendingSelectionCoverGo.transform.SetSiblingIndex(gridPanel.transform.GetSiblingIndex() + 1);
+            return;
+        }
+
+        var canvasTransform = gridPanel.transform.parent;
+        pendingSelectionCoverGo = new GameObject("PendingSelectionCover");
+        pendingSelectionCoverGo.transform.SetParent(canvasTransform, false);
+        pendingSelectionCoverGo.transform.SetSiblingIndex(gridPanel.transform.GetSiblingIndex() + 1);
+        var rt = pendingSelectionCoverGo.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        var img = pendingSelectionCoverGo.AddComponent<Image>();
+        img.color = theme.panelBackgroundAlt;
+    }
+
+    private void HidePendingSelectionCover()
+    {
+        if (pendingSelectionCoverGo != null) pendingSelectionCoverGo.SetActive(false);
+    }
+
+    // Busca users/{uid}/characters via RosterService, reconstrói um PlayerProfile runtime por
+    // documento com characterTypeId preenchido (o doc "legado" sem esse campo já está
+    // representado pelo asset pré-autorado correspondente — nunca duplicar), reconstrói o grid
+    // mesclado e, por fim, resolve PendingCharacterSelection (personagem recém-concedido pelo
+    // case opening, se houver — ver CaseOpeningPopup).
+    private async Task LoadRosterAndRefreshGridAsync()
+    {
+        string uid = AuthService.CurrentUser.UserId;
+        var docs = await RosterService.ListOwnedCharacterDocsAsync(uid);
+
+        _rosterProfiles.Clear();
+        foreach (var dto in docs)
+        {
+            if (dto == null || string.IsNullOrEmpty(dto.characterTypeId)) continue;
+            var runtime = PlayerProfileConverter.FromCharacterDTO(dto, characterDatabase);
+            if (runtime == null) continue;
+            LocalSaveService.ApplyIfSaved(runtime);
+            _rosterProfiles.Add(runtime);
+        }
+
+        PopulateCharacterGrid();
+        await ResolvePendingCharacterSelectionAsync(uid);
+    }
+
+    // Personagem recém-concedido pelo case opening (2026-07-24) — CaseOpeningPopup grava o
+    // characterId aqui antes de navegar pra esta cena; abrir o detalhe automaticamente (mesmo
+    // efeito visual de clicar o card manualmente — overlay full-screen, background art, painel
+    // expandido) satisfaz "abrir já com esse personagem em destaque". Consumido uma única vez —
+    // limpo logo em seguida, nunca reaplicado numa visita futura à cena.
+    private async Task ResolvePendingCharacterSelectionAsync(string uid)
+    {
+        string pendingId = PendingCharacterSelection.PendingCharacterId;
+        if (string.IsNullOrEmpty(pendingId)) return;
+        PendingCharacterSelection.PendingCharacterId = null;
+
+        PlayerProfile match = null;
+        foreach (var profile in _rosterProfiles)
+        {
+            if (profile != null && profile.characterId == pendingId) { match = profile; break; }
+        }
+
+        // Fallback (2026-07-25, bug real reportado pelo usuário — "Continuar" não levava pro
+        // detalhe do personagem) — se a listagem geral (LoadRosterAndRefreshGridAsync acima) não
+        // trouxe o documento por qualquer motivo (cache local do SDK ainda sem conhecimento do
+        // doc gravado por outro processo — a Cloud Function, via Admin SDK — timing, etc.), busca
+        // ESSE documento específico direto do SERVIDOR (RosterService.GetOwnedCharacterDocAsync,
+        // Source.Server explícito, ignora cache) antes de desistir.
+        if (match == null)
+        {
+            var dto = await RosterService.GetOwnedCharacterDocAsync(uid, pendingId);
+            if (dto != null)
+            {
+                match = PlayerProfileConverter.FromCharacterDTO(dto, characterDatabase);
+                if (match != null)
+                {
+                    LocalSaveService.ApplyIfSaved(match);
+                    _rosterProfiles.Add(match);
+                }
+            }
+        }
+
+        // Remove o painel de cobertura temporário (Start() o mostrou só pra evitar o flash
+        // enquanto isto rodava, ver comentário lá) — `gridPanel` nunca foi desativado, então não
+        // precisa ser reativado aqui. Se achou o personagem, a grade fica coberta pelo overlay
+        // full-screen de qualquer forma (OnCharacterSelected abaixo); se não achou (ver log
+        // abaixo), a grade normal (já corretamente construída, já que nunca ficou inativa)
+        // aparece como fallback em vez de deixar o usuário preso numa tela vazia.
+        HidePendingSelectionCover();
+
+        if (match != null)
+        {
+            // OnCharacterSelected já dispara/retoma ResolveCaseUnlocksAsync sozinho quando
+            // necessário (ver comentário lá) — cobre tanto este caminho (recém-concedido) quanto
+            // reabrir um personagem cuja sequência ficou incompleta numa sessão anterior.
+            OnCharacterSelected(match);
+        }
+        else
+        {
+            // Falha real (2026-07-25) — não deveria acontecer no fluxo normal (o personagem
+            // acabou de ser concedido por purchaseCase, a transaction já commitou antes do
+            // Cloud Function responder, e o fallback acima já tentou um get() direto no
+            // servidor); logado pra ajudar a diagnosticar se persistir (ex: characterDatabase
+            // deste componente não bate com o catálogo exportado pra
+            // functions/src/characterCatalog.json — ver PlayerProfileConverter.FromCharacterDTO,
+            // que já loga o motivo exato da falha de match de molde separadamente).
+            Debug.LogError($"[CharacterSelectController] PendingCharacterSelection '{pendingId}' não encontrado (nem na listagem geral, nem no fallback direto ao servidor) — caindo na grade normal.");
+        }
+    }
+
+    // Cria (escondido) o painel de reveal dos unlocks de skill/arma/pet do case opening — ver
+    // CharacterUnlockRevealPanel. Mesma regra de instanciação de CharacterPanel (GameObject SEM
+    // pai, raiz da cena — o componente cria seu próprio Canvas filho).
+    private void BuildUnlockRevealPanel()
+    {
+        var go = new GameObject("CharacterUnlockRevealPanel");
+        unlockRevealPanel = go.AddComponent<CharacterUnlockRevealPanel>();
+        unlockRevealPanel.Build(theme);
+    }
+
+    // Unlocks progressivos de skill/arma/pet concedidos ao ganhar este personagem via case
+    // opening (2026-07-25, ver CharacterUnlockEngine) — N sorteios sequenciais
+    // (CharacterUnlockEngine.UnlockCountForRarity, por raridade), revelados um de cada vez dentro
+    // do próprio overlay de detalhe já aberto por OnCharacterSelected (pedido explícito do
+    // usuário — não uma tela própria antes de chegar aqui), bloqueando Selecionar/Fechar até
+    // resolver todos.
+    //
+    // Refresh (2026-07-25, mesmo dia): cada unlock começa como um RASCUNHO (sorteado, mas ainda
+    // NÃO aplicado a `match.skills/weapons/pets`) — só vira de verdade quando o jogador clica
+    // "Continuar". Enquanto isso, "Refresh" pode substituir o rascunho (até
+    // UnlockRerollService.MaxRerollsPerUnlock vezes), sempre via Cloud Function
+    // (UnlockRerollService/rerollUnlock — diamante e limite validados/decididos 100%
+    // server-side, nunca só no client, mesma regra inegociável de ARQUITETURA.md "Moeda
+    // premium"). Aplicar só no aceite (não no sorteio) é o que garante que um rascunho descartado
+    // nunca contamine `CharacterUnlockEngine.OwnedTier` do PRÓXIMO unlock (ou do próprio
+    // rerollUnlock no servidor, que lê o characterId no Firestore pra decidir o tier por posse).
+    //
+    // Retomada (2026-07-25, bug real corrigido — reportado pelo usuário: fechar o app durante o
+    // 1º unlock perdia todos os seguintes): `match.caseUnlocksAcceptedCount` é persistido a cada
+    // "Continuar" aceito, então o loop sempre recomeça do PRÓXIMO unlock ainda não aceito, nunca
+    // do 1º — nem perde os restantes (chamada não roda de novo sozinha, mas `OnCharacterSelected`
+    // agora tenta de novo toda vez que o detalhe deste personagem é reaberto, ver lá) nem
+    // duplica os já aceitos (não dá pra usar o tamanho de skills/weapons/pets como proxy — um
+    // unlock que evolui uma família já possuída não aumenta esse total).
+    //
+    // Retomada do RASCUNHO (2026-07-25, 2ª rodada — reportado pelo usuário: sorteou "Book",
+    // fechou o app antes de aceitar, reabriu e veio "Vampirismo" — um sorteio DIFERENTE em vez de
+    // continuar mostrando o mesmo; e o contador de refresh reiniciava pra "2 disponíveis" mesmo
+    // já tendo usado algum antes, causando "resource-exhausted" inesperado ao tentar de novo).
+    // `match.pendingUnlock*` persiste o rascunho (kind/name/tier + refreshes já usados) a cada
+    // sorteio/refresh, ANTES de mostrar o painel — se `pendingUnlockIndex` já bater com o `i`
+    // atual ao entrar no loop, resolve esse mesmo rascunho de volta em vez de sortear um novo.
+    private async Task ResolveCaseUnlocksAsync(PlayerProfile match)
+    {
+        int total = CharacterUnlockEngine.UnlockCountForRarity(match.rarity);
+
+        // Esconde os botões de ação (já visíveis desde OnCharacterSelected) até resolver a
+        // sequência inteira — mesmo espírito de "Continuar" bloqueado até escolher no level-up de
+        // combate (CombatResultPanel.ShowLevelUpChoice).
+        btnSelecionarGo.SetActive(false);
+        btnFecharGo.SetActive(false);
+
+        for (int i = match.caseUnlocksAcceptedCount + 1; i <= total; i++)
+        {
+            LevelUpOption option;
+            int remainingRerolls;
+
+            var resumed = match.pendingUnlockIndex == i
+                ? CharacterUnlockEngine.ResolveServerResult(match.pendingUnlockKind, match.pendingUnlockName, match.pendingUnlockTier)
+                : null;
+
+            if (resumed.HasValue)
+            {
+                // Rascunho de uma sessão anterior — mesmo resultado, mesmo contador de refresh
+                // real (não reinicia pra "2 disponíveis" à toa).
+                option = resumed.Value;
+                remainingRerolls = Mathf.Max(0, UnlockRerollService.MaxRerollsPerUnlock - match.pendingUnlockRerollsUsed);
+            }
+            else
+            {
+                // Sem rascunho pendente pra este índice (1ª vez chegando aqui, ou o rascunho
+                // salvo ficou inconsistente — ex: catálogo mudou) — sorteia do zero e já persiste
+                // imediatamente, antes de mostrar o painel, pra sobreviver a um fechamento logo
+                // em seguida.
+                option = CharacterUnlockEngine.DrawUnlock(match);
+                remainingRerolls = UnlockRerollService.MaxRerollsPerUnlock;
+                PersistUnlockDraft(match, i, option, 0);
+            }
+
+            while (true)
+            {
+                var tcs = new TaskCompletionSource<bool>(); // true = Continuar, false = Refresh
+                unlockRevealPanel.Show(i, total, option, remainingRerolls,
+                    onContinueClicked: () => tcs.TrySetResult(true),
+                    onRefreshClicked: () => tcs.TrySetResult(false));
+                bool accepted = await tcs.Task;
+                if (accepted) break;
+
+                // Refresh clicado — chamada server-authoritative; painel fica bloqueado
+                // (SetBusy) até a resposta chegar, pra evitar clique duplo/corrida.
+                unlockRevealPanel.SetBusy(true);
+                var result = await UnlockRerollService.RerollUnlockAsync(match.characterId, i);
+                if (!result.Success)
+                {
+                    // Mesmo rascunho, mesmo contador — servidor recusou (saldo/limite mudou
+                    // entre a checagem local e a chamada, ou falha de rede); jogador pode tentar
+                    // de novo ou só aceitar o resultado atual com "Continuar".
+                    unlockRevealPanel.ShowRefreshError(result.ErrorMessage);
+                    continue;
+                }
+
+                var newOption = CharacterUnlockEngine.ResolveServerResult(result.Kind, result.Name, result.Tier);
+                if (newOption.HasValue) option = newOption.Value;
+                remainingRerolls = result.RemainingRerolls;
+                int rerollsUsed = UnlockRerollService.MaxRerollsPerUnlock - remainingRerolls;
+                PersistUnlockDraft(match, i, option, rerollsUsed);
+                // Diamante já debitado no servidor dentro da mesma transaction do sorteio — só
+                // espelha localmente (mesmo padrão de WalletService.SpendDiamondsAsync, nunca uma
+                // segunda escrita client-side).
+                PlayerEconomyState.Diamonds = Mathf.Max(0, PlayerEconomyState.Diamonds - UnlockRerollService.CostDiamonds);
+            }
+
+            // Aceito — só agora aplica de verdade (mesma mutação/bônus do level-up de combate,
+            // LevelUpEngine.ApplyOption), limpa o rascunho e persiste, antes de sortear o próximo
+            // unlock.
+            LevelUpEngine.ApplyOption(option, match);
+            match.caseUnlocksAcceptedCount = i; // ponto de retomada — ver comentário acima
+            ClearUnlockDraft(match);
+            LocalSaveService.Save(match);
+            characterPanel.Refresh(); // reflete o item novo na grade de Habilidades/Armas/Pets ao vivo
+        }
+
+        unlockRevealPanel.Hide();
+        match.caseUnlocksResolved = true;
+        LocalSaveService.Save(match);
+
+        btnSelecionarGo.SetActive(true);
+        btnFecharGo.SetActive(true);
+    }
+
+    // Persiste o rascunho ATUAL do unlock em andamento (índice + kind/name/tier + quantos
+    // refreshes já foram usados) — chamado logo após sortear/rerolar, ANTES de mostrar o painel
+    // e aguardar a resposta do jogador, pra sobreviver a um fechamento do app nesse meio-tempo
+    // (ver ResolveCaseUnlocksAsync).
+    private static void PersistUnlockDraft(PlayerProfile match, int unlockIndex, LevelUpOption option, int rerollsUsed)
+    {
+        var shape = CharacterUnlockEngine.ToServerShape(option);
+        match.pendingUnlockIndex = unlockIndex;
+        match.pendingUnlockKind = shape.kind;
+        match.pendingUnlockName = shape.name;
+        match.pendingUnlockTier = shape.tier;
+        match.pendingUnlockRerollsUsed = rerollsUsed;
+        LocalSaveService.Save(match);
+    }
+
+    // Limpa o rascunho pendente ao aceitar um unlock (não faz sentido mais depois de aplicado).
+    private static void ClearUnlockDraft(PlayerProfile match)
+    {
+        match.pendingUnlockIndex = 0;
+        match.pendingUnlockKind = "";
+        match.pendingUnlockName = "";
+        match.pendingUnlockTier = 0;
+        match.pendingUnlockRerollsUsed = 0;
     }
 
     // Fundo cheio da cena (gradiente vertical UITheme.backgroundTop/backgroundBottom) — inserido
@@ -299,13 +642,34 @@ public class CharacterSelectController : MonoBehaviour
         // personagem pela UI). Não-jogável ainda aparece no grid, só travado/cinza sem Button.
         // p == null: referência órfã (asset deletado por fora sem tirar da lista) — ignora em vez
         // de derrubar a cena inteira com NullReferenceException.
+        // Bug real corrigido (2026-07-25, reportado pelo usuário: "os chibers que eu comprei
+        // vieram desabilitados") — comprar um personagem via case opening cujo `characterTypeId`
+        // bate com um dos 72 moldes pré-autorados (ex: "Anubis") fazia o molde travado
+        // (`characterDatabase.unlockedCharacters`, sempre isPlayable=false a menos que seja o
+        // "original" desta conta) aparecer JUNTO da instância jogável de verdade do roster —
+        // visualmente idênticos (mesmo portrait/nome), fácil de olhar pro card travado e achar que
+        // é o personagem recém-comprado. Molde cujo `.name` já está em `_rosterProfiles`
+        // (`characterTypeId`, ver PlayerProfile.characterTypeId) é IGNORADO aqui — a instância do
+        // roster já representa esse tipo de personagem, o card travado do molde vira redundante.
+        var ownedTypeIds = new HashSet<string>();
+        foreach (var rp in _rosterProfiles)
+            if (rp != null && !string.IsNullOrEmpty(rp.characterTypeId))
+                ownedTypeIds.Add(rp.characterTypeId);
+
         var enabled = new List<PlayerProfile>();
         var locked = new List<PlayerProfile>();
         foreach (var p in characterDatabase.unlockedCharacters)
         {
             if (p == null || !p.isUnlockedForSelection) continue;
+            if (ownedTypeIds.Contains(p.name)) continue;
             (p.isPlayable ? enabled : locked).Add(p);
         }
+        // Roster real (2026-07-24) — personagens concedidos via case opening entram junto dos
+        // assets legados isPlayable=true (todos já nascem isPlayable=true por construção, ver
+        // PlayerProfileConverter.FromCharacterDTO), ordenados pela MESMA regra de sempre
+        // (favorito → raridade → nome). O personagem "original" da conta (doc legado, sem
+        // characterTypeId) não entra em _rosterProfiles — já está representado pelo asset acima.
+        enabled.AddRange(_rosterProfiles);
         enabled.Sort(CharacterDatabase.ComparePlayerProfiles);
         locked.Sort(CharacterDatabase.ComparePlayerProfiles);
 
@@ -607,6 +971,22 @@ public class CharacterSelectController : MonoBehaviour
         SpawnCharacterPreview(profile);
         btnSelecionarGo.SetActive(true);
         btnFecharGo.SetActive(true);
+
+        // Bug real corrigido (2026-07-25) — dispara/RETOMA os unlocks de skill/arma/pet do case
+        // opening pra qualquer personagem do roster (isRuntimeInstance — nunca true nos ~72
+        // assets pré-autorados, então isto nunca roda neles) que ainda não terminou a sequência
+        // (!caseUnlocksResolved). Antes, isso só era chamado uma vez, no caminho específico do
+        // PendingCharacterSelection logo após a compra — se o app fechasse no meio da sequência
+        // (ex: no 1º unlock, antes de aceitar), os unlocks restantes eram perdidos pra sempre: o
+        // PendingCharacterId já tinha sido consumido, então reabrir o personagem depois (mesmo
+        // clicando normalmente no grid) nunca tentava de novo. Chamar isto aqui, de forma
+        // incondicional a cada abertura de detalhe, cobre os dois casos com o mesmo código —
+        // ResolveCaseUnlocksAsync retoma do ponto certo via `caseUnlocksAcceptedCount`, nunca
+        // reconcede um unlock já aceito.
+        if (profile.isRuntimeInstance && !profile.caseUnlocksResolved)
+        {
+            _ = ResolveCaseUnlocksAsync(profile);
+        }
     }
 
     // "Fechar" (dentro da visualização expandida, diferente do "Voltar" fixo do canto superior
@@ -637,7 +1017,9 @@ public class CharacterSelectController : MonoBehaviour
     public void OnClickSelect()
     {
         if (selectedProfile == null) return;
-        selectedProfileHolder.currentProfile = selectedProfile;
+        // SetProfile() (não atribuição direta) — mantém SelectedProfileHolder.characterId em
+        // sincronia (2026-07-24, ver SelectedProfileHolder.cs).
+        selectedProfileHolder.SetProfile(selectedProfile);
         StartCoroutine(SyncAndLoadMainMenuRoutine());
     }
 

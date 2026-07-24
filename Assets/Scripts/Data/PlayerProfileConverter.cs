@@ -28,7 +28,14 @@ public static class PlayerProfileConverter
 
     public static void CapturePristineIfNeeded(PlayerProfile profile)
     {
-        if (profile == null || _pristineSnapshots.ContainsKey(profile)) return;
+        // Instâncias runtime (2026-07-24, ver PlayerProfile.isRuntimeInstance) nunca precisam de
+        // snapshot de fábrica - "pristine" não tem sentido pra um objeto que já nasceu com dado
+        // real de uma conta (FromCharacterDTO/FromOpponentIndexMap já aplicam o DTO na criação) e
+        // nunca é reaproveitado entre contas. Sem este guard, cada instância runtime virava uma
+        // entrada nova e PERMANENTE neste dicionário estático (nunca removida, nem por
+        // RestoreAllPristine) - vazamento de memória sem teto proporcional a quantas vezes o
+        // roster/oponentes são buscados/trocados numa sessão.
+        if (profile == null || profile.isRuntimeInstance || _pristineSnapshots.ContainsKey(profile)) return;
         _pristineSnapshots[profile] = ToDTO(profile);
     }
 
@@ -63,7 +70,10 @@ public static class PlayerProfileConverter
 
     public static void MarkOwnerScope(PlayerProfile profile, string scope)
     {
-        if (profile == null) return;
+        // Mesmo guard/motivo de CapturePristineIfNeeded acima - instância runtime nunca precisa
+        // ser rastreada aqui (nunca é reaproveitada entre contas), e este dicionário também nunca
+        // remove entradas sozinho.
+        if (profile == null || profile.isRuntimeInstance) return;
         _ownerScope[profile] = scope;
     }
 
@@ -100,6 +110,16 @@ public static class PlayerProfileConverter
         var dto = new CharacterDTO
         {
             characterId = profile.OpponentId(),
+            // Bug real corrigido (2026-07-25) — faltava aqui, então TODO save (LocalSaveService.
+            // Save, chamado a cada unlock concedido por CharacterSelectController.
+            // ResolveCaseUnlocksAsync, ou a cada favoritar/level-up/etc.) reescrevia o documento
+            // com characterTypeId vazio/null, apagando de verdade o campo que
+            // PlayerProfileConverter.FromCharacterDTO precisa pra reconhecer o personagem como
+            // concedido via case opening na próxima leitura — reportado pelo usuário como
+            // "personagem comprado volta a aparecer bloqueado" ao reabrir a tela depois. Campo
+            // fica vazio ("") nos assets pré-autorados (nunca setado, default de PlayerProfile) —
+            // inofensivo pra eles, já que não fazem parte do roster de conta.
+            characterTypeId = profile.characterTypeId,
             profileName = profile.profileName,
             level = profile.level,
             winRate = profile.winRate,
@@ -108,6 +128,15 @@ public static class PlayerProfileConverter
             battlesRemaining = profile.battlesRemaining,
             isFavorite = profile.isFavorite,
             rarity = (int)profile.rarity,
+            caseUnlocksResolved = profile.caseUnlocksResolved,
+            caseUnlocksAcceptedCount = profile.caseUnlocksAcceptedCount,
+            pendingUnlockIndex = profile.pendingUnlockIndex,
+            pendingUnlockKind = profile.pendingUnlockKind,
+            pendingUnlockName = profile.pendingUnlockName,
+            pendingUnlockTier = profile.pendingUnlockTier,
+            pendingUnlockRerollsUsed = profile.pendingUnlockRerollsUsed,
+            hasPendingLevelUpChoice = profile.hasPendingLevelUpChoice,
+            pendingLevelUpRerollsUsed = profile.pendingLevelUpRerollsUsed,
             maxHealth = profile.maxHealth,
             str = profile.str,
             agility = profile.agility,
@@ -140,6 +169,11 @@ public static class PlayerProfileConverter
                 if (p != null)
                     dto.pets.Add(new PetTierRef { type = p.petType.ToString(), tier = p.tier });
 
+        if (profile.pendingLevelUpBoxes != null)
+            foreach (var b in profile.pendingLevelUpBoxes)
+                if (b != null)
+                    dto.pendingLevelUpBoxes.Add(new PendingLevelUpBoxRef { kind = b.kind, attrIndex = b.attrIndex, name = b.name, tier = b.tier });
+
         return dto;
     }
 
@@ -152,6 +186,20 @@ public static class PlayerProfileConverter
         profile.battlesRemaining = dto.battlesRemaining;
         profile.isFavorite = dto.isFavorite;
         profile.rarity = (CharacterRarity)dto.rarity;
+        profile.caseUnlocksResolved = dto.caseUnlocksResolved;
+        profile.caseUnlocksAcceptedCount = dto.caseUnlocksAcceptedCount;
+        profile.pendingUnlockIndex = dto.pendingUnlockIndex;
+        profile.pendingUnlockKind = dto.pendingUnlockKind ?? "";
+        profile.pendingUnlockName = dto.pendingUnlockName ?? "";
+        profile.pendingUnlockTier = dto.pendingUnlockTier;
+        profile.pendingUnlockRerollsUsed = dto.pendingUnlockRerollsUsed;
+        profile.hasPendingLevelUpChoice = dto.hasPendingLevelUpChoice;
+        profile.pendingLevelUpRerollsUsed = dto.pendingLevelUpRerollsUsed;
+        profile.pendingLevelUpBoxes = new List<PendingLevelUpBoxRef>();
+        if (dto.pendingLevelUpBoxes != null)
+            foreach (var b in dto.pendingLevelUpBoxes)
+                if (b != null)
+                    profile.pendingLevelUpBoxes.Add(new PendingLevelUpBoxRef { kind = b.kind, attrIndex = b.attrIndex, name = b.name, tier = b.tier });
         profile.maxHealth = dto.maxHealth;
         profile.str = dto.str;
         profile.agility = dto.agility;
@@ -229,6 +277,7 @@ public static class PlayerProfileConverter
         if (template == null) return null;
 
         var runtime = ScriptableObject.CreateInstance<PlayerProfile>();
+        runtime.isRuntimeInstance = true; // 2026-07-24 — ver PlayerProfile.isRuntimeInstance
         runtime.characterId = dto.characterId; // OpponentId() precisa disso — .name de uma instância recém-criada não bate com o personagem de verdade
         // ApplyDTO (chamado abaixo) nunca escreve profileName — num profile JÁ EXISTENTE esse
         // campo nunca muda, então nunca precisou reaplicar; numa instância nova como esta, fica
@@ -248,4 +297,71 @@ public static class PlayerProfileConverter
         ApplyDTO(runtime, dto);
         return runtime;
     }
+
+    // Reconstrói um PlayerProfile RUNTIME a partir de um documento de
+    // users/{uid}/characters/{characterId} (2026-07-23, sistema de compra de personagens/case
+    // opening - ver ARQUITETURA.md "Modelo de roster multi-personagem") - mesma técnica de
+    // FromOpponentIndexMap acima, mas casando pelo `characterTypeId` (não `characterId`, que
+    // aqui já é o ID único da instância gerado pela Cloud Function purchaseCase, não mais o nome
+    // do template). Devolve null se o DTO não tiver characterTypeId (personagem "original"
+    // pré-existente desta conta, gravado antes desta data - continua carregado pelo fluxo de
+    // sempre, LoadCharacterAsync/ApplyDTO num PlayerProfile já autorado) ou se o molde
+    // referenciado não existir mais em templateCatalog.
+    //
+    // Recebe o CharacterDTO já parseado (não um Dictionary cru) — 2026-07-24, extraído de
+    // FromCharacterMap pra RosterService (que já devolve List<CharacterDTO> via
+    // CharacterDTOMap.FromMap) não precisar reserializar pra Dictionary só pra chamar isto.
+    public static PlayerProfile FromCharacterDTO(CharacterDTO dto, CharacterDatabase templateCatalog)
+    {
+        if (dto == null || string.IsNullOrEmpty(dto.characterTypeId)) return null;
+        if (templateCatalog?.unlockedCharacters == null)
+        {
+            Debug.LogError($"[PlayerProfileConverter] FromCharacterDTO('{dto.characterTypeId}') falhou - templateCatalog nulo/vazio (CharacterDatabase não wireado no Inspector deste componente?).");
+            return null;
+        }
+
+        PlayerProfile template = null;
+        foreach (var t in templateCatalog.unlockedCharacters)
+        {
+            if (t != null && t.name == dto.characterTypeId) { template = t; break; }
+        }
+        if (template == null)
+        {
+            // Falha real (2026-07-25) - personagem concedido de verdade (existe no Firestore),
+            // mas o molde não foi achado neste CharacterDatabase local - ex: characterTypeId com
+            // grafia diferente do nome do asset, ou este componente aponta pra um
+            // CharacterDatabase desatualizado/diferente do que Tools > AutoArms > Export
+            // Character Catalog for Cloud Function exportou. Sem este log, o sintoma era só "caiu
+            // na grade normal em vez de abrir o detalhe", sem pista nenhuma do motivo.
+            Debug.LogError($"[PlayerProfileConverter] FromCharacterDTO: molde '{dto.characterTypeId}' não encontrado em templateCatalog.unlockedCharacters ({templateCatalog.unlockedCharacters.Count} personagens).");
+            return null;
+        }
+
+        var runtime = ScriptableObject.CreateInstance<PlayerProfile>();
+        runtime.isRuntimeInstance = true; // 2026-07-24 — ver PlayerProfile.isRuntimeInstance
+        runtime.characterId = dto.characterId; // ID único desta instância, não o nome do template
+        runtime.characterTypeId = dto.characterTypeId; // 2026-07-25 — ver PlayerProfile.characterTypeId
+        runtime.profileName = template.profileName;
+        runtime.characterPrefab = template.characterPrefab;
+        runtime.previewIcon = template.previewIcon;
+        runtime.splashArt = template.splashArt;
+        runtime.attackSettings = template.attackSettings;
+        runtime.scale = template.scale;
+        runtime.startPos = template.startPos;
+        // Concedido via case opening: personagem real desta conta (2026-07-24, migração de
+        // 02_SelectCharacter/MainMenuCharacterPreview/SelectedProfileHolder concluída — ver
+        // ARQUITETURA.md) — selecionável/jogável por definição, mesmo critério de qualquer asset
+        // pré-autorado com essas duas flags ligadas. Era false/false (2026-07-23, "ainda não é
+        // jogável") enquanto essa migração estava deliberadamente pendente.
+        runtime.isUnlockedForSelection = true;
+        runtime.isPlayable = true;
+
+        ApplyDTO(runtime, dto);
+        return runtime;
+    }
+
+    // Wrapper fino pra quem só tem o Dictionary cru (ex: leitura direta de um DocumentSnapshot
+    // sem passar por RosterService) — mantém a assinatura antiga funcionando.
+    public static PlayerProfile FromCharacterMap(Dictionary<string, object> map, CharacterDatabase templateCatalog)
+        => FromCharacterDTO(CharacterDTOMap.FromMap(map), templateCatalog);
 }

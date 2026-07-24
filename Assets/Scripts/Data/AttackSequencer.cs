@@ -152,17 +152,20 @@ public class AttackSequencer : MonoBehaviour
         var result      = XpSystem.AddXP(player1Profile, xpGained);
 
         // Save real (2026-07-15, corrigido — bug real reportado pelo usuário: Firestore ficava
-        // "um passo atrás" do valor final de personagem). Antes, tanto aqui quanto dentro de
-        // XpSystem.AddXP (via MarkDirty) o save disparava IMEDIATAMENTE após battlesRemaining/XP,
-        // ANTES do jogador escolher o bônus de level-up (ShowLevelUpChoice, que só roda depois
-        // de CombatResultPanel.Show abaixo) — str/agility/speed ainda não tinham recebido o bônus
-        // da escolha (CombatResultPanel.ApplyBonus), então o save capturava um estado
-        // intermediário/incompleto. Corrigido: só salva aqui se NÃO houve level-up (nada mais vai
-        // mudar no profile depois disso). Quando houve level-up, o único save acontece em
-        // ApplyBonus, depois que o jogador escolhe — MarkDirty não salva mais sozinho, ver
-        // XpSystem.cs.
-        if (!result.didLevelUp)
-            LocalSaveService.Save(player1Profile);
+        // "um passo atrás" do valor final de personagem; 2026-07-25, 2ª rodada — bug real
+        // corrigido de novo: guardar esse save até o jogador escolher o bônus de level-up
+        // significava que fechar o app com a tela de escolha aberta perdia XP/level/
+        // battlesRemaining/bônus da luta inteira, sem chance de retomar — ver investigação em
+        // CHANGELOG.md/ARQUITETURA.md). Salva SEMPRE agora, incondicional — a parte "base"
+        // (battlesRemaining/xpCurrent/level/+2 HP automático) nunca dependeu da escolha
+        // pendente, só ficava represada por cautela. `hasPendingLevelUpChoice` marca se há uma
+        // escolha de skill/arma/pet/status ainda por resolver (CombatResultPanel preenche
+        // pendingLevelUpBoxes logo a seguir, quando sorteia as caixas) — MainMenuController
+        // detecta esse campo ao carregar o menu e reabre a MESMA tela de escolha se o app tiver
+        // fechado antes do jogador decidir (ver CombatResultPanel.ResumePendingLevelUpChoiceIfAny).
+        // Limpo só em CombatResultPanel.ApplyBonus, quando a escolha de fato acontece.
+        player1Profile.hasPendingLevelUpChoice = result.didLevelUp;
+        LocalSaveService.Save(player1Profile);
 
         // Histórico de batalhas/vitórias por oponente (05_SelectOpponent) — guardado em
         // PlayerPrefs por opponentId (continua sendo a fonte de leitura do card, sem mudança).

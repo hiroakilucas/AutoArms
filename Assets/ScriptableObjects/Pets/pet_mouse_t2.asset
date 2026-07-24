@@ -24,7 +24,6 @@ MonoBehaviour:
   agility: 8
   speed: 7
   hp: 23
-  damage: 6
   comboRate: 0.3
   evasionBase: 0
   accuracyBonus: 0

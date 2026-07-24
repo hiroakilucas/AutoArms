@@ -36,11 +36,12 @@ public class PetData : ScriptableObject
     public float initiative;
 
     [Header("Atributos (escalam por tier)")]
+    // Campo `damage` removido (2026-07-21) — o dano do pet é derivado direto daqui
+    // (CombatSimulator.SimulatePetHit: Round(str * 0.45)), ver PETS.md pro motivo do multiplicador.
     public float str;
     public int agility;
     public int speed;
     public int hp;
-    public int damage;
 
     [Header("Bônus especiais do PRÓPRIO pet (variam por pet, escalam por tier)")]
     [Tooltip("Chance de golpe extra (combo) do próprio pet. Javali sempre 0 (nunca combina).")]

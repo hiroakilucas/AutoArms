@@ -1,0 +1,125 @@
+rules_version = '2';
+// Fonte de verdade: até 2026-07-23 estas regras só existiam coladas manualmente no Firebase
+// Console (ver ARQUITETURA.md "Regras de segurança do Firestore"). Este arquivo é a primeira
+// versão versionada no repo — baseline copiado literalmente do texto documentado ali, mais as
+// coleções novas do sistema de compra de personagens (casePackages/casePurchases, ver
+// ARQUITETURA.md "Modelo de roster multi-personagem"). Se as regras no Console tiverem
+// divergido manualmente desse texto documentado, conferir antes do primeiro
+// `firebase deploy --only firestore:rules`.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /characters/{characterId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        // `create, update` (não `write` puro) — ver nota abaixo sobre a armadilha de `delete`.
+        // Nenhum código apaga um characters/{characterId} hoje, mas separado por precaução (o
+        // mesmo bug real já aconteceu em replays/{replayId}, ver logo abaixo).
+        //
+        // characterTypeId (2026-07-23, sistema de compra de personagens/case opening) é um campo
+        // extra opcional — regras do Firestore não rejeitam campos não mencionados na validação,
+        // então não precisou entrar aqui explicitamente. A CONCESSÃO de um personagem novo (criar
+        // o documento pela primeira vez) só acontece via Cloud Function purchaseCase (Admin SDK,
+        // que ignora estas regras por completo) — o client só usa este `create/update` pra
+        // salvar PROGRESSO de um personagem que já possui (mesmo fluxo de sempre,
+        // FirestoreService.SaveCharacterAsync).
+        allow create, update: if request.auth != null && request.auth.uid == uid
+          && request.resource.data.level is int
+          && request.resource.data.level >= 1
+          && request.resource.data.level <= 9999
+          && request.resource.data.str is number
+          && request.resource.data.str <= 20 + 4 * request.resource.data.level
+          && request.resource.data.agility is number
+          && request.resource.data.agility <= 20 + 4 * request.resource.data.level
+          && request.resource.data.speed is number
+          && request.resource.data.speed <= 20 + 4 * request.resource.data.level
+          && request.resource.data.maxHealth is number
+          && request.resource.data.maxHealth <= 80 + 16 * request.resource.data.level
+          && request.resource.data.weapons is list
+          && request.resource.data.weapons.size() <= 50
+          && request.resource.data.skills is list
+          && request.resource.data.skills.size() <= 100;
+
+        // Replay (log de eventos completo, 2026-07-18 — ver CHANGELOG.md e a nota "Replay
+        // fabricado client-side" mais abaixo). Cap de 400 eventos cobre o teto de segurança do
+        // próprio CombatSimulator (maxRounds=300, ver CombatSimulator.cs) com folga. `result` só
+        // aceita os 2 valores válidos — não impede um cliente forjar um replay falso (ver nota),
+        // só barra um documento grosseiramente mal formado.
+        //
+        // Bug real corrigido (2026-07-20): era um único `allow write` cobrindo create+update+
+        // DELETE com essa mesma validação de `request.resource.data.*` — mas numa operação de
+        // delete, `request.resource` é `null` (não existe "dado novo" a validar), então QUALQUER
+        // delete era rejeitado com "Missing or insufficient permissions". `FirestoreService.
+        // TrimOldReplaysAsync` apaga replays além do teto de `MaxReplaysPerCharacter` (10) — todo
+        // delete falhava silenciosamente (dentro do mesmo try/catch do save), aparentando "falha
+        // ao salvar replay" no log quando na real o replay NOVO salvava certinho (create passa
+        // pela validação normal); só a limpeza dos antigos nunca funcionava, acumulando document
+        // os sem rotação. Separado em `create, update` (com a validação de dados) + `delete` (só
+        // checagem de dono, sem exigir `request.resource.data` nenhum).
+        match /replays/{replayId} {
+          allow read: if request.auth != null && request.auth.uid == uid;
+          allow create, update: if request.auth != null && request.auth.uid == uid
+            && request.resource.data.result in ["win", "loss"]
+            && request.resource.data.events is list
+            && request.resource.data.events.size() <= 400;
+          allow delete: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+
+      match /matchHistory/{opponentId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Contador de compras por pacote de case (2026-07-23) — só a Cloud Function purchaseCase
+      // escreve aqui (Admin SDK, ignora estas regras); o client só LÊ pra mostrar "restantes: X"
+      // no card da Loja. `allow write: if false` explícito (não só omissão) deixa a intenção
+      // clara mesmo que o Admin SDK não precise dela.
+      match /casePurchases/{packageId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+    }
+
+    // opponents_index (Fatia 5, implementado em 2026-07-15; lido pela busca de adversário na
+    // Fatia 6): qualquer usuário autenticado pode ler (é a superfície pública), só o dono pode
+    // escrever o próprio doc. A regra abaixo não depende do nome do path variable ({characterId}
+    // aqui é só um placeholder de segmento — não precisa bater com nenhum campo), já que a
+    // checagem real é sempre sobre o campo `ownerUid` dentro do documento. Mesma validação de
+    // faixa amarrada ao `level` que `characters/{characterId}` já tem acima (Fatia 6, 2026-07-15)
+    // — necessário porque, desde a correção da Fatia 6, este documento também carrega os stats
+    // BASE (não só os `eff*` de exibição), então fica sujeito ao mesmo risco de valor
+    // grosseiramente forjado pelo cliente.
+    match /opponents_index/{characterId} {
+      allow read: if request.auth != null;
+      // `create, update` (não `write` puro, mesmo motivo do fix em replays/{replayId} acima) —
+      // nenhum código apaga um opponents_index hoje, separado só por precaução.
+      allow create, update: if request.auth != null && request.auth.uid == request.resource.data.ownerUid
+        && request.resource.data.level is int
+        && request.resource.data.level >= 1
+        && request.resource.data.level <= 9999
+        && request.resource.data.str is number
+        && request.resource.data.str <= 20 + 4 * request.resource.data.level
+        && request.resource.data.agility is number
+        && request.resource.data.agility <= 20 + 4 * request.resource.data.level
+        && request.resource.data.speed is number
+        && request.resource.data.speed <= 20 + 4 * request.resource.data.level
+        && request.resource.data.maxHealth is number
+        && request.resource.data.maxHealth <= 80 + 16 * request.resource.data.level
+        && request.resource.data.weapons is list
+        && request.resource.data.weapons.size() <= 50
+        && request.resource.data.skills is list
+        && request.resource.data.skills.size() <= 100;
+    }
+
+    // Catálogo estático dos pacotes de case da Loja (2026-07-23, sistema de compra de
+    // personagens) — preço/raridade/limite/odds. Nenhuma escrita do cliente em nenhuma
+    // circunstância: populado só por functions/scripts/seedCasePackages.ts (Admin SDK, roda fora
+    // do app, ver ARQUITETURA.md). Leitura liberada pra qualquer usuário autenticado — é
+    // catálogo público (preço/estoque restante aparecem no card da Loja antes da compra).
+    match /casePackages/{packageId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

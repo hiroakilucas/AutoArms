@@ -13,19 +13,25 @@ using UnityEngine.UI;
 // 2026-07-20 — era uma barra horizontal no topo com grid vertical, layout revisto a pedido do
 // usuário) + grid de cards rolando HORIZONTALMENTE à direita. Mesmo padrão de construção 100% via
 // código de 03_Arsenal (ArsenalController): Canvas/ScrollView/GridLayoutGroup montados em Start(),
-// sem hierarquia de UI pré-colocada na cena (só Main Camera + este GameObject). Preços/itens
-// espelham MONETIZACAO.md (seções 1-5) — hardcoded aqui de propósito nesta fase: o que está sendo
-// validado é o fluxo de clique/navegação, não uma fonte de dados dinâmica.
+// sem hierarquia de UI pré-colocada na cena (só Main Camera + este GameObject). Preços/itens de
+// Diamantes/Desbloqueios/Passes/Progressão espelham MONETIZACAO.md — hardcoded aqui de propósito
+// (comprar ainda não passa por nenhum gateway de pagamento real, Fase 8): o resultado da compra
+// (diamante/desbloqueio/passe/slot) persiste de verdade desde 2026-07-21 (WalletService/
+// ShopStateService), mas o PAGAMENTO em si nunca foi validado.
 //
-// FASE 1 (placeholder, escopo explícito do usuário): clicar num card NÃO grava no Firestore nem
-// debita WalletService de verdade — só loga no Console e incrementa um contador local em memória
-// (ShopItem.Purchased, perdido ao sair da cena). Trocar por WalletService/Cloud Function de
-// verdade quando a Fase 4 avançar além do placeholder (ver ARQUITETURA.md "Moeda premium" — este
-// controller nem chega a tocar WalletService, então a regra de diamante nunca-client-writable
-// nem entra em jogo ainda).
+// Personagens (aba, 2026-07-23): ÚNICA exceção nesta tela — compra de verdade, validada
+// server-side pela Cloud Function purchaseCase (ver CaseService/HandleCasePurchaseAsync), preço/
+// limite lidos ao vivo de casePackages/ (ver ARQUITETURA.md "Modelo de roster multi-personagem").
+// Recibo de pagamento cash ainda é mock (sem gateway real), mas o sorteio/concessão/débito de
+// diamante já são autoritativos no servidor, nunca no cliente.
 public class ShopController : MonoBehaviour
 {
     [SerializeField] private UITheme theme;
+
+    // Sistema de compra de personagens/case opening (2026-07-23) — precisa resolver ícone/nome/
+    // raridade de um characterTypeId pra popular a roleta e o card de reveal (CaseOpeningPopup).
+    // Wireado no Inspector da cena 06_Loja, mesmo padrão de theme.
+    [SerializeField] private CharacterDatabase characterDatabase;
 
     private enum Tab { Diamantes, Desbloqueios, Passes, Progressao, Personagens }
 
@@ -49,6 +55,12 @@ public class ShopController : MonoBehaviour
         public int DiamondNormalAmount;
         public int DiamondBonusAmount;
         public bool FirstPurchaseBonusUsed;
+
+        // Sistema de compra de personagens/case opening (2026-07-23) — não vazio identifica um
+        // item como pacote de case (mesmo espírito de DiamondNormalAmount > 0 pros pacotes de
+        // diamante); OnBuyClicked desvia pra HandleCasePurchaseAsync antes do incremento síncrono
+        // genérico, já que comprar um case chama a Cloud Function purchaseCase (assíncrono).
+        public string CasePackageId;
     }
 
     // Região compartilhada por Sidebar e ScrollView (2026-07-20, layout em sidebar) — mesmo topo/
@@ -89,6 +101,16 @@ public class ShopController : MonoBehaviour
     // foram feitas nesta sessão" — a próxima liberação é sempre `item.Purchased + 1`. Ver
     // CharacterSlotCost/OnBuyClicked.
     private const string CharacterSlotTitle = "Próximo Personagem";
+
+    // Aba Personagens — sistema de compra de personagens/case opening (2026-07-23). IDs batem
+    // 1:1 com os documentos casePackages/{packageId} no Firestore (ver
+    // functions/src/scripts/seedCasePackages.ts). Preço/limite abaixo são o FALLBACK mostrado
+    // antes do primeiro carregamento real (ou se o documento não existir ainda) — mesmos valores
+    // de MONETIZACAO.md seções 5/7, devem ficar em sincronia manual com o seed.
+    private const string PackageIdRare = "case_rare";
+    private const string PackageIdLegendary = "case_legendary";
+    private const string PackageIdImmortal = "case_immortal";
+    private const string PackageIdMoedaGeral = "case_moeda_geral";
 
     // Diamantes (2 linhas): dimensiona pra caber ~4 colunas visíveis na largura do ScrollView.
     private const float CardWidthMulti = 320f;
@@ -166,11 +188,31 @@ public class ShopController : MonoBehaviour
         PlayerEconomyState.Coins = coins;
         PlayerEconomyState.Diamonds = diamonds;
         await ShopStateService.LoadAsync(uid);
+        await LoadCasePackageStateAsync(uid);
 
         BuildItemData();
         RebuildGrid();
         _displayedDiamonds = PlayerEconomyState.Diamonds;
         if (_diamondValueTxt != null) _diamondValueTxt.text = _displayedDiamonds.ToString();
+    }
+
+    // Sistema de compra de personagens/case opening (2026-07-23) — carrega os 4 pacotes
+    // (casePackages/{packageId}, catálogo estático) + quantas vezes esta conta já comprou cada um
+    // (users/{uid}/casePurchases/{packageId}), pra BuildItemData mostrar preço/limite/"restantes"
+    // reais em vez do fallback hardcoded. Falha silenciosa por pacote (CasePackageService já loga
+    // erro) — card cai pro fallback se o documento não existir ainda (ex: seed não rodado).
+    private static readonly string[] AllPackageIds = { PackageIdRare, PackageIdLegendary, PackageIdImmortal, PackageIdMoedaGeral };
+
+    private async Task LoadCasePackageStateAsync(string uid)
+    {
+        foreach (var packageId in AllPackageIds)
+        {
+            var info = await CasePackageService.LoadPackageAsync(packageId);
+            if (info != null) CasePackageState.Packages[packageId] = info;
+
+            int purchasedCount = await CasePackageService.LoadPurchasedCountAsync(uid, packageId);
+            CasePackageState.PurchasedCounts[packageId] = purchasedCount;
+        }
     }
 
     // Cena nova sem EventSystem pré-colocado — mesmo padrão de ArsenalController/CombatHUD.
@@ -278,13 +320,62 @@ public class ShopController : MonoBehaviour
         // CharacterCardUI pro fundo do portrait — sem precisar inventar cor nova. Card de
         // liberação por moeda (seção 6) vem primeiro — preço em moeda (ícone Coin, não Diamond),
         // dinâmico a partir de CharacterSlotCost(1) pra próxima liberação nesta sessão.
+        // Sistema de compra de personagens/case opening (2026-07-23) — preço/limite lidos de
+        // CasePackageState (populado por LoadCasePackageStateAsync a partir de casePackages/),
+        // com fallback pros mesmos valores de MONETIZACAO.md enquanto isso não carrega ainda (ou
+        // se o seed nunca rodou). `Purchased` vem do contador real por jogador
+        // (casePurchases/{packageId}), não mais um contador de sessão em memória.
+        var rareItem = NewItem("Personagem Raro", "Sorteio entre 19 personagens raros, sem repetição.",
+            CasePriceLabel(PackageIdRare, cashFallback: 99.00), limit: CasePurchaseLimit(PackageIdRare, 10), accent: theme.rarityRare);
+        rareItem.CasePackageId = PackageIdRare;
+        rareItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdRare, out var rareCount) ? rareCount : 0;
+
+        var legendaryItem = NewItem("Personagem Legendary", "Sorteio entre 11 personagens legendary, sem repetição.",
+            CasePriceLabel(PackageIdLegendary, cashFallback: 199.00), limit: CasePurchaseLimit(PackageIdLegendary, 3), accent: theme.rarityLegendary);
+        legendaryItem.CasePackageId = PackageIdLegendary;
+        legendaryItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdLegendary, out var legendaryCount) ? legendaryCount : 0;
+
+        var immortalItem = NewItem("Personagem Imortal", "Sorteio entre 3 personagens imortais, sem repetição.",
+            CasePriceLabel(PackageIdImmortal, cashFallback: 249.00), limit: CasePurchaseLimit(PackageIdImmortal, 1), accent: theme.rarityImmortal);
+        immortalItem.CasePackageId = PackageIdImmortal;
+        immortalItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdImmortal, out var immortalCount) ? immortalCount : 0;
+
+        // Case Geral (moeda/diamante, 2026-07-23) — 4º pacote, distinto do card "Próximo
+        // Personagem" acima (moeda/soft currency, liberação de slot sem odds de raridade,
+        // MONETIZACAO.md seção 6). Pool = todos os personagens de todas as raridades, sorteados
+        // pelas tierWeights (seção 7); sem limite de compras.
+        var moedaGeralItem = NewItem("Case Geral",
+            "Sorteio entre TODOS os personagens do jogo, por raridade (odds da distribuição real).\nSem limite de compras.",
+            CaseCurrencyPriceLabel(PackageIdMoedaGeral, currencyFallback: 500), _diamondIconSprite,
+            limit: CasePurchaseLimit(PackageIdMoedaGeral, 0));
+        moedaGeralItem.CasePackageId = PackageIdMoedaGeral;
+        moedaGeralItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdMoedaGeral, out var moedaCount) ? moedaCount : 0;
+
         _items[Tab.Personagens] = new List<ShopItem>
         {
             NewItem(CharacterSlotTitle, "Libera o próximo personagem disponível.\nCusto aumenta a cada liberação.", $"{CharacterSlotCost(1)} moedas", coinIcon),
-            NewItem("Personagem Raro", "Sorteio entre 19 personagens raros, sem repetição.", "R$ 99,00", limit: 10, accent: theme.rarityRare),
-            NewItem("Personagem Legendary", "Sorteio entre 11 personagens legendary, sem repetição.", "R$ 199,00", limit: 3, accent: theme.rarityLegendary),
-            NewItem("Personagem Imortal", "Sorteio entre 3 personagens imortais, sem repetição.", "R$ 249,00", limit: 1, accent: theme.rarityImmortal),
+            rareItem,
+            legendaryItem,
+            immortalItem,
+            moedaGeralItem,
         };
+    }
+
+    private static string CasePriceLabel(string packageId, double cashFallback)
+    {
+        double cash = CasePackageState.Packages.TryGetValue(packageId, out var info) ? info.CashPrice : cashFallback;
+        return $"R$ {cash:F2}".Replace(".", ",");
+    }
+
+    private static int CasePurchaseLimit(string packageId, int limitFallback)
+    {
+        return CasePackageState.Packages.TryGetValue(packageId, out var info) ? info.PurchaseLimitPerPlayer : limitFallback;
+    }
+
+    private static string CaseCurrencyPriceLabel(string packageId, int currencyFallback)
+    {
+        int cost = CasePackageState.Packages.TryGetValue(packageId, out var info) ? info.CurrencyCost : currencyFallback;
+        return $"{cost} diamantes";
     }
 
     private static ShopItem NewItem(string title, string subtitle, string price, Sprite icon = null, int limit = 0, Color? accent = null)
@@ -370,7 +461,21 @@ public class ShopController : MonoBehaviour
     // construído sob demanda e descartado ao fechar.
     private void ShowPassInfoPopup()
     {
-        var canvasGo = new GameObject("PassInfoPopupCanvas (temp)");
+        // Atualizado (2026-07-21) — o bônus de XP por vitória JÁ está funcionando de verdade
+        // (AttackSequencer.OnCombatEnd lê PlayerPassState.WinXpBonus a cada vitória); só a coleta
+        // diária de diamante/moeda continua pendente.
+        ShowInfoPopup("O bônus de XP por vitória do seu passe já está funcionando (some ao XP " +
+            "normal de cada vitória, todos os personagens).\n\nA coleta diária de diamantes e " +
+            "moedas do passe ainda será liberada em uma atualização futura.");
+    }
+
+    // Popup genérico de mensagem+OK (extraído de ShowPassInfoPopup em 2026-07-23 pra ser
+    // reaproveitado pelos erros de compra de case - "pool esgotada"/limite atingido/saldo
+    // insuficiente, ver HandleCasePurchaseAsync) - mesmo overlay+painel+botão de sempre, só o
+    // texto muda por chamador.
+    private void ShowInfoPopup(string message)
+    {
+        var canvasGo = new GameObject("InfoPopupCanvas (temp)");
         var canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 30;
@@ -407,12 +512,7 @@ public class ShopController : MonoBehaviour
         msgRt.anchorMin = new Vector2(0.08f, 0.28f); msgRt.anchorMax = new Vector2(0.92f, 0.92f);
         msgRt.offsetMin = msgRt.offsetMax = Vector2.zero;
         var msgTxt = msgGo.AddComponent<TextMeshProUGUI>();
-        // Atualizado (2026-07-21) — o bônus de XP por vitória JÁ está funcionando de verdade
-        // (AttackSequencer.OnCombatEnd lê PlayerPassState.WinXpBonus a cada vitória); só a coleta
-        // diária de diamante/moeda continua pendente.
-        msgTxt.text = "O bônus de XP por vitória do seu passe já está funcionando (some ao XP " +
-            "normal de cada vitória, todos os personagens).\n\nA coleta diária de diamantes e " +
-            "moedas do passe ainda será liberada em uma atualização futura.";
+        msgTxt.text = message;
         msgTxt.fontSize = 26;
         msgTxt.color = theme.textOnDark;
         msgTxt.alignment = TextAlignmentOptions.Center;
@@ -807,6 +907,16 @@ public class ShopController : MonoBehaviour
     {
         if (item.PurchaseLimit > 0 && item.Purchased >= item.PurchaseLimit) return;
 
+        // Sistema de compra de personagens/case opening (2026-07-23) — assíncrono (chama a Cloud
+        // Function purchaseCase) e só incrementa item.Purchased/abre a roleta depois de confirmar
+        // sucesso; sai antes do incremento síncrono genérico abaixo, usado pelos outros 4 tipos
+        // de item (que nunca podem falhar depois do clique, diferente deste).
+        if (!string.IsNullOrEmpty(item.CasePackageId))
+        {
+            _ = HandleCasePurchaseAsync(item, card);
+            return;
+        }
+
         item.Purchased++;
 
         // Pacote de diamante — bônus de 1ª compra (ver NewDiamondItem/ShopItem.
@@ -971,5 +1081,71 @@ public class ShopController : MonoBehaviour
         }
 
         card.RefreshPurchaseState(item.Purchased, item.PurchaseLimit);
+    }
+
+    // Sistema de compra de personagens/case opening (2026-07-23) — chama a Cloud Function
+    // purchaseCase (CaseService), nunca sorteia/decrementa nada localmente. Em sucesso, abre
+    // CaseOpeningPopup com o resultado já decidido pelo servidor; em erro, mostra a mensagem certa
+    // (ShowInfoPopup) sem abrir a roleta — "pool esgotada"/limite atingido/saldo insuficiente.
+    private async Task HandleCasePurchaseAsync(ShopItem item, ShopCardUI card)
+    {
+        if (!AuthService.IsSignedIn)
+        {
+            ShowInfoPopup("É necessário estar logado para comprar personagens.");
+            return;
+        }
+
+        // Cash (Raro/Legendary/Imortal) exige um "recibo" — mock por enquanto (sem gateway de
+        // pagamento real, ver MONETIZACAO.md/ARQUITETURA.md "Moeda premium"). A Cloud Function já
+        // está pronta pra validar de verdade (TODO explícito em purchaseCase.ts); só o que entra
+        // aqui muda quando o gateway (Google Play Billing/Apple StoreKit) existir.
+        bool isCash = item.CasePackageId != PackageIdMoedaGeral;
+        string mockReceipt = isCash ? $"mock-receipt-{Guid.NewGuid()}" : null;
+
+        var result = await CaseService.PurchaseCaseAsync(item.CasePackageId, mockReceipt);
+        if (!result.Success)
+        {
+            string message = (result.ErrorMessage ?? "").Contains("pool esgotada")
+                ? "Você já possui todos os personagens desta raridade — pool esgotada."
+                : result.ErrorCode == "resource-exhausted"
+                    ? "Limite de compras atingido para este pacote."
+                    : result.ErrorCode == "failed-precondition"
+                        ? "Saldo de diamantes insuficiente."
+                        : "Não foi possível completar a compra. Tente novamente.";
+            ShowInfoPopup(message);
+            return;
+        }
+
+        // Diagnóstico (2026-07-25, investigando "Continuar não abre o detalhe do personagem") —
+        // grantedCharacterId só existe na resposta de purchaseCase desde uma rodada anterior
+        // desta mesma tarefa; se a Cloud Function implantada AINDA for a versão de antes dessa
+        // mudança (functions/src/purchaseCase.ts editado localmente, mas nunca reimplantado via
+        // `firebase deploy --only functions`), a resposta não teria essa chave —
+        // `dict["grantedCharacterId"] as string` (CaseService.cs) não lança exceção nesse caso
+        // (IDictionary não-genérico devolve null pra chave ausente, não lança), então a compra
+        // continua "bem-sucedida" (reveal funciona normalmente, usa wonCharacterTypeId) mas
+        // PendingCharacterSelection nunca é setado — CharacterSelectController nunca vê nenhuma
+        // seleção pendente e cai na grade normal, SEM nenhum erro em lugar nenhum. Este log
+        // confirma/descarta essa hipótese de forma inequívoca.
+        if (string.IsNullOrEmpty(result.GrantedCharacterId))
+        {
+            Debug.LogError("[ShopController] purchaseCase respondeu sem 'grantedCharacterId' - a Cloud Function implantada provavelmente ainda é uma versão antiga (rodar `firebase deploy --only functions` depois de functions/src/purchaseCase.ts ter sido atualizado). 'Continuar' não vai conseguir abrir o detalhe do personagem concedido sem esse campo.");
+        }
+
+        item.Purchased++;
+        CasePackageState.PurchasedCounts[item.CasePackageId] = item.Purchased;
+        card.RefreshPurchaseState(item.Purchased, item.PurchaseLimit);
+
+        // Diamante já foi debitado no servidor (dentro da transaction de purchaseCase) — só
+        // espelha localmente pro contador do header não esperar um reload de PlayerEconomyState.
+        if (item.CasePackageId == PackageIdMoedaGeral && CasePackageState.Packages.TryGetValue(item.CasePackageId, out var pkgInfo))
+        {
+            PlayerEconomyState.Diamonds = Mathf.Max(0, PlayerEconomyState.Diamonds - pkgInfo.CurrencyCost);
+            _displayedDiamonds = PlayerEconomyState.Diamonds;
+            if (_diamondValueTxt != null) _diamondValueTxt.text = _displayedDiamonds.ToString();
+        }
+
+        CaseOpeningPopup.Show(theme, characterDatabase, result.ReelPoolCharacterTypeIds, result.WonCharacterTypeId,
+            result.GrantedCharacterId, onClosed: null);
     }
 }

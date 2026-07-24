@@ -1,7 +1,534 @@
 # AutoArms — Changelog
 
 ### Progresso
-- Total: 144 tarefas | Concluídas: 52 (recontado em 2026-07-21 — ver nota em CLAUDE.md)
+- Total: 144 tarefas | Concluídas: 53 (2026-07-23: +1, "Compra de energia e personagens com
+  diamante" fechada por completo — ver ROADMAP_FUTURO.md Fase 4)
+
+- 2026-07-25: **Energia não atualizava ao trocar de personagem pela seta/arraste no menu
+  principal (bug real, reportado pelo usuário — ex: trocar pro "Medieval Warrior", com 7 de
+  energia, pra outro personagem nunca jogado ainda mostrava "7" também)** — energia é POR
+  PERSONAGEM (`users/{uid}/characters/{characterId}`, ver `EnergyService`), mas
+  `PlayerEconomyState.EnergyCurrent` é um cache único/global, recarregado só no login ou ao abrir
+  o menu — `MainMenuCharacterPreview.SwitchCharacter` nunca buscava a energia do personagem NOVO,
+  só reconstruía a fileira de ícones com o valor global (do personagem anterior) ainda em cache.
+  Corrigido chamando `MainMenuController.RefreshEconomyOnMenuLoad()` (já lê
+  `selectedProfileHolder.currentProfile.OpponentId()`, atualizado pelo `SetProfile` do próprio
+  `SwitchCharacter`) a cada troca — mesmo re-fetch que já roda ao carregar o menu.
+
+- 2026-07-25: **2 bugs reais corrigidos, achados testando a resiliência do level-up (entrada
+  seguinte)**:
+  1. **NullReferenceException em `CharacterPanel.RefreshAll()`/`MainMenuController.Start()`** —
+     `SelectedProfileHolder.currentProfile` pode ser uma instância RUNTIME (personagem de case
+     opening, `isRuntimeInstance=true`) sem referência estável entre sessões (`characterId`, campo
+     do holder, já documentava essa limitação, mas a reconstrução nunca tinha sido implementada) —
+     se a conta ativa era um desses personagens quando o app fechou, `currentProfile` chegava nulo
+     na sessão seguinte e travava `characterPanel.Setup()` no carregamento do menu. Duas correções:
+     - `MainMenuController.Start()` virou `InitializeAsync()` (chamado via `_ = InitializeAsync()`
+       em `Start()`) — novo `ReconstructSelectedProfileIfMissingAsync()` roda ANTES de
+       `characterPanel.Setup()`: tenta achar o personagem ORIGINAL/molde por nome em
+       `characterDatabase.unlockedCharacters` primeiro; se não achar (é um personagem de ROSTER),
+       busca `RosterService.GetOwnedCharacterDocAsync` + `PlayerProfileConverter.FromCharacterDTO`
+       (mesmo padrão já usado por `CharacterSelectController`/`MainMenuCharacterPreview`).
+     - **`CharacterPanel.RefreshAll()` tinha um guard de `p == null` que também travava** —
+       assumia `_compactInfo.name`/`_expandedInfo.name` sempre existirem, mas no modo
+       `_bottomAnchored` (gaveta mobile, único uso: `MainMenuController`) esses campos ficam
+       `null` de propósito (ver "Gaveta mobile" em CLAUDE.md). Corrigido com null-check antes de
+       escrever `.text`, eliminando a exceção mesmo se a reconstrução acima falhar por qualquer
+       outro motivo (ex: sem conta/rede).
+  2. **Painel de detalhe do personagem aparecia aberto no centro da tela ao retomar a escolha de
+     level-up, em vez do botão "i" colapsado no canto superior direito** —
+     `CombatResultPanel.ResumePendingLevelUpChoiceIfAny` usava `FindScreenCanvas()` (primeiro
+     Canvas `ScreenSpaceOverlay` encontrado por `FindObjectsOfType`, sem ordem garantida) como pai
+     da tela de escolha inteira; seguro em `04_CombatScenePVP` (só o Canvas do `CombatHUD`
+     existe), mas em `01_MainMenu` (onde a retomada roda) já existem vários Canvas concorrentes
+     (`CharacterPanel` bottomAnchored, `CurrencyHud`, HUDs de Level/XP/Energia) — reusar um deles
+     tornava a ordem de desenho dependente de sibling index dentro de um Canvas alheio. Corrigido
+     criando um Canvas raiz DEDICADO (`sortingOrder=1000`, abaixo do popup de detalhe da própria
+     tela de escolha, que já usa 1500) só para a retomada, destruído junto quando o jogador
+     finalmente escolhe uma caixa.
+  3. **Regressão do próprio fix do item 2 acima, achada no teste seguinte do usuário — as 5
+     caixas de escolha "estouraram" a tela** — o Canvas dedicado criado no item 2 ganhou `Canvas`+
+     `GraphicRaycaster`, mas faltou o `CanvasScaler` (`ScaleWithScreenSize`, referenceResolution
+     1920×1080) que TODO outro Canvas do projeto tem (`LoginController`/`MainMenuController`/
+     `CharacterPanel`/etc.) — sem ele, o Canvas cai no modo default "Constant Pixel Size": cards
+     de 270-405px (`CardScale=1.5`) renderizavam em pixels BRUTOS de tela, sem escalar pra caber,
+     em vez de unidades de referência 1920×1080 escaladas pro tamanho real da tela/janela. O
+     Canvas que `FindScreenCanvas()` encontrava ANTES do fix do item 2 sempre tinha essa config
+     "de graça" por ser um Canvas já existente da cena — o Canvas dedicado novo não herda nada
+     automaticamente. Corrigido adicionando o `CanvasScaler` que faltava.
+
+- 2026-07-25: **Resiliência do level-up de combate a fechamento abrupto do app implementada**
+  (investigação prévia confirmou cenário (b): XP/level/+2 HP automático/`battlesRemaining` e a
+  escolha de skill/arma/pet/status ficavam represados em memória até o jogador escolher uma
+  caixa — fechar o app no meio da tela "Escolha 1 bônus" perdia a luta inteira, sem nenhuma
+  lógica de retomada existente). Desenho aprovado antes de implementar (ver histórico da
+  conversa) — dois pontos de save:
+  - **`AttackSequencer.OnCombatEnd`**: o `if (!result.didLevelUp)` que guardava o save some — salva
+    SEMPRE agora, incondicional, logo após `XpSystem.AddXP` (antes até de `CombatResultPanel` ser
+    instanciado). `battlesRemaining`/`xpCurrent`/`level`/o +2 HP automático nunca dependeram da
+    escolha pendente, só ficavam represados por cautela — `XpSystem.cs` também teve o comentário
+    (agora desatualizado) corrigido. Novo campo `PlayerProfile.hasPendingLevelUpChoice` é setado
+    (`= result.didLevelUp`) na mesma gravação.
+  - **`CombatResultPanel.ShowLevelUpChoice`/`DrawAndBuildCards`**: assim que as N caixas são
+    sorteadas (1ª vez OU a cada "Novo Sorteio"), persiste o rascunho em
+    `PlayerProfile.pendingLevelUpBoxes` (kind/name/tier de cada caixa — mesmo shape de
+    `CharacterUnlockEngine.ToServerShape`, mas cobrindo também `Kind.Attribute`, que os unlocks do
+    case opening nunca produzem) + `pendingLevelUpRerollsUsed`, ANTES de montar qualquer card na
+    tela. `ApplyBonus` limpa os três campos (`hasPendingLevelUpChoice`/`pendingLevelUpBoxes`/
+    `pendingLevelUpRerollsUsed`) na mesma chamada de save que já aplicava o bônus escolhido —
+    único ponto em todo o sistema que os zera.
+  - **Retomada**: novo `CombatResultPanel.ResumePendingLevelUpChoiceIfAny(profile, theme)`,
+    chamado por `MainMenuController.Start()` a cada carregamento do menu — se
+    `hasPendingLevelUpChoice` estiver true, resolve `pendingLevelUpBoxes` de volta pro
+    `LevelUpOption` real (`ResolvePendingBox`, usando `SkillDatabase`/`WeaponDatabase`/
+    `PetDatabase` via `Resources.Load`, já que fora da cena de combate não há Inspector wireando
+    isso) e reabre a MESMA tela de escolha (`ShowLevelUpChoice` ganhou os parâmetros opcionais
+    `resumeOptions`/`resumeRerollsUsed`) — mesmas caixas, mesmo progresso de custo do "Novo
+    Sorteio" (não reinicia pra 50 diamantes). Bloqueio do menu (Jogar/Chibers/etc.) é automático:
+    o overlay opaco que a tela de escolha já constrói (`raycastTarget=true`, cobre a tela
+    inteira) já intercepta qualquer clique atrás dele, sem precisar desabilitar cada botão à
+    parte. Se os dados salvos não resolverem por completo (ex: catálogo mudou entre fechar e
+    reabrir), cai pro sorteio fresco de novo em vez de arriscar mostrar caixas incompletas —
+    mesma rede de segurança já usada no case opening.
+  - **`ShowAllOptionsForTesting` desligada de novo** (`CombatResultPanel.cs`, `true` → `false`,
+    pedido do usuário) — precisava estar `false` pra testar o item 3 do plano (progressão de
+    custo do "Novo Sorteio" sobrevivendo a fechar/reabrir o app), que só existe na tela real em
+    pirâmide, não na grade de teste com todas as opções. Religar se precisar testar skill nova
+    sem ícone/tier de novo (ver histórico da constante).
+
+- 2026-07-25: **2ª rodada da retomada de unlocks — a "limitação conhecida" registrada na entrada
+  anterior aconteceu de verdade no teste do usuário e foi corrigida**: sorteou "Book", fechou o
+  app antes de aceitar, reabriu e veio um resultado DIFERENTE ("Vampirismo") em vez de continuar
+  mostrando "Book"; e o contador de refresh reiniciava mostrando "2 disponíveis" mesmo já tendo
+  usado 1 antes de fechar, causando um "resource-exhausted" inesperado (com o botão ainda
+  habilitado) ao tentar de novo. Causa: só `caseUnlocksAcceptedCount` (unlocks JÁ ACEITOS) era
+  persistido — o RASCUNHO do unlock em andamento (ainda não aceito) só existia na variável local
+  `option`, perdida ao fechar o processo; o contador de refresh (`remainingRerolls`) também só
+  vivia no client, resetado pra `MaxRerollsPerUnlock` a cada novo sorteio, sem nunca checar o que
+  o servidor (`unlockRerollCounts`) já tinha de verdade. Fix: novos campos
+  `PlayerProfile.pendingUnlockIndex/Kind/Name/Tier/RerollsUsed` (+ round-trip completo em
+  `CharacterDTO`/`CharacterDTOMap`/`PlayerProfileConverter.ToDTO`**e**`ApplyDTO`) persistem o
+  rascunho atual (mesmo shape kind/name/tier que o servidor usa, ver novo
+  `CharacterUnlockEngine.ToServerShape`) IMEDIATAMENTE após cada sorteio/refresh, antes mesmo de
+  mostrar o painel — se `pendingUnlockIndex` já bate com o unlock atual ao entrar no loop
+  (`ResolveCaseUnlocksAsync`), resolve esse mesmo rascunho de volta (`ResolveServerResult`) em vez
+  de sortear um novo, e restaura `remainingRerolls` a partir do `pendingUnlockRerollsUsed`
+  salvo — nunca mais reinicia a contagem à toa. Rascunho é limpo (`ClearUnlockDraft`) só quando o
+  unlock é de fato aceito.
+
+- 2026-07-25: **Bug real corrigido — fechar o app no meio da sequência de unlocks perdia os
+  unlocks restantes pra sempre** (pergunta do usuário: "caso ele feche o jogo na 1ª sorte de
+  skill, perde toda as skills futuras que tinha pra receber?" — resposta era sim, antes deste
+  fix). Causa: `ResolveCaseUnlocksAsync` só era chamado uma vez, no caminho específico de
+  `PendingCharacterSelection` logo após a compra — `PendingCharacterId` já tinha sido consumido
+  nesse momento, então reabrir o personagem depois (mesmo clicando normalmente na grade) nunca
+  tentava de novo. Fix: `OnCharacterSelected` agora dispara/retoma os unlocks sozinho toda vez que
+  o detalhe de um personagem do roster (`isRuntimeInstance`) com `!caseUnlocksResolved` é aberto —
+  cobre tanto o caminho pós-compra quanto reabrir depois. Retomar do 1º unlock sempre incorreria
+  em duplicar os já aceitos (não dá pra usar `skills.Count+weapons.Count+pets.Count` como proxy —
+  um unlock que evolui uma família já possuída não aumenta esse total), então novo campo
+  `PlayerProfile.caseUnlocksAcceptedCount` (+ `CharacterDTO`/`CharacterDTOMap`/
+  `PlayerProfileConverter.ToDTO`**e**`ApplyDTO`, os dois sentidos desta vez — ver bug do
+  `characterTypeId` mais acima no dia) é persistido a cada "Continuar" aceito e usado como ponto
+  de retomada do loop (`for (i = acceptedCount + 1; i <= total; i++)`). **Limitação conhecida,
+  não corrigida agora**: se o app fechar depois de usar 1+ refresh num unlock mas antes de aceitar
+  esse mesmo unlock, o contador de refresh no SERVIDOR (`unlockRerollCounts`) continua contando
+  o(s) uso(s) anterior(es), mas o CLIENTE reinicia a UI mostrando 2 refreshes disponíveis de novo
+  ao retomar — cosmético, não é brecha de segurança (o servidor sempre recusa corretamente se o
+  limite real já tiver sido atingido).
+
+- 2026-07-25: **Melhoria de UI no refresh dos unlocks** (pedido do usuário) — contagem de
+  refreshes restantes agora aparece direto no próprio botão ("Refresh (15 diamantes) — N
+  restante(s)"), não só na linha de status abaixo. Também corrigido: label usava o emoji 💎, que
+  não existe na fonte TMP do projeto e renderizava como quadrado vazio (mesmo bug já visto antes
+  com ★) — trocado por "diamantes" por extenso, igual ao resto do jogo (`CombatResultPanel`
+  "Novo Sorteio (X diamantes)").
+
+- 2026-07-25: **Bug real corrigido — `rerollUnlock` falhava com `UNAUTHENTICATED` na 1ª tentativa
+  de uso** (reportado pelo usuário testando o refresh pela primeira vez). Causa: não era erro de
+  código — o Cloud Run subjacente à function recém-criada rejeitava a chamada antes mesmo dela
+  chegar no nosso `request.auth` ("The request was not authorized to invoke this service"), porque
+  a permissão de invocação pública (que o `firebase deploy` normalmente configura sozinho pra toda
+  function `onCall`) não foi aplicada na criação inicial — `purchaseCase` (function já existente,
+  só atualizada) não sofria disso. Resolvido reimplantando só `rerollUnlock`
+  (`firebase deploy --only functions:rerollUnlock`) — o redeploy reaplicou a permissão
+  corretamente.
+
+- 2026-07-25: **Refresh dos unlocks progressivos do case opening implementado** (pedido do
+  usuário) — cada unlock revelado (skill/arma/pet) pode ser resorteado até 2 vezes antes de
+  aceitar, custo FIXO de 15 diamantes por uso (não escala, deliberadamente separado do "Novo
+  Sorteio" do level-up de combate, que dobra a cada uso — dois sistemas econômicos distintos, sem
+  lógica de custo compartilhada). Servidor-autoritativo de ponta a ponta, seguindo a regra
+  inegociável de `ARQUITETURA.md` "Moeda premium": nova Cloud Function `rerollUnlock`
+  (`functions/src/rerollUnlock.ts`) valida saldo de diamante e o limite de 2 refreshes (contador
+  `unlockRerollCounts` no próprio documento do personagem, nunca só client-side — não burlável) e
+  resorteia usando as MESMAS regras já implementadas (família ponderada por odds + tier por
+  posse, ver `functions/src/unlockEngine.ts`, porta 1:1 de `CharacterUnlockEngine.DrawUnlock`),
+  tudo numa única transaction atômica com o débito de diamante. Como a function roda em Node sem
+  acesso aos ScriptableObjects do Unity, novo `functions/src/unlockCatalog.json` (espelho de
+  odds/tiers reais de skill/arma/pet, gerado por `Tools > AutoArms > Export Unlock Catalog for
+  Cloud Function`, `Assets/Editor/UnlockCatalogExporter.cs`) — mesmo papel de
+  `characterCatalog.json` pra `purchaseCase`, também começa vazio até a 1ª exportação.
+  `CharacterSelectController.ResolveCaseUnlocksAsync` reestruturado: cada unlock agora é um
+  RASCUNHO (sorteado mas só aplicado a `match.skills/weapons/pets` quando "Continuar" é clicado)
+  — refresh troca o rascunho sem nunca ter tocado o personagem de verdade, o que também garante
+  que um rascunho descartado nunca conta como "possuído" pro próximo unlock nem pro próprio
+  `rerollUnlock` (que decide o tier lendo o documento do personagem no Firestore). Novo
+  `UnlockRerollService.cs` (client da function, mesmo padrão de `CaseService`/`purchaseCase`) e
+  `CharacterUnlockEngine.ResolveServerResult` (resolve nome+tier devolvidos pelo servidor pro
+  `SkillData`/`WeaponData`/`PetData` real via os databases locais). `CharacterUnlockRevealPanel`
+  ganhou botão "Refresh (15💎)" ao lado de "Continuar", linha de status (refreshes
+  restantes + saldo de diamante conhecido), estado ocupado durante a chamada e mensagem de erro
+  transitória se o servidor recusar (saldo insuficiente/limite atingido) sem travar o fluxo —
+  botão some por completo quando os 2 refreshes acabam. **Pré-requisito antes de testar**: rodar
+  `Tools > AutoArms > Export Unlock Catalog for Cloud Function` no Editor (catálogo começa vazio)
+  e `firebase deploy --only functions` — sem isso `rerollUnlock` sempre falha com "internal"
+  (nenhum candidato no pool), comportamento seguro por padrão.
+
+- 2026-07-25: **Bug real corrigido — personagem comprado via case opening sempre vinha com os
+  stats BASE mínimos (55 HP/2 STR/2 AGI/2 SPD), sem a distribuição aleatória de 9 pontos que
+  "Tools > AutoArms > Reset All Profiles to Level 1" e todo personagem pré-autorado do projeto
+  sempre tiveram** (reportado pelo usuário). Não era um bug — a 1ª versão de `purchaseCase.ts`
+  (2026-07-23) já documentava isso no próprio código como decisão deliberada: "sem RNG de stats no
+  servidor nesta primeira versão". Fix: nova `generateLevel1Stats()` em `purchaseCase.ts`,
+  réplica exata de `CharacterCreation.GenerateLevel1Stats()` (`Assets/Scripts/Utils/
+  CharacterCreation.cs`) — distribui 9 pontos aleatórios entre HP (+5/ponto), STR/AGI/SPD
+  (+1/ponto cada), 25% de chance cada por ponto, sem teto por atributo — usando
+  `crypto.randomInt` (mesmo padrão de segurança já usado no resto da function, nunca
+  `Math.random()` pra nada que decide recompensa do jogador). Precisa de `firebase deploy --only
+  functions` pra valer em produção (editar o `.ts` local nunca implanta sozinho — mesma lição já
+  aprendida antes nesta mesma function).
+
+- 2026-07-25: **Causa raiz REAL do bug "personagem comprado volta a aparecer bloqueado"
+  encontrada (4ª rodada) — bug próprio, introduzido na implementação dos unlocks desta mesma
+  sessão, não era cache/consistência do Firestore**. Instrumentação temporária
+  (`[RosterDebug]`, `Debug.Log` em `RosterService.ListOwnedCharacterDocsAsync`/`CacheDto` e
+  `CharacterSelectController.LoadRosterAndRefreshGridAsync`) confirmou no Console do usuário: o
+  documento `users/{uid}/characters/{characterId}` do personagem comprado tinha `characterTypeId`
+  correto ("Valkyrie 1") na 1ª leitura (logo após a compra), e **vazio** na 2ª leitura (mesma
+  sessão, via botão CHIBERS) — o campo estava sendo apagado de verdade no Firestore, não só lido
+  de um cache desatualizado. Causa: `PlayerProfile.characterTypeId` (novo campo desta sessão, ver
+  entrada "Unlocks progressivos..." acima) foi preenchido em `PlayerProfileConverter.
+  FromCharacterDTO` (leitura), mas **esquecido em `ToDTO`** (escrita) — todo `LocalSaveService.
+  Save(profile)` (chamado a cada unlock concedido em `ResolveCaseUnlocksAsync`, exatamente a
+  sequência que roda logo após a compra) reconstruía o `CharacterDTO` sem esse campo e
+  regravava o documento inteiro com `characterTypeId` vazio, apagando a própria marca que
+  `LoadRosterAndRefreshGridAsync` usa pra reconhecer o personagem como concedido via case opening.
+  Fix: `characterTypeId = profile.characterTypeId` adicionado em `PlayerProfileConverter.ToDTO`.
+  O `Source.Server`/cache de sessão das rodadas anteriores (`RosterService`) continuam válidos
+  como defesa adicional contra inconsistência real de leitura, mas não eram a causa deste bug
+  específico — mantidos, instrumentação de diagnóstico removida. **Nota**: personagens já
+  concedidos ANTES deste fix (ex: o "Valkyrie 1" usado no diagnóstico) já têm o documento
+  corrompido no Firestore — precisam de correção manual do campo `characterTypeId` no Console ou
+  de uma nova compra pra validar o fix; não é retroativo sozinho.
+
+- 2026-07-25: **3ª rodada do bug "personagem comprado volta a aparecer bloqueado" — o
+  `Source.Server` sozinho (rodada anterior) não foi suficiente** (reportado pelo usuário com
+  repro passo a passo: compra "Anubis" (Raro), reveal→Continuar mostra ele desbloqueado
+  corretamente na grade, mas "Voltar" pro menu → "CHIBERS" de novo mostra Anubis travado — mesma
+  sessão, sem fechar o app). Investigação confirmou que os dois caminhos (entrar vindo do case
+  opening e entrar vindo do botão CHIBERS) são o MESMO código
+  (`CharacterSelectController.Start()` → `LoadRosterAndRefreshGridAsync` →
+  `RosterService.ListOwnedCharacterDocsAsync`, já que `02_SelectCharacter` é recarregada do zero
+  via `SceneManager.LoadScene` nos dois casos, nunca reaproveitando a instância anterior) — não
+  havia dois caminhos divergentes, era a MESMA query de listagem não sendo confiável de forma
+  consistente mesmo com `Source.Server` (sem garantia formal de que uma query AGREGADA reflita um
+  doc criado poucos segundos antes por outro processo — a Cloud Function via Admin SDK — tão
+  rápido/consistentemente quanto um `get()` direto por ID). Fix definitivo: novo cache de SESSÃO
+  em `RosterService` (`characterId → CharacterDTO`, estático, nunca limpo entre cenas — só reseta
+  ao fechar o app, mesmo padrão de `PendingCharacterSelection`/`SelectedProfileHolder`) — todo
+  personagem que este device já confirmou possuir nesta sessão (via listagem OU via
+  `GetOwnedCharacterDocAsync`) fica cacheado e é sempre MESCLADO no resultado de
+  `ListOwnedCharacterDocsAsync` dali em diante — uma vez visto corretamente, nunca mais
+  "desaparece" de uma leitura futura nesta sessão, independente do que a query de listagem
+  devolva. Cache é sempre atualizado/sobrescrito a cada leitura bem-sucedida (sem stats
+  desatualizados presos além do necessário).
+
+- 2026-07-25: **2ª rodada do bug "personagem comprado aparece desabilitado" — o fix anterior
+  (deduplicar molde vs. instância do roster) não resolveu, porque o roster nem chegava a listar o
+  personagem** (reportado pelo usuário: comprou, fechou o overlay, voltou pro menu, clicou em
+  "Chibers" de novo — personagem continuava travado). Causa raiz de verdade:
+  `RosterService.ListOwnedCharacterDocsAsync` (a query que alimenta a grade inteira) chamava
+  `GetSnapshotAsync()` sem `Source.Server` — o personagem é criado pela Cloud Function
+  `purchaseCase` via Admin SDK, que nunca passa pelos listeners/sync normais do SDK client-side;
+  sem forçar o servidor, essa LISTAGEM podia continuar devolvendo o cache local persistente
+  (`FirestoreService.PersistenceEnabled = true`) indefinidamente, não só no instante seguinte à
+  compra — mesma causa raiz já identificada e corrigida antes só pro caso pontual de
+  `GetOwnedCharacterDocAsync` (fallback do fluxo de compra), mas nunca aplicada à query de
+  LISTAGEM geral, que é a que realmente popula a grade em qualquer reabertura normal da tela. Fix:
+  `Source.Server` explícito também em `ListOwnedCharacterDocsAsync`. O fix da rodada anterior
+  (`PlayerProfile.characterTypeId` + dedup do molde travado) continua válido e necessário — os
+  dois bugs eram reais e distintos, um mascarando o outro no teste.
+
+- 2026-07-25: **Bug real corrigido — personagem comprado via case opening aparecia "desabilitado"
+  na grade de `02_SelectCharacter`** (reportado pelo usuário depois de fechar o overlay de
+  detalhe e reabrir a tela pelo botão "Chibers"). Não era o personagem comprado em si — era um
+  card DUPLICADO e visualmente idêntico: quando o `characterTypeId` sorteado pelo case opening
+  bate com um dos 72 moldes pré-autorados do projeto (ex: comprou e caiu em "Anubis"), o molde
+  em si (`characterDatabase.unlockedCharacters`, sempre `isPlayable=false` a menos que seja o
+  personagem "original" desta conta) continuava aparecendo na grade travado/cinza, ao lado da
+  instância jogável de verdade concedida no roster — mesmo portrait, mesmo nome, fácil de olhar
+  pro card errado (o travado) e concluir que a compra veio desabilitada. Fix: novo campo
+  `PlayerProfile.characterTypeId` (`[NonSerialized]`, preenchido por
+  `PlayerProfileConverter.FromCharacterDTO`) identifica de qual molde cada instância do roster
+  veio; `CharacterSelectController.PopulateCharacterGridRoutine` agora pula qualquer molde cujo
+  `.name` já esteja representado por uma instância no roster da conta — só a instância jogável
+  aparece, sem o card travado redundante ao lado.
+
+- 2026-07-25: **2ª rodada do bug da grade quebrada de `02_SelectCharacter` — o fix anterior
+  (`LayoutRebuilder.ForceRebuildLayoutImmediate` no fim da construção + em `HideOverlayAfterDelay`)
+  não resolveu de fato** (reportado pelo usuário: continuava "uma caixinha pequena" ao clicar
+  "Fechar" em vez de "Selecionar"). Causa raiz de verdade: forçar o rebuild não adianta se
+  `gridPanel` ainda está DESATIVADO no momento em que ele roda — `Start()` desativava `gridPanel`
+  (`SetActive(false)`) até a seleção pendente resolver, e a 1ª leva de cards de
+  `PopulateCharacterGridRoutine` é construída de forma SÍNCRONA assim que `StartCoroutine` é
+  chamado (comportamento padrão da Unity — o corpo da coroutine roda até o 1º `yield` antes de
+  `StartCoroutine` retornar), o que acontece ANTES de `gridPanel.SetActive(true)` nesse fluxo —
+  `LayoutRebuilder.ForceRebuildLayoutImmediate` também não faz nada numa hierarquia inativa.
+  **Fix definitivo (substitui o da rodada anterior por completo)**: `gridPanel` nunca mais é
+  desativado — fica sempre ativo, construindo normalmente o tempo todo, IGUAL ao fluxo de clique
+  manual num card (que nunca teve esse bug). O "esconder a grade até resolver a seleção pendente"
+  virou um painel opaco temporário próprio (`ShowPendingSelectionCover`/
+  `HidePendingSelectionCover`, mesma cor de `selectionOverlayGo`), posicionado como sibling logo
+  acima de `gridPanel` (cobre só a grade, sem tapar o botão "Voltar" fixo) — puramente visual,
+  nunca toca a hierarquia/estado ativo da grade. Os dois `LayoutRebuilder.ForceRebuildLayoutImmediate`
+  da rodada anterior foram removidos (sem função nenhuma agora que a causa raiz não existe mais).
+
+- 2026-07-25: **Bug real corrigido — grade de `02_SelectCharacter` aparecia quebrada (1 card
+  cortado, em vez da grade completa de 3 colunas) depois de fechar o overlay de detalhe aberto
+  via case opening** (reportado pelo usuário testando o fluxo completo comprar→reveal→Continuar→
+  overlay de detalhe→Fechar; some voltando ao normal só saindo e reentrando na cena). Comparado
+  com o fluxo normal (clicar num card já dentro da grade, sem o bug) — a diferença é que só o
+  caminho de `PendingCharacterSelection` (personagem recém-ganho via case opening) desativa
+  `gridPanel` em `Start()` até resolver a seleção pendente. `PopulateCharacterGridRoutine`
+  (coroutine que constrói os cards em lotes de 12 por frame) tem sua 1ª leva executada de forma
+  SÍNCRONA assim que `StartCoroutine` é chamado — isso acontece ANTES de `gridPanel.
+  SetActive(true)` (só reativado depois, em `ResolvePendingCharacterSelectionAsync`) — então
+  `GridLayoutGroup`/`ContentSizeFitter` (em `gridContent`) tentam calcular layout de uma
+  hierarquia ainda INATIVA, o que a Unity simplesmente não processa (Canvas não renderiza pra
+  disparar o rebuild pendente), deixando o tamanho do Content e a posição dos cards presos num
+  estado parcial que não se autocorrige de forma confiável mesmo depois de `gridPanel` ser
+  reativado (limitação conhecida do Layout System da Unity com `ContentSizeFitter`/`LayoutGroup`
+  reativados). Fix: `LayoutRebuilder.ForceRebuildLayoutImmediate(gridContent)` no fim de
+  `PopulateCharacterGridRoutine` (causa raiz — ponto único que sempre roda com `gridPanel` já
+  ativo e cobre 100% dos cards, independente do timing durante a construção) + a mesma chamada
+  defensiva em `HideOverlayAfterDelay` (momento exato em que o jogador volta a ver a grade). Sem
+  efeito no fluxo normal (clique manual no card) — a grade já estava correta o tempo todo nesse
+  caminho.
+
+- 2026-07-25: **Bug real de design corrigido — unlocks progressivos do case opening concediam
+  T2/T3 de item que o personagem nunca tinha possuído em T1** (reportado pelo usuário: um Raro
+  saiu com "Vitalidade T1, Faca T2, Rato T3" — Faca T2/Rato T3 sem nunca ter tido Faca T1/Rato
+  T1/T2). **Substitui por completo** a lógica implementada na rodada anterior (tier elegível por
+  POSIÇÃO do unlock na sequência — 1º só T1, 2º T1/T2, 3º+ T1/T2/T3 — independente de qual item
+  saía), que estava desconectada de posse real e por isso conseguia entregar um tier alto de um
+  item nunca visto antes. Regra corrigida em `CharacterUnlockEngine.DrawUnlock` (agora recebe o
+  `PlayerProfile`, não mais um índice de unlock): cada unlock sorteia uma FAMÍLIA (skill/arma/pet,
+  ponderado pelos mesmos odds de sempre) e o tier concedido é sempre `1 + maior tier que o
+  personagem já possui desta família específica` — nunca um tier arbitrário. Família já no tier
+  máximo (T3) não desperdiça o unlock: sorteia outra em vez de conceder. Como o profile já reflete
+  tudo aplicado nos unlocks anteriores da MESMA sequência (`LevelUpEngine.ApplyOption` roda antes
+  do próximo sorteio), T2/T3 só aparecem quando a mesma família calha de repetir dentro da mesma
+  sequência de abertura — raro por natureza, como esperado. Reaproveita
+  `SkillDatabase.FindByFamilyNameAndTier`/`WeaponDatabase.FindByFamilyNameAndTier`/
+  `PetDatabase.FindByTypeAndTier` (mesma resolução já usada pela camada de save) em vez de andar
+  cadeia de tier manualmente. `CharacterSelectController.ResolveCaseUnlocksAsync` simplificado
+  junto — não precisa mais rastrear conjuntos de exclusão por família (a checagem de posse já
+  cobre isso sozinha).
+
+- 2026-07-25: **Bug real corrigido — compra de case falhava com `NotFound`/"Pacote não
+  encontrado"** (reportado pelo usuário testando `case_rare` pela 1ª vez desde a implementação
+  dos unlocks acima). Causa: não era bug de código — `purchaseCase` lê `casePackages/{packageId}`
+  no Firestore (`functions/src/purchaseCase.ts`) e o script que popula essa coleção
+  (`functions/src/scripts/seedCasePackages.ts`, `npm run seed`) nunca tinha sido executado contra
+  o Firestore de produção desde que o sistema de case opening foi criado (2026-07-23) — os 4
+  documentos (`case_rare`/`case_legendary`/`case_immortal`/`case_moeda_geral`) simplesmente não
+  existiam ainda. Rodado agora (`GOOGLE_APPLICATION_CREDENTIALS` apontando pra uma service account
+  key local do projeto `autoarms-c248f`, já que o script usa Admin SDK/ADC, autenticação diferente
+  do login do `firebase` CLI) — "Seed concluído — 4 pacotes gravados em casePackages/." confirmado.
+
+- 2026-07-25: **Unlocks progressivos de skill/arma/pet ao ganhar personagem via case opening
+  implementado** (pedido do usuário — cada raridade concede N sorteios sequenciais: Normal 1,
+  Uncommon 2, Rare 3, Legendary 4, Immortal 5). Investigação prévia (obrigatória antes de
+  implementar, pedido explícito do usuário) confirmou que as tabelas de odds POR ITEM já existiam
+  e já estavam conectadas (`SkillData.odds`/`WeaponData.dropOdds`/`PetData.odds`, aplicadas por
+  `OddsApplier.cs`, mesmas usadas em `LevelUpEngine.DrawWeightedOption` no level-up de combate) —
+  reaproveitadas sem alterar nenhum valor. Não existia, e foi confirmado com o usuário antes de
+  codar: pesos de TIER por unlock (1º unlock só T1; 2º T1 ou T2; 3º em diante T1/T2/T3) — decisão
+  final do usuário foi não inventar uma tabela de pesos nova, e sim incluir os tiers elegíveis no
+  MESMO pool ponderado por odds já existente; como o odds de uma família é idêntico em todos os
+  seus tiers (`OddsApplier`), isso já produz uma divisão uniforme entre tiers elegíveis sem
+  nenhuma tabela extra. Novo `CharacterUnlockEngine.cs` (`Assets/Scripts/Utils/`) faz esse sorteio
+  (exclui família já concedida na mesma sequência) e devolve um `LevelUpOption` reaproveitado
+  direto por `LevelUpEngine.ApplyOption` (mesma mutação/bônus flat de Vitality-Herculean
+  Strength-etc/HP malus de pet já testada no level-up de combate — nenhuma lógica de aplicação
+  duplicada). Novo campo `PlayerProfile.caseUnlocksResolved`/`CharacterDTO.caseUnlocksResolved`
+  (Firestore, mesmo padrão de `isFavorite`/`rarity`) marca a sequência como concluída, pra nunca
+  reconceder ao reabrir o detalhe do mesmo personagem. Integração no fluxo (decisão do usuário,
+  pergunta explícita): dentro do MESMO overlay de detalhe que `OnCharacterSelected` já abre pro
+  personagem recém-concedido (não uma tela própria antes dele) — `Selecionar`/`Fechar` ficam
+  escondidos e um card de reveal simples (`CharacterUnlockRevealPanel.cs`, novo, Canvas próprio
+  sortingOrder 50 pra desenhar por cima do Canvas do `CharacterPanel`) mostra categoria+item+tier
+  um por vez, com "Continuar" avançando pro próximo; cada unlock é persistido (`LocalSaveService.
+  Save`) e refletido ao vivo no `CharacterPanel` (`Refresh()`) assim que aplicado, antes mesmo do
+  próximo ser sorteado. Ver MONETIZACAO.md seção 13.
+
+- 2026-07-25: **Causa raiz real encontrada e corrigida — "Continuar" ainda caía na grade mesmo
+  depois do fix anterior**: a Cloud Function `purchaseCase` implantada em produção ainda era uma
+  versão ANTIGA, de antes do campo `grantedCharacterId` ter sido adicionado à resposta (rodada
+  anterior desta mesma tarefa) — editar `functions/src/purchaseCase.ts` localmente nunca implanta
+  sozinho, precisa de `firebase deploy --only functions` explícito, que nunca tinha rodado depois
+  dessa mudança. Sintoma sem nenhum erro em lugar nenhum: `dict["grantedCharacterId"] as string`
+  em `CaseService.cs` usa `IDictionary` não-genérico, que devolve `null` (não lança exceção) pra
+  chave ausente — a compra continuava "bem-sucedida" (reveal funcionava normal, usa
+  `wonCharacterTypeId`), mas `PendingCharacterSelection` nunca era setado, então
+  `CharacterSelectController` nunca via seleção pendente nenhuma pra resolver. Diagnosticado com
+  um novo log em `ShopController.HandleCasePurchaseAsync` (avisa explicitamente se
+  `GrantedCharacterId` vier vazio) e confirmado rodando `firebase deploy --only functions`
+  (projeto `autoarms-c248f`) — deploy concluído com sucesso, função `purchaseCase
+  (southamerica-east1)` atualizada.
+
+- 2026-07-25: **Mais dois bugs reais corrigidos no case opening** (reportados pelo usuário depois
+  do fix anterior — persistiam no teste).
+  **1) "Continuar" ainda caía na grade completa em vez de abrir o detalhe do personagem
+  recém-ganho**: adicionado um fallback direto — `RosterService.GetOwnedCharacterDocAsync`
+  (novo) busca o documento específico do personagem concedido direto do SERVIDOR
+  (`Source.Server`, ignora cache local) sempre que a listagem geral do roster
+  (`ListOwnedCharacterDocsAsync`) não o retorna por qualquer motivo (timing, cache do SDK ainda
+  sem conhecimento de um doc gravado por outro processo — a Cloud Function via Admin SDK).
+  `CharacterSelectController.ResolvePendingCharacterSelectionAsync` (antes síncrono, agora
+  `async Task`) tenta esse fallback antes de desistir e cair na grade normal.
+  **2) `WinGlow` aparecia flutuando sobre o painel de reveal do personagem sorteado**: o destaque
+  de raridade ao redor do ícone vencedor NA FAIXA da roleta foi projetado numa época em que o card
+  de reveal era pequeno e a faixa continuava visível atrás dele — desde que o reveal virou
+  full-screen (2026-07-24), o painel de reveal cobre a faixa inteira, e o `WinGlow` (criado DEPOIS
+  do painel na hierarquia, portanto desenhado por cima de tudo) passou a flutuar sobre o painel em
+  vez de destacar algo visível. Removido por completo — a borda de raridade do próprio ícone de
+  reveal (`_revealIconBorder`, já existente) já cumpre esse papel no layout atual.
+
+- 2026-07-25: **Dois bugs reais corrigidos na tela de case opening, pós-migração do roster**
+  (reportados pelo usuário testando o fluxo completo).
+  **1) Marcador central nunca alinhava exatamente com o vencedor**: causa raiz não era um
+  desalinhamento de índice/posição do marcador (ambos já batiam certo na leitura do código) — era
+  o Canvas/`CanvasScaler` do próprio `CaseOpeningPopup` terem sido criados NO MESMO FRAME em que
+  `viewportRt.rect.width` era lido; a `RectTransform` de um Canvas `ScreenSpaceOverlay` recém-criado
+  não reflete o tamanho real da tela até o sistema de Canvas rodar seu próprio update interno —
+  ler antes disso podia devolver um valor obsoleto/placeholder, fazendo `finalX` parar a faixa
+  numa posição calculada pra uma largura ERRADA. Fix: `Canvas.ForceUpdateCanvases()` logo após
+  montar Canvas/`CanvasScaler`, forçando o rebuild antes de qualquer leitura de `rect.width`.
+  **2) Botão "Continuar" caía na grade completa em vez de abrir direto no detalhe do personagem
+  recém-ganho**: não existe (nem existiu) um `CharacterDetailController` separado — a tela de
+  detalhe (splash art + painel de stats + Fechar/Selecionar) sempre foi construída inline em
+  `CharacterSelectController` (`BuildSelectionOverlay`/`OnCharacterSelected`), a mesma
+  `02_SelectCharacter`. `CharacterSelectController.Start()` agora esconde `gridPanel`
+  imediatamente quando chega com uma `PendingCharacterSelection` pendente (setada por
+  `CaseOpeningPopup` antes do `SceneManager.LoadScene`), só reexibindo depois que
+  `ResolvePendingCharacterSelection` resolve (ou falha em resolver) a seleção — o usuário nunca
+  vê nem um flash da grade completa antes do overlay de detalhe cobrir a tela. Adicionado
+  `Debug.LogError` em `PlayerProfileConverter.FromCharacterDTO` (molde não encontrado no
+  `CharacterDatabase`) e em `CharacterSelectController.ResolvePendingCharacterSelection`
+  (personagem concedido não encontrado no roster carregado) — falhas reais que antes ficavam
+  silenciosas, dificultando diagnosticar se o problema persistir.
+
+- 2026-07-24: **Bug real corrigido — vencedor da roleta de case opening sempre caía no
+  penúltimo slot visível, sobrando espaço vazio à direita da faixa** (reportado pelo usuário com
+  screenshot). Causa: `CaseOpeningPopup.cs` tinha `ReelSlotCount`/`WinningSlotIndex` como
+  CONSTANTES fixas (32/27) — só 4 slots sobravam depois do vencedor, quantidade que não
+  considerava a largura real do viewport nem o tamanho do ícone, então não escalava pra telas/
+  resoluções diferentes (e piorou nesta mesma rodada, que aumentou os ícones). Fix: `Init` agora
+  mede `viewportRt.rect.width` em runtime e CALCULA `winningSlotIndex` (distância de giro fixa,
+  `SpinTravelSlots=20`, mantém a mesma sensação de duração de antes) e `totalSlotCount` (padding
+  depois do vencedor = quantos slots cabem visíveis na largura real + `SafetyMarginSlots`) — nunca
+  mais expõe o fim do array, em qualquer resolução/aspect ratio. `BuildReel` foi separado em
+  `BuildViewport`/`BuildContent` porque o Content só pode ser dimensionado depois de medir o
+  viewport.
+  Mesma rodada, ajustes visuais pedidos pelo usuário: ícones da faixa bem maiores (`SlotSize`
+  160→380, `SlotSpacing` 18→32, borda 6→14 — só ~4-5 personagens visíveis por vez, era ~7-8) e o
+  viewport passou a esticar 100% da largura da tela sem nenhuma margem (era 24px de cada lado).
+
+- 2026-07-24: **Migração de `CharacterSelectController`/`SelectedProfileHolder`/
+  `MainMenuCharacterPreview` pro roster real concluída** — revoga o adiamento documentado em
+  `ARQUITETURA.md` no dia anterior. `PlayerProfileConverter.FromCharacterDTO` (extraído de
+  `FromCharacterMap`, que virou wrapper fino) passou a marcar personagens do roster como
+  `isUnlockedForSelection = true; isPlayable = true;` (era `false/false`) — o grid de
+  `02_SelectCharacter` e a troca rápida do menu principal (`MainMenuCharacterPreview`) agora
+  mesclam os assets pré-autorados de sempre com o roster buscado de `RosterService.
+  ListOwnedCharacterDocsAsync` (assíncrono, mesmo padrão "mostra default, atualiza quando os
+  dados reais chegam" de `ShopController`). `SelectedProfileHolder` ganhou o campo `characterId`
+  (sincronizado por `SetProfile()`). Novo `PendingCharacterSelection` (canal estático cross-scene,
+  mesmo padrão de `ReplayPlaybackState`) é o handoff do case opening pra seleção: o botão
+  "Continuar" do `CaseOpeningPopup` agora navega direto pra `02_SelectCharacter` com o personagem
+  recém-concedido já em destaque (mesmo efeito de clicar o card manualmente) — exigiu um campo
+  novo (`grantedCharacterId`) na resposta de `purchaseCase`, já que a function só retornava o
+  MOLDE (`wonCharacterTypeId`), não o ID da instância concedida.
+  **Risco real achado e corrigido junto** (pesquisa antes de implementar): `PlayerProfileConverter.
+  _pristineSnapshots`/`_ownerScope` são dicionários chaveados por referência de objeto, sem teto,
+  pensados só pros ~72 assets pré-autorados — alimentá-los com o fluxo de instâncias runtime que
+  esta migração passou a gerar viraria vazamento de memória sem limite durante a sessão. Fix: novo
+  `PlayerProfile.isRuntimeInstance` guarda os dois métodos pra pular instâncias runtime por
+  completo (nunca precisam da proteção cross-conta que esses dicionários existem pra dar). Ver
+  `ARQUITETURA.md` "Modelo de roster multi-personagem" pro desenho completo.
+
+- 2026-07-24: **Polish visual do case opening** (pedido do usuário depois de testar o fluxo pela
+  primeira vez) — `CaseOpeningPopup`/`CaseReelSpinner`: borda colorida por raridade em todo ícone
+  (faixa da roleta e card de reveal, via `UITheme.RarityColor`), faixa esticada de ponta a ponta
+  da tela (era uma faixa central de 1040px — `finalX`/`startX` agora calculados a partir da
+  largura REAL medida em runtime, já que o viewport estica por âncora em vez de largura fixa),
+  fundo 100% opaco (era ~90%), marcador central trocado de vermelho opaco pra amarelo (`currencyGold`)
+  a 45% de opacidade, painel de reveal expandido pra quase tela cheia com o ícone do personagem
+  bem maior (560px, era 200px).
+
+- 2026-07-23: **Bug real corrigido — compra de personagem (Case Geral/Raro/Legendary/Imortal)
+  sempre falhava com popup genérico, sem log nenhum no Console e sem nenhuma invocação chegando
+  no Cloud Logging de `purchaseCase`** (reportado pelo usuário testando "Personagem Legendary",
+  R$199,00). Causa: `CaseService.cs` chamava `FirebaseFunctions.DefaultInstance.
+  GetHttpsCallable("purchaseCase")` — `DefaultInstance` aponta pra `us-central1` por padrão, mas
+  `purchaseCase` foi implantada em `southamerica-east1` (`functions/src/purchaseCase.ts`,
+  `onCall({ region: "southamerica-east1" }, ...)`); a chamada ia pra uma região onde a function
+  nunca existiu, falhando antes de sair do cliente (por isso nenhuma invocação real aparecia no
+  Cloud Logging — só logs de deploy/inicialização do container). Fix: nova constante
+  `CaseService.FunctionsRegion = "southamerica-east1"` (precisa ficar em sincronia manual com a
+  `region` de `purchaseCase.ts`) + `FirebaseFunctions.GetInstance(FirebaseApp.DefaultInstance,
+  FunctionsRegion)` em vez de `DefaultInstance`.
+  **Segundo bug real, achado no mesmo diagnóstico**: o `catch (FunctionsException e)` nunca
+  chamava `Debug.LogError` — qualquer erro desse tipo (incluindo o de região acima) ficava
+  completamente silencioso no Console, atrapalhando o diagnóstico ("nenhum log de erro aparece").
+  Corrigido logando `e.ErrorCode`/`e.Message` antes de montar o `CasePurchaseResult` de erro —
+  não muda a lógica de decisão de mensagem do `ShopController` (que já lia `ErrorCode`/
+  `ErrorMessage` do resultado, não do log), só deixa de engolir a exceção silenciosamente.
+
+- 2026-07-23: **Sistema de compra de personagens/case opening implementado do zero** — infra de
+  Cloud Functions criada pela primeira vez no projeto (`functions/`, Node/TS, `firebase.json`,
+  `firestore.rules` versionado pela primeira vez no repo — até então as regras só existiam coladas
+  manualmente no Console). Cloud Function `purchaseCase` (`functions/src/purchaseCase.ts`) valida
+  pagamento (cash mock por recibo não-vazio — `// TODO` explícito pra validação real via App
+  Store/Google Play antes de produção — ou saldo de diamante via Admin SDK), limite de compras por
+  jogador (`users/{uid}/casePurchases/{packageId}`, não estoque global — decisão explícita do
+  usuário, diferente do texto original da task), monta o pool elegível excluindo personagens já
+  possuídos e sorteia o vencedor com `crypto.randomInt` dentro de uma única transaction (concede o
+  personagem, incrementa o contador de compras, debita diamante se aplicável).
+  Descoberta que evitou uma migração de schema: `users/{uid}/characters/{characterId}` já era uma
+  subcoleção desde a Fatia 3 (2026-07-15) — bastou um campo novo (`characterTypeId`, referência ao
+  molde `PlayerProfile`) pro `CharacterDTO`/`CharacterDTOMap`, mais `PlayerProfileConverter.
+  FromCharacterMap` (mesma técnica de `FromOpponentIndexMap`) pra reconstruir um `PlayerProfile`
+  runtime a partir de um documento do roster. Ver ARQUITETURA.md "Modelo de roster
+  multi-personagem" pra lista completa de telas (`02_SelectCharacter`, `SelectedProfileHolder`,
+  `MainMenuCharacterPreview`) que ainda precisam migrar antes de um personagem concedido virar
+  jogável — essa migração ficou fora do escopo desta tarefa, deliberadamente.
+  Client (`CaseOpeningPopup`/`CaseReelSpinner`, `Assets/Scripts/UI/`): roleta horizontal estilo
+  CS:GO — faixa de 32 ícones translada em X com easing `easeOutQuint` (~4,5s, sem DOTween, que não
+  está no projeto) até parar com o vencedor sob um marcador fixo (slot 27/32); reveal com glow por
+  cor de raridade (`UITheme.RarityColor`, novo helper) e punch de escala via coroutine. Aba
+  Personagens da Loja (`ShopController`) ganhou um 4º card "Case Geral" (diamante, pool de todas
+  as raridades pelas odds da seção 7 de MONETIZACAO.md) — distinto do card "Próximo Personagem"
+  (moeda/soft currency, seção 6), que continua intocado. Reverte a nota "NÃO FAZER AINDA" que
+  MONETIZACAO.md registrava desde 2026-07-21 pra persistência de personagens comprados — decisão
+  revogada pelo usuário nesta data.
+  **Pré-requisito ainda pendente do lado do usuário**: pacote `Firebase.Functions` (Unity SDK)
+  precisa ser importado antes de `CaseService.cs` compilar — só `Firebase.Firestore`/
+  `Firebase.Auth`/`FirebaseApp` estavam presentes até agora. Plano Blaze do Firebase Console
+  também precisa estar habilitado antes de `firebase deploy --only functions,firestore:rules`
+  funcionar de verdade (Cloud Functions não rodam no plano Spark).
 
 - 2026-07-22: **Bug real corrigido — pet voltava ao spawn e corria de novo a CADA hit de combo**
   (reportado pelo usuário testando o sistema de iniciativa ATB novo: "o macaco está voltando

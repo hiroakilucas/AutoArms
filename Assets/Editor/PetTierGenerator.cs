@@ -5,8 +5,9 @@ using UnityEditor;
 // EXATOS da tabela aprovada pelo usuário (2026-07-16, extraída manualmente da referência visual
 // do My Brute e adaptada pro nosso jogo) — valores literais por tier, não multiplicador.
 // hpMalusPercent/odds/initiative/comboDebuff/blockDebuff são FIXOS por tipo de pet (mesmo valor
-// nos 3 tiers, conforme confirmado pelo usuário) — só str/agility/speed/hp/damage e os bônus
-// especiais (comboRate/evasionBase/accuracyBonus/disarmRate) escalam por tier.
+// nos 3 tiers, conforme confirmado pelo usuário) — só str/agility/speed/hp e os bônus
+// especiais (comboRate/evasionBase/accuracyBonus/disarmRate) escalam por tier. `damage` removido
+// (2026-07-21) — dano do pet agora é Round(str * 0.45), ver CombatSimulator/PETS.md.
 public static class PetTierGenerator
 {
     private const string PetsFolder = "Assets/ScriptableObjects/Pets";
@@ -28,17 +29,17 @@ public static class PetTierGenerator
         public float hpMalusPercent, odds, initiative;   // fixos, mesmo valor nos 3 tiers
         public float comboDebuff, blockDebuff;           // fixos, só Javali (0 pros outros 2)
         public float[] str;                              // [3] (T1,T2,T3)
-        public int[] agility, speed, hp, damage;         // [3] cada
+        public int[] agility, speed, hp;                 // [3] cada
         public float[] comboRate, evasionBase, accuracyBonus, disarmRate; // [3] cada
 
         public PetTierValues(PetType type, float hpMalusPercent, float odds, float initiative,
-            float[] str, int[] agility, int[] speed, int[] hp, int[] damage,
+            float[] str, int[] agility, int[] speed, int[] hp,
             float[] comboRate, float[] evasionBase, float[] accuracyBonus, float[] disarmRate,
             float comboDebuff = 0f, float blockDebuff = 0f)
         {
             this.type = type;
             this.hpMalusPercent = hpMalusPercent; this.odds = odds; this.initiative = initiative;
-            this.str = str; this.agility = agility; this.speed = speed; this.hp = hp; this.damage = damage;
+            this.str = str; this.agility = agility; this.speed = speed; this.hp = hp;
             this.comboRate = comboRate; this.evasionBase = evasionBase;
             this.accuracyBonus = accuracyBonus; this.disarmRate = disarmRate;
             this.comboDebuff = comboDebuff; this.blockDebuff = blockDebuff;
@@ -58,7 +59,6 @@ public static class PetTierGenerator
             agility:    new[] { 6, 8, 10 },
             speed:      new[] { 5, 7, 9 },
             hp:         new[] { 21, 23, 25 },
-            damage:     new[] { 3, 6, 9 },
             comboRate:      new[] { 0.20f, 0.30f, 0.40f },
             evasionBase:    new[] { 0f, 0f, 0f },
             accuracyBonus:  new[] { 0f, 0f, 0f },
@@ -71,7 +71,6 @@ public static class PetTierGenerator
             agility:    new[] { 17, 21, 25 },
             speed:      new[] { 25, 29, 33 },
             hp:         new[] { 34, 38, 42 },
-            damage:     new[] { 3, 6, 9 },
             comboRate:      new[] { 0.70f, 0.75f, 0.80f },
             evasionBase:    new[] { 0.20f, 0.25f, 0.30f },
             accuracyBonus:  new[] { 0f, 0f, 0f },
@@ -85,7 +84,6 @@ public static class PetTierGenerator
             agility:    new[] { 3, 5, 7 },
             speed:      new[] { 2, 4, 6 },
             hp:         new[] { 140, 150, 160 },
-            damage:     new[] { 5, 10, 15 },
             comboRate:      new[] { 0f, 0f, 0f },
             evasionBase:    new[] { 0.10f, 0.15f, 0.20f },
             accuracyBonus:  new[] { 0.20f, 0.30f, 0.40f },
@@ -166,7 +164,6 @@ public static class PetTierGenerator
         dest.agility  = v.agility[tierIndex];
         dest.speed    = v.speed[tierIndex];
         dest.hp       = v.hp[tierIndex];
-        dest.damage   = v.damage[tierIndex];
 
         dest.comboRate     = v.comboRate[tierIndex];
         dest.evasionBase   = v.evasionBase[tierIndex];

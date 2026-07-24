@@ -30,7 +30,29 @@ public class MainMenuController : MonoBehaviour
 
     void Start()
     {
+        _ = InitializeAsync();
+    }
+
+    private async Task InitializeAsync()
+    {
         _energySettings = Resources.Load<EnergySettings>("EnergySettings");
+
+        // Bug real corrigido (2026-07-25, reportado pelo usuário — NullReferenceException em
+        // CharacterPanel.RefreshAll ao reabrir o app) — SelectedProfileHolder.currentProfile pode
+        // ser uma instância RUNTIME (personagem concedido via case opening,
+        // PlayerProfile.isRuntimeInstance) "sem referência estável entre sessões" (comentário já
+        // existente em SelectedProfileHolder.characterId, nunca implementado até agora): se a
+        // conta ativa era um desses personagens quando o app fechou, a instância morre junto do
+        // processo e currentProfile chega NULO nesta nova sessão — travava
+        // characterPanel.Setup() logo abaixo (RefreshAll não espera currentProfile nulo). Não é
+        // causado pelo código de resiliência do level-up — é uma lacuna pré-existente no sistema
+        // de roster, só exposta agora que a conta de teste tem um personagem de case opening
+        // ativo. Reconstrói ANTES de qualquer coisa depender do profile.
+        if (selectedProfileHolder != null && selectedProfileHolder.currentProfile == null
+            && !string.IsNullOrEmpty(selectedProfileHolder.characterId))
+        {
+            await ReconstructSelectedProfileIfMissingAsync();
+        }
 
         // Restaura o save local (2026-07-14, ver LocalSaveService.cs) ANTES de qualquer leitura
         // dos campos do profile abaixo — sem isso, num build real, o CharacterPanel mostraria
@@ -58,6 +80,56 @@ public class MainMenuController : MonoBehaviour
         BuildCurrencyHud();
 
         RefreshEconomyOnMenuLoad();
+
+        // Resiliência do level-up de combate (2026-07-25, bug real corrigido) — se o app fechou
+        // com a tela "Escolha 1 bônus" aberta antes do jogador decidir, reabre a MESMA tela agora
+        // (mesmo profile, mesmas caixas já sorteadas) em vez de deixar a escolha perder-se pra
+        // sempre. Chamado por último, depois de CharacterPanel já existir (FindScreenCanvas
+        // precisa de algum Canvas ScreenSpaceOverlay já presente na cena) — o overlay opaco da
+        // tela de escolha bloqueia sozinho qualquer clique em Jogar/Chibers/etc. atrás dele, sem
+        // precisar desabilitar cada botão manualmente. Ver CombatResultPanel.
+        // ResumePendingLevelUpChoiceIfAny/AttackSequencer.OnCombatEnd.
+        if (selectedProfileHolder != null)
+            CombatResultPanel.ResumePendingLevelUpChoiceIfAny(selectedProfileHolder.currentProfile, theme);
+    }
+
+    // Reconstrói selectedProfileHolder.currentProfile a partir de characterId (2026-07-25, ver
+    // comentário em InitializeAsync acima) — dois casos possíveis, mesma ordem de prioridade que
+    // OpponentId()/CharacterSelectController já usam em outros pontos:
+    // 1. Personagem ORIGINAL/molde (characterId caiu no fallback de PlayerProfile.OpponentId(),
+    //    que é o próprio nome do asset Unity quando o campo characterId está vazio) — basta achar
+    //    o asset persistente correspondente em characterDatabase.unlockedCharacters por nome.
+    // 2. Personagem de ROSTER (case opening) — characterId é o ID real do documento Firestore
+    //    (users/{uid}/characters/{characterId}); reconstrói via RosterService.
+    //    GetOwnedCharacterDocAsync + PlayerProfileConverter.FromCharacterDTO, mesmo padrão já
+    //    usado por CharacterSelectController.ResolvePendingCharacterSelectionAsync/
+    //    MainMenuCharacterPreview.LoadRosterAndMergeOrderedProfilesAsync.
+    private async Task ReconstructSelectedProfileIfMissingAsync()
+    {
+        string characterId = selectedProfileHolder.characterId;
+
+        if (characterDatabase != null)
+        {
+            foreach (var template in characterDatabase.unlockedCharacters)
+            {
+                if (template != null && template.name == characterId)
+                {
+                    selectedProfileHolder.SetProfile(template);
+                    return;
+                }
+            }
+        }
+
+        if (!AuthService.IsSignedIn) return;
+
+        var dto = await RosterService.GetOwnedCharacterDocAsync(AuthService.CurrentUser.UserId, characterId);
+        if (dto == null) return;
+
+        var runtime = PlayerProfileConverter.FromCharacterDTO(dto, characterDatabase);
+        if (runtime == null) return;
+
+        LocalSaveService.ApplyIfSaved(runtime);
+        selectedProfileHolder.SetProfile(runtime);
     }
 
     // Moeda/diamante — canto superior direito da TELA (2026-07-20, redesenho mobile).

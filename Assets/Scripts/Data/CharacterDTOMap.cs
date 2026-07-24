@@ -25,9 +25,14 @@ public static class CharacterDTOMap
         foreach (var p in dto.pets)
             pets.Add(new Dictionary<string, object> { { "type", p.type }, { "tier", p.tier } });
 
+        var pendingLevelUpBoxes = new List<object>();
+        foreach (var b in dto.pendingLevelUpBoxes)
+            pendingLevelUpBoxes.Add(new Dictionary<string, object> { { "kind", b.kind }, { "attrIndex", b.attrIndex }, { "name", b.name }, { "tier", b.tier } });
+
         return new Dictionary<string, object>
         {
             { "characterId", dto.characterId },
+            { "characterTypeId", dto.characterTypeId },
             { "profileName", dto.profileName },
             { "level", dto.level },
             { "winRate", dto.winRate },
@@ -36,6 +41,16 @@ public static class CharacterDTOMap
             { "battlesRemaining", dto.battlesRemaining },
             { "isFavorite", dto.isFavorite },
             { "rarity", dto.rarity },
+            { "caseUnlocksResolved", dto.caseUnlocksResolved },
+            { "caseUnlocksAcceptedCount", dto.caseUnlocksAcceptedCount },
+            { "pendingUnlockIndex", dto.pendingUnlockIndex },
+            { "pendingUnlockKind", dto.pendingUnlockKind },
+            { "pendingUnlockName", dto.pendingUnlockName },
+            { "pendingUnlockTier", dto.pendingUnlockTier },
+            { "pendingUnlockRerollsUsed", dto.pendingUnlockRerollsUsed },
+            { "hasPendingLevelUpChoice", dto.hasPendingLevelUpChoice },
+            { "pendingLevelUpBoxes", pendingLevelUpBoxes },
+            { "pendingLevelUpRerollsUsed", dto.pendingLevelUpRerollsUsed },
             { "maxHealth", dto.maxHealth },
             { "str", dto.str },
             { "agility", dto.agility },
@@ -67,6 +82,7 @@ public static class CharacterDTOMap
         var dto = new CharacterDTO
         {
             characterId = GetString(map, "characterId"),
+            characterTypeId = GetString(map, "characterTypeId"),
             profileName = GetString(map, "profileName"),
             level = GetInt(map, "level"),
             winRate = GetFloat(map, "winRate"),
@@ -75,6 +91,15 @@ public static class CharacterDTOMap
             battlesRemaining = GetInt(map, "battlesRemaining"),
             isFavorite = GetBool(map, "isFavorite"),
             rarity = GetInt(map, "rarity"),
+            caseUnlocksResolved = GetBool(map, "caseUnlocksResolved"),
+            caseUnlocksAcceptedCount = GetInt(map, "caseUnlocksAcceptedCount"),
+            pendingUnlockIndex = GetInt(map, "pendingUnlockIndex"),
+            pendingUnlockKind = GetString(map, "pendingUnlockKind"),
+            pendingUnlockName = GetString(map, "pendingUnlockName"),
+            pendingUnlockTier = GetInt(map, "pendingUnlockTier"),
+            pendingUnlockRerollsUsed = GetInt(map, "pendingUnlockRerollsUsed"),
+            hasPendingLevelUpChoice = GetBool(map, "hasPendingLevelUpChoice"),
+            pendingLevelUpRerollsUsed = GetInt(map, "pendingLevelUpRerollsUsed"),
             maxHealth = GetInt(map, "maxHealth"),
             str = GetInt(map, "str"),
             agility = GetInt(map, "agility"),
@@ -106,6 +131,17 @@ public static class CharacterDTOMap
             foreach (var p in pList)
                 if (p is Dictionary<string, object> pMap)
                     dto.pets.Add(new PetTierRef { type = GetString(pMap, "type"), tier = GetInt(pMap, "tier") });
+
+        if (map.TryGetValue("pendingLevelUpBoxes", out var plbObj) && plbObj is List<object> plbList)
+            foreach (var b in plbList)
+                if (b is Dictionary<string, object> bMap)
+                    dto.pendingLevelUpBoxes.Add(new PendingLevelUpBoxRef
+                    {
+                        kind = GetString(bMap, "kind"),
+                        attrIndex = GetInt(bMap, "attrIndex"),
+                        name = GetString(bMap, "name"),
+                        tier = GetInt(bMap, "tier"),
+                    });
 
         return dto;
     }

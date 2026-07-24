@@ -31,6 +31,21 @@ public class PetTierRef
     public int tier;
 }
 
+// Uma caixa de escolha de level-up de combate ainda não confirmada (2026-07-25, bug real
+// corrigido - fechar o app com a tela de escolha aberta perdia XP/level/bônus, sem chance de
+// retomar). `kind` = "attribute"/"skill"/"weapon"/"pet"; `attrIndex` só usado quando
+// kind=="attribute" (índice 0-9 na tabela fixa de bônus de atributo, ver LevelUpOption.Name());
+// `name`+`tier` (mesmo shape de WeaponTierRef/SkillTierRef/PetTierRef) só usados pra skill/arma/
+// pet - resolvido de volta pro LevelUpOption real via CombatResultPanel.ResolvePendingBox.
+[Serializable]
+public class PendingLevelUpBoxRef
+{
+    public string kind;
+    public int attrIndex;
+    public string name;
+    public int tier;
+}
+
 // Representacao serializavel da progressao de UM PlayerProfile - usada hoje pelo save local em
 // JSON (LocalSaveService) e pensada pra ser o mesmo formato usado pelo save na nuvem
 // (Firestore, ver ARQUITETURA.md e o plano de contas/backend) mais pra frente. Sem nenhuma
@@ -43,6 +58,15 @@ public class CharacterDTO
     // Chave de save - profile.characterId, ou profile.name se characterId estiver vazio (ver
     // PlayerProfile.OpponentId(), mesmo criterio).
     public string characterId;
+
+    // ID do "molde" PlayerProfile de origem (2026-07-23, sistema de compra de personagens/case
+    // opening - ver ARQUITETURA.md "Modelo de roster multi-personagem"). Igual ao nome do asset
+    // Unity (mesma chave que PlayerProfileConverter.FromOpponentIndexMap ja usa pra achar o
+    // molde de um oponente) - permite que uma conta possua VARIOS characterId diferentes, cada
+    // um instancia de um characterTypeId (raridade/prefab/stats iniciais). Vazio nos documentos
+    // gravados antes desta data (personagem "original" da conta, unico que existia ate entao) -
+    // retrocompativel, nao precisa de migracao.
+    public string characterTypeId;
 
     // Escopo de conta (2026-07-15, correcao de bug real - LocalSaveService.cs) - uid do Firebase
     // Auth de quem salvou isso, ou "offline" se ninguem estava logado no momento do save. Sem
@@ -62,6 +86,29 @@ public class CharacterDTO
     public int battlesRemaining;
     public bool isFavorite;
     public int rarity; // (int)CharacterRarity
+
+    // Ver PlayerProfile.caseUnlocksResolved - marca que a sequencia de unlocks de skill/arma/pet
+    // do case opening (CharacterUnlockEngine) ja rodou por completo pra este characterId.
+    public bool caseUnlocksResolved;
+
+    // Ver PlayerProfile.caseUnlocksAcceptedCount - ponto de retomada se a sequencia for
+    // interrompida (app fechado) antes de caseUnlocksResolved virar true.
+    public int caseUnlocksAcceptedCount;
+
+    // Ver PlayerProfile.pendingUnlockIndex/Kind/Name/Tier/RerollsUsed - rascunho do unlock atual
+    // (ainda nao aceito), persistido pra sobreviver a fechar o app no meio de um reveal.
+    public int pendingUnlockIndex;
+    public string pendingUnlockKind;
+    public string pendingUnlockName;
+    public int pendingUnlockTier;
+    public int pendingUnlockRerollsUsed;
+
+    // Ver PlayerProfile.hasPendingLevelUpChoice/pendingLevelUpBoxes/pendingLevelUpRerollsUsed -
+    // escolha de level-up de COMBATE ainda não confirmada (sistema diferente do unlock do case
+    // opening acima - este é o "Continuar"/pirâmide de caixas do AttackSequencer.OnCombatEnd).
+    public bool hasPendingLevelUpChoice;
+    public List<PendingLevelUpBoxRef> pendingLevelUpBoxes = new List<PendingLevelUpBoxRef>();
+    public int pendingLevelUpRerollsUsed;
 
     public int maxHealth;
     public int str;

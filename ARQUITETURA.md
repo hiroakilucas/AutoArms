@@ -45,6 +45,36 @@ sendo o alvo final; isto é uma exceção datada e sinalizada, não uma reversã
 **Não implementado ainda** (correto deixar pra quando a Fase 4 for de fato construída) — só a
 regra em si é fixa e não deve ser esquecida/relaxada quando esse dia chegar.
 
+**Primeira implementação real da regra (2026-07-23) — só no caminho do case opening**: a Cloud
+Function `purchaseCase` (`functions/src/purchaseCase.ts`, ver seção "Modelo de roster
+multi-personagem" abaixo) é a PRIMEIRA gravação de diamante do projeto que segue a regra à risca —
+lê `users/{uid}.diamonds` via Admin SDK (nunca confia em saldo enviado pelo cliente) e debita
+dentro de uma transaction, só depois de validar o pagamento (recibo mock/cash ou saldo
+suficiente/moeda). Isto **não migra** `WalletService.SpendDiamondsAsync` (usado por
+reroll/refill/etc.) pra Cloud Function — esse continua sendo o placeholder client-writable
+descrito acima, propositalmente fora do escopo desta tarefa. `casePackages/{packageId}` e
+`users/{uid}/casePurchases/{packageId}` (novo, contador de limite de compra por jogador) seguem a
+mesma regra de "nunca client-writable": `allow write: if false` no `firestore.rules`, únicas
+escritas possíveis são via Admin SDK (a própria function, ou o script de seed
+`functions/src/scripts/seedCasePackages.ts`).
+
+**2ª implementação real da regra (2026-07-25) — refresh dos unlocks de skill/arma/pet do case
+opening**: Cloud Function `rerollUnlock` (`functions/src/rerollUnlock.ts`) — custo FIXO de 15
+diamantes (não escala) e limite de 2 refreshes por unlock individual, ambos validados/decididos
+100% server-side (Admin SDK lê `users/{uid}.diamonds` e o contador
+`users/{uid}/characters/{characterId}.unlockRerollCounts`, nunca confia em nada enviado pelo
+cliente) — mesma transaction debita o diamante e incrementa o contador atomicamente com o
+resorteio. **Deliberadamente um sistema econômico separado** do "Novo Sorteio" do level-up de
+combate (`CombatResultPanel.cs`, `WalletService.SpendDiamondsAsync`, placeholder client-writable,
+custo progressivo 50/100/200) — pedido explícito do usuário pra não compartilhar lógica de custo
+entre os dois, só a mecânica de "gastar diamante pra resortear". O sorteio ORIGINAL de cada
+unlock (sem custo) continua 100% client-side (`CharacterUnlockEngine.DrawUnlock`, mesmo nível de
+confiança client-authoritative de qualquer recompensa do level-up de combate) — só o REFRESH, por
+gastar dinheiro premium de verdade, precisou de Cloud Function. `functions/src/unlockCatalog.json`
+(gerado por `Tools > AutoArms > Export Unlock Catalog for Cloud Function`) é o espelho server-side
+dos databases de skill/arma/pet (odds + quais tiers cada família realmente tem), mesmo papel de
+`characterCatalog.json` pra `purchaseCase`.
+
 ## Regras de segurança do Firestore — `users/{uid}/characters`
 
 Implementado na Fatia 3 do plano de contas/save na nuvem (2026-07-15). `allow write: if
@@ -165,6 +195,95 @@ a regra acima não depende de saber a composição do ID, só lê os campos.
 Isso não substitui validação server-side de verdade (Cloud Function, Fase 8, correto deixar pra
 depois) — só fecha o caso mais grosseiro de edição direta de documento sem precisar de Cloud
 Function agora.
+
+## Modelo de roster multi-personagem (2026-07-23)
+
+Contexto: até 2026-07-21 (`MONETIZACAO.md`, seção "Itens em aberto") a persistência de múltiplos
+personagens por conta estava marcada como **"NÃO FAZER AINDA"**, pedido explícito do usuário —
+decisão revertida em 2026-07-23 para viabilizar o sistema de compra de personagens/case opening
+(Loja, aba Personagens). Esta seção documenta o modelo adotado.
+
+**Descoberta que evitou uma migração de schema**: `users/{uid}/characters/{characterId}` **já
+era** uma subcoleção (não um documento único) desde a Fatia 3 (2026-07-15) — o "1 conta = 1
+personagem" de até então era só uma limitação do CLIENTE (nada além do personagem selecionado era
+lido/escrito), não do schema do Firestore. Ganhar um personagem novo é simplesmente criar mais um
+documento nessa mesma subcoleção.
+
+**Dois IDs distintos, propósitos diferentes:**
+- `characterId` — ID **único desta instância** de personagem (documento). Pro personagem
+  "original" de cada conta (o único que existia antes desta data), continua sendo
+  `PlayerProfile.OpponentId()` (nome do asset, ou vazio → nome). Pra personagem concedido via
+  `purchaseCase` (Cloud Function), é um ID auto-gerado pelo Firestore (`charactersRef.doc()`,
+  nunca reaproveita o nome do template) — permite, em tese, que contas diferentes possuam
+  instâncias do mesmo personagem sem colidir, e (futuramente) que a mesma conta possua mais de
+  uma instância do mesmo `characterTypeId` sem duas gravarem no mesmo documento.
+- `characterTypeId` (campo novo em `CharacterDTO`/`CharacterDTOMap`, 2026-07-23) — referência ao
+  "molde" `PlayerProfile` de origem, igual ao **nome do asset Unity** (mesma convenção que
+  `PlayerProfileConverter.FromOpponentIndexMap` já usava pra achar o molde visual de um
+  oponente). Vazio nos documentos gravados antes desta data (retrocompatível, sem migração
+  necessária). `PlayerProfileConverter.FromCharacterDTO(dto, templateCatalog)` reconstrói um
+  `PlayerProfile` runtime a partir de um documento do roster, casando por `characterTypeId` —
+  mesma técnica de `FromOpponentIndexMap`, mas indexando pelo campo novo em vez de `characterId`.
+  `FromCharacterMap(map, templateCatalog)` continua existindo como wrapper fino sobre
+  `FromCharacterDTO` pra quem só tem o `Dictionary` cru de um `DocumentSnapshot`.
+
+**Quem concede um personagem**: só a Cloud Function `purchaseCase` (Admin SDK, ver
+`functions/src/purchaseCase.ts`) cria um documento novo em `users/{uid}/characters/{id}` — o
+cliente nunca cria um documento de personagem do zero, só atualiza um que já possui (mesmo fluxo
+de sempre, `FirestoreService.SaveCharacterAsync`). `RosterService.ListOwnedCharacterDocsAsync`
+(cliente) só LÊ o roster inteiro.
+
+**Migração de `CharacterSelectController`/`SelectedProfileHolder`/`MainMenuCharacterPreview`
+concluída em 2026-07-24** (estava deliberadamente pendente desde 2026-07-23 — ver histórico no
+`CHANGELOG.md`). Um personagem concedido via `purchaseCase` agora é genuinamente selecionável e
+jogável, não só persistido:
+
+- `PlayerProfileConverter.FromCharacterDTO` passou a marcar `isUnlockedForSelection = true;
+  isPlayable = true;` (era `false/false`, "ainda não é jogável") — esses dois campos são o
+  mesmo "gate" que `CharacterSelectController` (grid) e `MainMenuCharacterPreview` (troca rápida)
+  já usavam pra decidir quem aparece/é clicável; só precisou inverter o default.
+- `CharacterSelectController.PopulateCharacterGridRoutine` mescla os assets pré-autorados
+  (`CharacterDatabase.unlockedCharacters`, comportamento de sempre — inclui o personagem
+  "original" da conta) com `_rosterProfiles` (buscado assincronamente por
+  `LoadRosterAndRefreshGridAsync`, via `RosterService.ListOwnedCharacterDocsAsync` +
+  `FromCharacterDTO`, filtrando só documentos com `characterTypeId` preenchido — o doc legado sem
+  esse campo já está representado pelo asset, nunca duplicado). Grid nasce só com os assets (0
+  latência) e reconstrói quando o roster chega — mesmo padrão de
+  `ShopController.LoadPersistedShopStateAsync`.
+- `MainMenuCharacterPreview` (troca rápida por seta/swipe) segue o mesmo padrão —
+  `_orderedProfiles` nasce de `CharacterDatabase.GetPlayableCharactersOrdered()` e é mesclado com
+  o roster assim que `LoadRosterAndMergeOrderedProfilesAsync` completa, sem respawnar o
+  personagem já exibido.
+- `SelectedProfileHolder` ganhou o campo `characterId` (sincronizado por `SetProfile()`, que
+  substituiu toda atribuição direta a `.currentProfile` nos dois arquivos acima) — ID de
+  instância do roster do personagem selecionado, independente da identidade do objeto
+  `PlayerProfile` em si (asset ou runtime).
+- Novo `PendingCharacterSelection` (`Assets/Scripts/Data/`, canal estático cross-scene, mesmo
+  padrão de `ReplayPlaybackState`) — handoff do case opening pra seleção:
+  `CaseOpeningPopup`("Continuar") grava o `grantedCharacterId` (novo campo retornado por
+  `purchaseCase`, distinto de `wonCharacterTypeId`/o molde) e navega direto pra
+  `02_SelectCharacter`; `CharacterSelectController.ResolvePendingCharacterSelection` lê+limpa o
+  campo assim que o roster carrega e abre o detalhe automaticamente (`OnCharacterSelected`, mesmo
+  efeito de clicar o card manualmente). Deliberadamente separado de
+  `SelectedProfileHolder.currentProfile` — este representa o personagem CONFIRMADO pra combate
+  (só muda em `OnClickSelect`), um conceito diferente de "destacar ao abrir a tela".
+
+**Risco real identificado e corrigido junto desta migração**: `PlayerProfileConverter.
+_pristineSnapshots`/`_ownerScope` são `Dictionary<PlayerProfile, ...>` chaveados por referência de
+objeto, pensados pra um conjunto pequeno e estável (~72 assets) — nunca removem entradas.
+Alimentá-los com o fluxo de instâncias runtime que esta migração passou a gerar (uma por
+fetch/troca de roster) viraria vazamento de memória sem teto, e o mecanismo de isolamento entre
+contas (a razão desses dicionários existirem) ficaria inerte pra essas instâncias (nunca são
+reaproveitadas entre contas, então não precisam dessa proteção). Fix: novo
+`PlayerProfile.isRuntimeInstance` (`[NonSerialized]`, setado por `FromCharacterDTO`/
+`FromOpponentIndexMap`) guarda `CapturePristineIfNeeded`/`MarkOwnerScope` pra pular essas
+instâncias por completo.
+
+**Ainda fora de escopo (confirmado, não implementado)**: restaurar "o último personagem
+selecionado" entre reinícios do app — `LoginController` continua carregando
+`SelectedProfileHolder.currentProfile` a partir do valor "wireado no Inspector" (comportamento
+documentado, preservado de propósito); esta migração funciona só dentro de uma sessão em
+execução.
 
 ## Stat base vs. stat efetivo — nunca confundir os dois em UI voltada a PvP
 

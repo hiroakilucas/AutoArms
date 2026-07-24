@@ -40,11 +40,14 @@ public static class XpSystem
     // So marca dirty no Editor - NAO chama LocalSaveService.Save aqui (removido 2026-07-15, bug
     // real reportado pelo usuario). AddXP roda ANTES do jogador escolher o bonus de level-up
     // (CombatResultPanel.ApplyBonus, que so acontece depois de AttackSequencer.OnCombatEnd
-    // mostrar o painel) - se este metodo salvasse sozinho toda vez que e chamado, capturaria um
-    // profile com XP/level ja atualizados mas str/agility/speed ainda SEM o bonus da escolha
-    // pendente (save prematuro/incompleto). Quem decide QUANDO salvar de verdade agora e o
-    // chamador (AttackSequencer.OnCombatEnd): salva na hora se nao houve level-up (nada mais vai
-    // mudar), ou deixa pra CombatResultPanel.ApplyBonus salvar depois da escolha, se houve.
+    // mostrar o painel) - quem decide QUANDO salvar de verdade e o chamador
+    // (AttackSequencer.OnCombatEnd), que agora salva SEMPRE, incondicional, logo depois de
+    // chamar AddXP (2026-07-25, 2ª rodada - bug real corrigido: guardar esse save ate a escolha
+    // acontecer perdia XP/level/battlesRemaining da luta inteira se o app fechasse durante a
+    // tela de escolha, sem chance de retomar). str/agility/speed ainda sem o bonus da escolha
+    // pendente nesse momento e um estado intermediario VALIDO agora, nao mais "incompleto" -
+    // PlayerProfile.hasPendingLevelUpChoice marca isso explicitamente, e
+    // CombatResultPanel.ApplyBonus e quem aplica o bonus escolhido e limpa esse campo depois.
     private static void MarkDirty(PlayerProfile profile)
     {
 #if UNITY_EDITOR

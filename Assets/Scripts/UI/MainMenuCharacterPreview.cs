@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -56,6 +57,32 @@ public class MainMenuCharacterPreview : MonoBehaviour
 
         SpawnCharacter(profile);
         BuildSwapArrows();
+
+        // Roster real (2026-07-24, sistema de compra de personagens/case opening) — lista acima
+        // já nasce só com os assets legados (0 latência, comportamento de sempre); se logado,
+        // busca o roster do Firestore em segundo plano e mescla assim que chegar, sem
+        // interromper/respawnar o personagem já exibido (só recalcula _currentIndex pra as
+        // próximas trocas via seta/swipe navegarem certo).
+        if (AuthService.IsSignedIn) _ = LoadRosterAndMergeOrderedProfilesAsync();
+    }
+
+    private async Task LoadRosterAndMergeOrderedProfilesAsync()
+    {
+        string uid = AuthService.CurrentUser.UserId;
+        var docs = await RosterService.ListOwnedCharacterDocsAsync(uid);
+
+        var currentProfile = _orderedProfiles.Count > 0 && _currentIndex < _orderedProfiles.Count
+            ? _orderedProfiles[_currentIndex]
+            : selectedProfileHolder.currentProfile;
+
+        foreach (var dto in docs)
+        {
+            if (dto == null || string.IsNullOrEmpty(dto.characterTypeId)) continue;
+            var runtime = PlayerProfileConverter.FromCharacterDTO(dto, characterDatabase);
+            if (runtime != null) _orderedProfiles.Add(runtime);
+        }
+        _orderedProfiles.Sort(CharacterDatabase.ComparePlayerProfiles);
+        _currentIndex = Mathf.Max(0, _orderedProfiles.IndexOf(currentProfile));
     }
 
     // Extraído de Start() (2026-07-14) — instanciação simples/instantânea, usada só pelo 1º
@@ -108,7 +135,9 @@ public class MainMenuCharacterPreview : MonoBehaviour
         _currentIndex = ((_currentIndex + direction) % _orderedProfiles.Count + _orderedProfiles.Count) % _orderedProfiles.Count;
         var profile = _orderedProfiles[_currentIndex];
 
-        selectedProfileHolder.currentProfile = profile;
+        // SetProfile() (não atribuição direta) — mantém SelectedProfileHolder.characterId em
+        // sincronia (2026-07-24, ver SelectedProfileHolder.cs).
+        selectedProfileHolder.SetProfile(profile);
         StartCoroutine(SlideToCharacter(profile, direction));
 
         // CharacterPanel (gaveta no rodapé, modo bottomAnchored — ver MainMenuController.Start)
@@ -122,6 +151,18 @@ public class MainMenuCharacterPreview : MonoBehaviour
         // rede; se o dado da nuvem for mais novo que o local (personagem trocado pela primeira
         // vez nesta sessão), o panel é atualizado de novo quando a sincronização terminar.
         StartCoroutine(SyncSwitchedCharacterRoutine(profile, panel));
+
+        // Bug real corrigido (2026-07-25, reportado pelo usuário) — energia é POR PERSONAGEM
+        // (users/{uid}/characters/{characterId}, ver EnergyService/"Sistema de Energia" em
+        // CLAUDE.md), mas `PlayerEconomyState.EnergyCurrent` é um cache único/global só recarregado
+        // no login ou ao abrir o menu — trocar de personagem via seta/arraste nunca re-buscava a
+        // energia do personagem NOVO, então a fileira de ícones continuava mostrando o valor do
+        // personagem ANTERIOR (ex: "7 de energia" herdado, mesmo num personagem nunca jogado).
+        // `RefreshEconomyOnMenuLoad` já lê `selectedProfileHolder.currentProfile.OpponentId()`
+        // (atualizado pelo `SetProfile` acima) e no fim chama `RefreshEconomyHuds` →
+        // `RefreshEnergyHud` — mesmo re-fetch que já roda ao carregar o menu, só que agora também
+        // a cada troca rápida de personagem.
+        FindObjectOfType<MainMenuController>()?.RefreshEconomyOnMenuLoad();
     }
 
     private IEnumerator SyncSwitchedCharacterRoutine(PlayerProfile profile, CharacterPanel panel)

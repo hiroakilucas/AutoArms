@@ -21,7 +21,16 @@ Pelo [Firebase Console](https://console.firebase.google.com/) → projeto `autoa
 **Firestore Database** → aba **Data**:
 1. Cada coleção de topo (`users`, `opponents_index`) tem um menu **⋮** ao lado do nome →
    **Delete collection**. Isso apaga a coleção inteira, inclusive as subcoleções de cada documento
-   (`users/{uid}/characters`, `users/{uid}/matchHistory`).
+   (`users/{uid}/characters` — inclui personagens comprados via case opening, com `characterTypeId`
+   preenchido, não só o personagem "original" — `users/{uid}/matchHistory`,
+   `users/{uid}/casePurchases` — contador de limite de compra por pacote, 2026-07-23).
+
+**Não apague `casePackages`** (2026-07-23, sistema de compra de personagens/case opening) — ao
+contrário de `users`/`opponents_index`, essa coleção não é dado de conta/teste, é o CATÁLOGO
+estático dos pacotes da Loja (preço/raridade/limite/odds), populado uma única vez por
+`functions/src/scripts/seedCasePackages.ts` (Admin SDK, fora do app). Apagá-la por engano exige
+rodar o seed de novo pra Loja voltar a mostrar preços; resetar conta/personagens não precisa
+disso.
 
 ## 3. Limpar o que fica no dispositivo local
 

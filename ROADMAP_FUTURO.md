@@ -8,11 +8,13 @@
   (Fase 8) entrar.
 - [x] Sistema de energia com limite diário de batalhas — `EnergyService`/`EnergySettings`
   (2026-07-19), 10 batalhas/dia, +1 a cada 2h, hora do servidor (nunca o device).
-- [ ] Compra de energia e personagens com diamante — **energia: feito** (2026-07-21, preço
-  progressivo por dia/personagem 10/20/40, `EnergyService.PayToRefillAsync`). **Personagens:
-  ainda não** — a aba Personagens da Loja usa preço em R$ (cash, placeholder) pras raridades e
-  moeda (não diamante) pro card "Próximo Personagem"; item continua aberto por causa dessa
-  metade.
+- [x] Compra de energia e personagens com diamante — **energia: feito** (2026-07-21, preço
+  progressivo por dia/personagem 10/20/40, `EnergyService.PayToRefillAsync`). **Personagens: feito
+  (2026-07-23)** — sistema de compra de personagens/case opening (Cloud Function `purchaseCase`,
+  ver ARQUITETURA.md "Modelo de roster multi-personagem"): as 3 raridades continuam cash
+  (Raro/Legendary/Imortal, MONETIZACAO.md seção 5), mas ganharam um 4º pacote pago em diamante
+  ("Case Geral", pool de todas as raridades pelas odds da seção 7) — o card "Próximo Personagem"
+  (moeda/soft currency, seção 6) continua separado, intocado.
 - [x] Precificação dos pacotes — `MONETIZACAO.md` (todas as 9 seções com preços reais).
 - [x] **Reset de Level Up** — implementado com desenho diferente do descrito aqui originalmente
   (2026-07-21): botão "Novo Sorteio" (não "Resetar opções") refaz as N caixas (não só 2, ver
