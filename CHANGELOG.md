@@ -1,8 +1,215 @@
 # AutoArms — Changelog
 
+- 2026-07-27: **Bug visual corrigido — giro da roleta (`CaseOpeningPopup`) saía com raridade
+  homogênea** (ex: giro inteiro só Normal ou só Imortal), reportado pelo usuário depois de
+  confirmar que o sorteio do PRÊMIO em si estava correto (68/20/8/3.5/0.5%, ver entrada anterior).
+  Causa: `BuildReelSlotIds` preenchia os slots de giro sorteando uniformemente de
+  `reelPoolCharacterTypeIds` — que nunca foi um pool multi-raridade, é o resultado de
+  `rollWeightedPool` no servidor (a lista de personagens elegíveis DENTRO do tier já sorteado pro
+  prêmio final), sempre homogêneo por raridade de propósito. Isso é o comportamento CERTO pros 3
+  cards cash (Raro/Legendary/Imortal, `isRarityLocked`) — errado só pra "Próximo Personagem"
+  (sorteio ponderado entre as 5 raridades). Corrigido com um novo parâmetro
+  `CaseOpeningPopup.Show(..., weightedRarityFill: bool)`: `false` (cash, comportamento antigo
+  preservado) vs. `true` (Próximo Personagem — cada slot sorteado independentemente com os MESMOS
+  pesos `[68%, 20%, 8%, 3.5%, 0.5%]`, mirror client-side de `DEFAULT_TIER_WEIGHTS`, puramente
+  decorativo — o prêmio final continua 100% decidido no servidor).
+
+- 2026-07-26: **"Case Geral" (diamante) removido; "Próximo Personagem" virou compra real (Coins)**
+  — aba Personagens da Loja. Investigação prévia corrigiu duas premissas erradas: (1) o fluxo
+  IAP (Raro/Legendary/Imortal) não tem sorteio de raridade nenhum, cada card é travado numa
+  raridade fixa — quem já fazia o sorteio ponderado entre as 5 raridades era o próprio Case
+  Geral; (2) "Próximo Personagem" já existia como card na UI, mas era 100% decorativo (nenhuma
+  moeda debitada, nenhum personagem concedido, contador só em memória, resetado a cada troca de
+  cena).
+  - Nova Cloud Function `purchaseNextCharacter` (`functions/src/purchaseNextCharacter.ts`):
+    sorteia com as MESMAS odds que o Case Geral já usava — `[68%, 20%, 8%, 3.5%, 0.5%]`
+    (Normal/Uncommon/Rare/Legendary/Immortal, `DEFAULT_TIER_WEIGHTS`) — e concede o personagem
+    exatamente como `purchaseCase`. Preço escala por um contador PERSISTIDO por jogador
+    (`users/{uid}.nextCharacterPurchaseCount`), não mais um preço fixo por pacote: **25 / 50 /
+    100 / 200 / 400 / 800 / 1200 / 1400 / 1600 / 1800 / 2000 / 2200, depois +200 a cada compra**
+    (substitui a tabela antiga do card decorativo, 100/200/400/600/800/1000/+400).
+  - Refatoração de deduplicação: `secureRandomIndex`/`weightedRandomTier`/`rollWeightedPool`/
+    `rarityOfCharacter` extraídos pra `functions/src/caseRoll.ts`; a concessão do documento de
+    personagem (`DEFAULT_STARTING_WEAPONS`/shape do doc) extraída pra
+    `functions/src/grantCharacter.ts` — `purchaseCase.ts`/`grantStarterCharacter.ts` refatorados
+    pra importar as duas em vez de manter cópias próprias (nenhuma mudança de comportamento).
+  - Client: `ShopController.cs` remove o card "Case Geral" por completo (`PackageIdMoedaGeral` e
+    o pacote `casePackages/case_moeda_geral`, removido também do seed script); "Próximo
+    Personagem" ganha `NextCharacterService.cs` (novo, mesmo padrão de `CaseService.cs`) e reusa
+    o mesmo `CaseOpeningPopup` de reveal. Preço exibido agora vem do contador REAL
+    (`PlayerEconomyState.NextCharacterPurchaseCount`, carregado via novo
+    `WalletService.LoadNextCharacterPurchaseCountAsync`), não mais um contador de sessão.
+  - `MONETIZACAO.md` seções 6/13 atualizadas com a tabela final e a remoção do Case Geral.
+
+- 2026-07-26: **Renascimento também reabastece a energia de batalha** (pedido do usuário) — a
+  Cloud Function `rebirthCharacter` agora grava `energyCurrent`/`lastEnergyTimestamp` (mesmos
+  campos de `EnergyService.cs`) reabastecendo pro teto (`EnergySettings.maxEnergy`, 10) e
+  reancorando o timestamp em "agora" (servidor), mesmo espírito da reancoragem que a regeneração
+  natural já faz ao bater o teto. Primeira vez que este campo é escrito por uma Cloud Function
+  (antes só o SDK client-side gravava energia direto).
+
+- 2026-07-26: **Reveal do "Renascimento" movido pra 02_SelectCharacter** (pedido do usuário, "vai
+  para a tela onde tem a splashart do personagem") — `CharacterPanel.ExecuteRebirthAsync` não
+  revela mais os itens inline (onde o botão foi clicado); em vez disso aplica o resultado, salva,
+  e navega pra `02_SelectCharacter` via o MESMO handoff `PendingCharacterSelection` que o case
+  opening já usa (abre o detalhe do personagem automaticamente, com a splash art em tela cheia) +
+  um canal novo `PendingRebirthReveal` (itens concedidos). `CharacterSelectController.
+  OnCharacterSelected` consome os dois e roda a revelação em sequência reaproveitando a MESMA
+  `CharacterUnlockRevealPanel`/instância já usada pelo reveal de case-opening (nenhum painel novo
+  instanciado).
+
+- 2026-07-26: **Correção de escopo — economia do "Renascimento" invertida** (mesmo dia da
+  implementação original, ver entrada abaixo). Renascimento passou a ser **100% GRATUITO** — não
+  custa mais Coins nem Diamantes; toda a validação/débito de saldo insuficiente foi removida da
+  Cloud Function `rebirthCharacter` (o erro "Saldo de moedas insuficiente" não existe mais). Em
+  vez de custar, agora **CREDITA** `nível_antes × CharacterRebirthSettings.coinRewardPerLevel`
+  (10 por padrão, mesmo valor numérico de antes — só o campo mudou de nome, de `coinCostPerLevel`
+  pra `coinRewardPerLevel`, e de DÉBITO pra CRÉDITO via `FieldValue.increment` positivo). Nada
+  mais mudou: gate de level >= 10, concessão de N itens pela raridade, sorteio de stats base e
+  reroll individual (15 diamantes fixo) continuam idênticos à versão original.
+
+- 2026-07-26: **Nova feature "Renascimento" (Reset Nível 10+)** — distinta e coexistente com o
+  "Resetar Personagem" antigo (`CharacterPanel.ExecuteReset`, que continua grátis, sem gate de
+  level, credita moeda e limpa o loadout). O Renascimento é o oposto: só libera em level >= 10,
+  DEBITA moedas (`nível × CharacterRebirthSettings.coinCostPerLevel`, 10 por padrão) via nova
+  Cloud Function `rebirthCharacter` e CONCEDE N skills/armas/pets aleatórios pela raridade do
+  personagem (Normal 1 / Uncommon 2 / Rare 3 / Legendary 4 / Immortal 5 — mesma tabela de
+  `CharacterUnlockEngine.UnlockCountForRarity`), com status base também re-sorteados — tudo
+  decidido 100% server-side (nunca no cliente). Cada item concedido pode ser rerolado
+  individualmente depois (nova Cloud Function `rerollRebirthGrant`, custo fixo de 15 diamantes,
+  máx. 2 usos por item — reaproveita a mesma lógica de `rerollUnlock` via um núcleo compartilhado
+  novo, `functions/src/rerollShared.ts`, em vez de duplicar). UI: novo botão "RENASCIMENTO" em
+  `CharacterPanel.cs`, logo abaixo de "RESETAR PERSONAGEM"; reaproveita o mesmo
+  `CharacterUnlockRevealPanel` já usado pelo reveal de case-opening. Aproveitado pra corrigir
+  também o TODO de segurança do "Novo Sorteio" (reroll das caixas de level-up de combate,
+  `CombatResultPanel.cs`): custo deixou de dobrar (era 50→100→200 diamantes, gasto direto do
+  cliente) e passou a ser FIXO (15 diamantes, mesmo valor de `rerollUnlock`), validado/debitado
+  sempre no servidor (nova Cloud Function `rerollLevelUpBoxes`) — o sorteio das caixas em si
+  continua client-side, por decisão deliberada de escopo (ver comentário no arquivo da function).
+
+- 2026-07-25: **Bug real — o personagem certo não aparecia selecionado no menu principal depois
+  de parar e reiniciar o Play Mode (ou abrir o Play direto em `01_MainMenu`, pulando `00_Login`)**
+  (reportado pelo usuário). Causa, diferente dos bugs de cache acima: `SelectedProfileHolder` é um
+  ScriptableObject ASSET, e a Unity reverte QUALQUER mutação feita nele durante o Play Mode assim
+  que ele para — isso SEMPRE existiu, não tem relação com o Domain Reload (`SetProfile()` só muda
+  o objeto em memória, nunca grava de volta no `.asset` em disco). `currentProfile`/`characterId`
+  voltavam pro default serializado do asset (`Medieval Warrior`/vazio) toda sessão nova, mesmo pra
+  conta com personagem de verdade escolhido — `MainMenuController.
+  ReconstructSelectedProfileIfMissingAsync` (guard antigo) só cobria `currentProfile == null`, que
+  na prática quase nunca era verdade (o default do asset não é nulo, só é o personagem ERRADO), e
+  por isso quase nunca disparava. Corrigido com `PlayerProfileConverter.EnsureValidSelection`
+  (novo método compartilhado) — valida se `currentProfile` corresponde a um personagem que a conta
+  REALMENTE possui (por `characterId` contra o roster do Firestore) e, se não, reconstrói o 1º
+  personagem do roster como fallback; chamado tanto em `LoginController.OnAuthSuccessRoutine`
+  (fluxo normal) quanto em `MainMenuController.InitializeAsync` (cobre abrir o Play Mode direto
+  nesta cena, sem passar pelo login). `ReconstructSelectedProfileIfMissingAsync` removido
+  (substituído pela versão unificada). Não cobre o doc "legado" sem `characterTypeId`
+  (pré-2026-07-23) — mesma exceção documentada desde a migração original.
+
+- 2026-07-25: **Bug real — botões/fundos de TODAS as telas apareciam brancos depois de parar e
+  reiniciar o Play Mode sem fechar o Editor** (reportado pelo usuário, efeito colateral direto de
+  ter desligado o Domain Reload no Play Mode nesta mesma sessão, ver entrada de
+  `ProjectSettings/EditorSettings.asset` abaixo). `UIShapeUtil.cs` (gera em runtime todo sprite
+  procedural de retângulo arredondado/gradiente/estrela/triângulo usado por praticamente qualquer
+  botão/painel construído via código no jogo) cacheia esses `Sprite`s em `Dictionary`s estáticos
+  sem checar validade — com Domain Reload ligado, esse cache era limpo de graça a cada sessão de
+  Play; desligado, o cache sobrevive entre sessões, mas os `Sprite`/`Texture2D` da sessão anterior
+  já foram destruídos pela própria Unity ao sair do Play Mode (objetos criados em runtime não
+  sobrevivem à troca de volta pro Edit Mode) — `TryGetValue` continuava achando a entrada (a chave
+  nunca expira) e devolvia um sprite morto, renderizando branco. Corrigido checando `!= null` no
+  valor cacheado nos 4 caches do arquivo antes de reaproveitar (Unity detecta objeto destruído
+  mesmo com referência C# não-nula) — se inválido, regenera do zero como se fosse cache miss.
+
+- 2026-07-25: **Bug real — `RosterService.SessionCache` podia vazar personagem de uma conta de
+  teste antiga pra uma conta nova, na MESMA sessão do Editor** (mesma causa-raiz do bug acima:
+  Domain Reload desligado). Ficou mais grave ainda pelo fluxo de teste do usuário
+  (`LIMPEZA_BASE.md`) — apagar a conta direto pelo Firebase Console (em vez de "Sair da Conta" no
+  próprio app) nunca passa por `MainMenuController.OnLogoutClicked`, então nem a limpeza de estado
+  que já existia pra logout normal rodava. Corrigido escopando a chave do cache por
+  `(uid, characterId)` em vez de só `characterId` — um characterId da conta antiga nunca mais é
+  devolvido pra uma leitura de uid diferente, não importa se a conta antiga foi apagada pelo app
+  ou direto no Console. `PlayerProfileConverter._pristineSnapshots`/`_ownerScope` revisados e
+  confirmados já seguros (só rastreiam PlayerProfile pré-autorado, nunca instância runtime de
+  roster — instância nova a cada conta, sem chave reaproveitável entre contas).
+
+- 2026-07-25: **Bug real — `ArgumentOutOfRangeException` em `SimulatePetHit` travava a luta inteira
+  quando Hypnosis (ou Mimic copiando Hypnosis) roubava um pet inimigo** (reportado pelo usuário).
+  `BuildInitiativeRoster()`/`RunInitiativeLoop` monta a fila de iniciativa uma única vez no início
+  da luta, com dono fixo por pet — Hypnosis troca o dono de verdade em pleno combate
+  (`defender.pets.RemoveAt`/`attacker.pets.Add`) sem reconstruir a fila; a entrada antiga
+  continuava agendando o turno do pet pro dono ORIGINAL, e `petOwner.pets.IndexOf(pet)` devolvia
+  -1 quando disparava (pet não está mais nessa lista), estourando o índice em
+  `petOwner.pets[petIndex]`. Corrigido com um guard em `SimulatePetTurn` (`CombatSimulator.cs`) —
+  pet roubado simplesmente para de agir pro resto da luta (some da ordem de iniciativa) em vez de
+  travar a simulação; não resolve a ordem de iniciativa do pet sob o NOVO dono (limitação
+  conhecida, exigiria reconstruir a fila em runtime — fora do escopo deste fix).
+
+- 2026-07-25: **Bug real — `SelectedProfileHolder`/`SelectedOpponentHolder` perdiam o personagem
+  selecionado em runtime (voltavam pro default serializado no `.asset`) só de visitar `06_Loja` e
+  voltar.** Diagnosticado com log de `instanceID` (confirmou: mesmo objeto holder, `currentProfile`
+  e `characterId` revertidos juntos pro valor gravado em disco, sem nenhum `SetProfile` chamado no
+  meio) — `SceneManager.LoadScene` em modo Single roda `Resources.UnloadUnusedAssets`
+  implicitamente a cada troca de cena; `06_Loja`/`ShopController` é a única cena do fluxo sem
+  nenhuma referência serializada a esses dois assets (vivem em `Assets/Resources/`), tornando-os
+  elegíveis pra descarregar nesse intervalo. Corrigido com `hideFlags |=
+  HideFlags.DontUnloadUnusedAsset` no `OnEnable()` dos dois — protege incondicionalmente,
+  independente de qual cena referencia o asset no momento.
+
 ### Progresso
-- Total: 144 tarefas | Concluídas: 53 (2026-07-23: +1, "Compra de energia e personagens com
-  diamante" fechada por completo — ver ROADMAP_FUTURO.md Fase 4)
+- Total: 144 tarefas | Concluídas: 54 (2026-07-25: +1, "Onboarding — escolha do 1º personagem"
+  fechada por completo)
+
+- 2026-07-25: **Onboarding — escolha do 1º personagem implementada.** Nova cena
+  `ChooseFirstCharacter` (`ChooseFirstCharacterController.cs`, mesmo padrão 100%-via-código de
+  `LoginController`/`ArsenalController`), carregada por `LoginController.OnAuthSuccessRoutine`
+  sempre que uma conta loga sem NENHUM personagem no roster (`RosterService`) — cobre sign-up,
+  sign-in, Google e auto-login por igual. Grid 1×4 horizontal (Medieval Warrior, Medieval Warrior
+  Girl, Citizen 1, Citizen Women 2 — os 4 já existiam como `PlayerProfile`/prefab completos, não
+  foi criado nenhum ScriptableObject novo), tap pra destacar (`PressableCard.cs`, mesmo padrão de
+  `05_SelectOpponent`) + botão "Confirmar" separado. Confirmar chama a nova Cloud Function
+  `grantStarterCharacter` (`functions/src/grantStarterCharacter.ts`, região `southamerica-east1`,
+  deliberadamente separada de `purchaseCase` pra não acoplar um fluxo grátis num fluxo com
+  pagamento/diamante) — servidor valida que a conta ainda não possui nenhum personagem, grava
+  `users/{uid}/characters/{id}` com stats fixos por template e sorteia a 1ª skill (server-side,
+  não manipulável): pondera pelos odds reais do catálogo (`unlockCatalog.json`) pra achar 2
+  candidatos tier-1 distintos, depois decide entre os dois com uma moeda justa
+  (`crypto.randomInt`). Handoff pro cliente reaproveita 100% do canal já existente do case opening
+  (`PendingCharacterSelection` → `02_SelectCharacter` → `ResolvePendingCharacterSelectionAsync`) —
+  nenhum código novo do lado de lá. Documento gravado com `caseUnlocksResolved: true` de propósito
+  (senão `CharacterSelectController.ResolveCaseUnlocksAsync` concederia um 2º item não pedido, o
+  "bônus de boas-vindas" de 1 unlock que todo personagem Normal ganha do case opening).
+  `Medieval Warrior.asset` revertido pra `isPlayable: false` (era `true` desde 2026-07-14 como
+  único personagem "de teste" jogável do roster inteiro — não é mais caso especial; jogabilidade
+  agora vem só de instância possuída no roster, igual a qualquer outro personagem). Botão "Pular
+  (offline)" removido de `00_Login` (pedido do usuário — sem uma conta com personagem concedido
+  não há mais nada jogável, o botão não levaria a lugar nenhum). **Migração manual pendente**:
+  contas de teste anteriores a esta mudança têm `characters/Medieval Warrior` com
+  `characterTypeId` vazio (padrão "personagem original" pré-2026-07-23) — precisam de backfill
+  manual desse campo (ou simplesmente recriar a conta) pra continuarem jogáveis, já que o merge de
+  roster só reconhece documentos com `characterTypeId` preenchido.
+
+- 2026-07-25: **Bug real — `grantStarterCharacter` respondia `unauthenticated` mesmo com o
+  jogador logado normalmente.** Causa era na camada de IAM do Cloud Run, não no código: o 1º
+  deploy dessa function (recém-criada) não aplicou o binding `roles/run.invoker` pra `allUsers`
+  (`firebase functions:log` mostrou "The request was not authorized to invoke this service" —
+  rejeitado antes de chegar no `request.auth` da function), que o SDK do Unity traduz como
+  `FunctionsErrorCode.Unauthenticated`, mascarando a causa real como se fosse sessão expirada.
+  Corrigido reimplantando só essa function (`firebase deploy --only functions:grantStarterCharacter`),
+  reaplicando o binding.
+
+- 2026-07-25: **Bug real — conta nova ficava com `SelectedProfileHolder` apontando pro personagem
+  errado (default do asset, "Medieval Warrior") depois de escolher o 1º personagem no onboarding,
+  se o jogador fechasse o painel de detalhe em `02_SelectCharacter` em vez de clicar
+  "Selecionar".** Causava "Missing or insufficient permissions" ao ler energia (personagem que a
+  conta não possui de verdade no Firestore) e mostrava o personagem errado no menu até o jogador
+  trocar manualmente pela seta lateral. Raiz: "Fechar"/"Voltar" nunca gravam
+  `SelectedProfileHolder` de propósito (só "Selecionar" grava — comportamento correto pro fluxo de
+  case opening, onde só *ver* um personagem novo sem virar o ativo é válido), mas uma conta nova
+  não tem nenhuma seleção anterior válida pra preservar. Novo flag
+  `PendingCharacterSelection.AutoConfirmSelection`, setado só por `ChooseFirstCharacterController`
+  (nunca por `CaseOpeningPopup`), faz `CharacterSelectController.ResolvePendingCharacterSelectionAsync`
+  confirmar automaticamente o personagem concedido assim que o encontra, independente de qual
+  botão o jogador clicar depois.
 
 - 2026-07-25: **Energia não atualizava ao trocar de personagem pela seta/arraste no menu
   principal (bug real, reportado pelo usuário — ex: trocar pro "Medieval Warrior", com 7 de

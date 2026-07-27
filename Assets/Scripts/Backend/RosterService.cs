@@ -25,21 +25,30 @@ public static class RosterService
     // não há garantia formal de que a QUERY DE LISTAGEM (agregada, paginação/índice internos do
     // SDK) sempre reflita um doc criado poucos segundos antes por outro processo (a Cloud
     // Function, via Admin SDK) tão rápido/consistentemente quanto um `get()` direto por ID.
-    // Em vez de depender de qualquer garantia de consistência do SDK pra ISSO, este cache
-    // (characterId → CharacterDTO, nunca limpo entre cenas, só reseta ao fechar o app — mesmo
-    // padrão estático de PendingCharacterSelection/SelectedProfileHolder) guarda TUDO que este
-    // device já confirmou possuir nesta sessão (via listagem OU via get() direto) e é sempre
-    // MESCLADO no resultado de `ListOwnedCharacterDocsAsync` — um personagem que a listagem já
-    // trouxe uma vez nesta sessão nunca mais "desaparece" de uma leitura futura, não importa o
-    // que uma query subsequente devolva. Atualizado a cada leitura bem-sucedida (a versão mais
-    // recente sempre sobrescreve, então stats desatualizados de uma leitura antiga não persistem
-    // além do necessário).
-    private static readonly Dictionary<string, CharacterDTO> SessionCache = new Dictionary<string, CharacterDTO>();
+    // Em vez de depender de qualquer garantia de consistência do SDK pra ISSO, este cache guarda
+    // TUDO que este device já confirmou possuir nesta sessão (via listagem OU via get() direto) e
+    // é sempre MESCLADO no resultado de `ListOwnedCharacterDocsAsync` — um personagem que a
+    // listagem já trouxe uma vez nesta sessão nunca mais "desaparece" de uma leitura futura, não
+    // importa o que uma query subsequente devolva. Atualizado a cada leitura bem-sucedida (a
+    // versão mais recente sempre sobrescreve, então stats desatualizados de uma leitura antiga
+    // não persistem além do necessário).
+    //
+    // Chave escopada por uid (2026-07-25, bug real corrigido — era só `characterId`, sem uid
+    // nenhum) — "só reseta ao fechar o app" presumia que fechar o Play Mode já fechava o app de
+    // fato (Domain Reload limpava todo estático de graça); depois de desligar o Domain Reload
+    // (ver ProjectSettings/EditorSettings.asset) esse cache passou a sobreviver entre contas de
+    // teste diferentes na MESMA sessão do Editor, inclusive quando a conta antiga é apagada direto
+    // pelo Firebase Console (fluxo de LIMPEZA_BASE.md, que nunca passa por
+    // MainMenuController.OnLogoutClicked/RestoreAllPristine) — um characterId cacheado da conta
+    // antiga vazava pro roster mesclado da conta nova. Escopar por uid elimina o vazamento sem
+    // depender de nenhum passo extra de limpeza.
+    private static readonly Dictionary<(string uid, string characterId), CharacterDTO> SessionCache =
+        new Dictionary<(string, string), CharacterDTO>();
 
-    private static void CacheDto(CharacterDTO dto)
+    private static void CacheDto(string uid, CharacterDTO dto)
     {
         if (dto == null || string.IsNullOrEmpty(dto.characterId)) return;
-        SessionCache[dto.characterId] = dto;
+        SessionCache[(uid, dto.characterId)] = dto;
     }
 
     // Lista todos os documentos de personagem da conta (o "original" pré-existente, sem
@@ -64,7 +73,7 @@ public static class RosterService
             foreach (var doc in snap.Documents)
             {
                 var dto = CharacterDTOMap.FromMap(doc.ToDictionary());
-                CacheDto(dto);
+                CacheDto(uid, dto);
                 if (!string.IsNullOrEmpty(dto.characterId)) seenIds.Add(dto.characterId);
                 result.Add(dto);
             }
@@ -75,9 +84,9 @@ public static class RosterService
         }
 
         // Rede de segurança (ver comentário do SessionCache acima) — inclui qualquer personagem
-        // já confirmado nesta sessão que a listagem acima não trouxe desta vez.
+        // já confirmado nesta sessão (desta MESMA conta) que a listagem acima não trouxe desta vez.
         foreach (var kv in SessionCache)
-            if (!seenIds.Contains(kv.Key)) result.Add(kv.Value);
+            if (kv.Key.uid == uid && !seenIds.Contains(kv.Key.characterId)) result.Add(kv.Value);
 
         return result;
     }
@@ -96,7 +105,7 @@ public static class RosterService
             DocumentSnapshot snap = await CharactersCollection(uid).Document(characterId).GetSnapshotAsync(Source.Server);
             if (!snap.Exists) return null;
             var dto = CharacterDTOMap.FromMap(snap.ToDictionary());
-            CacheDto(dto); // ver SessionCache acima
+            CacheDto(uid, dto); // ver SessionCache acima
             return dto;
         }
         catch (Exception e)

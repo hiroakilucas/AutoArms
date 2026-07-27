@@ -7,7 +7,7 @@
  * login` antes — não requer estar dentro do runtime de uma Cloud Function.
  */
 import * as admin from "firebase-admin";
-import { CasePackageDoc, DEFAULT_TIER_WEIGHTS } from "../casePackageTypes";
+import { CasePackageDoc } from "../casePackageTypes";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -45,15 +45,11 @@ const packages: CasePackageDoc[] = [
     purchaseLimitPerPlayer: 1,
     tierWeights: null,
   },
-  {
-    packageId: "case_moeda_geral",
-    isRarityLocked: false,
-    rarityTier: 0,
-    cashPrice: 0,
-    currencyCost: 500, // ver MONETIZACAO.md — ajustar se o balanceamento mudar antes do primeiro seed real
-    purchaseLimitPerPlayer: 0, // sem limite
-    tierWeights: DEFAULT_TIER_WEIGHTS,
-  },
+  // "case_moeda_geral" (Case Geral, diamante) removido (2026-07-26) — substituído por "Próximo
+  // Personagem" (Coins, functions/src/purchaseNextCharacter.ts, preço progressivo por jogador em
+  // vez de preço fixo por pacote — não cabe no schema `casePackages` de preço único). O doc antigo
+  // em casePackages/case_moeda_geral fica órfão no Firestore (inofensivo, nada mais o lê) — não
+  // precisa ser apagado manualmente.
 ];
 
 async function main() {

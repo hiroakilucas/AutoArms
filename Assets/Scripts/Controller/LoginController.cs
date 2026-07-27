@@ -11,27 +11,37 @@ using UnityEngine.UI;
 // + um GameObject com este componente.
 //
 // Fluxo: inicializa o Firebase -> se ja existe sessao em cache (SDK do Firebase Auth persiste
-// isso sozinho), auto-login silencioso -> senao mostra o formulario (email/senha + Google).
-// Botao "Pular" sempre visivel (mesmo durante o carregamento) - carrega 01_MainMenu direto sem
-// conta, preservando 100% do comportamento atual do jogo (SelectedProfileHolder.currentProfile
-// continua vindo do valor wireado no Inspector). Login bem-sucedido roda a sincronizacao com a
-// nuvem (ver comentario mais abaixo) antes de seguir pro menu.
+// isso sozinho), auto-login silencioso -> senao mostra o formulario (email/senha + Google). Não
+// existe mais caminho offline/sem conta (botão "Pular" removido, 2026-07-24 — sem uma conta não
+// há personagem nenhum jogável, ver onboarding abaixo) — logar (ou criar conta) é obrigatório
+// pra entrar no jogo. Login bem-sucedido roda a sincronizacao com a nuvem (ver comentario mais
+// abaixo) antes de seguir pro menu.
 //
 // Google Sign-In so funciona em builds Android/iOS de verdade (o plugin GoogleSignIn lança
 // excecao em qualquer outra plataforma) - testado no Editor/Windows, o botao mostra uma
 // mensagem clara em vez de travar, mas o fluxo completo (AuthService.SignInWithGoogleAsync) so
 // fica validavel quando houver um build Android (Fase 7 do roadmap).
 //
-// Sincronizacao com a nuvem (Fatia 3, 2026-07-15): todo login bem-sucedido (auto-login, email/
-// senha, Google) roda SyncCharacterRoutine antes de ir pro 01_MainMenu — compara o
+// Onboarding (2026-07-24): OnAuthSuccessRoutine checa se a conta possui QUALQUER personagem no
+// roster (RosterService) antes de tudo o mais — se não possuir nenhum (conta nova, ou
+// reinstalada sem personagem ainda), carrega a cena `ChooseFirstCharacter` em vez de continuar o
+// fluxo normal (a escolha lá concede o personagem via Cloud Function `grantStarterCharacter` e
+// segue pro jogo sozinha). Cobre sign-up, sign-in, Google e auto-login por igual, já que todos
+// passam por este mesmo método.
+//
+// Sincronizacao com a nuvem (Fatia 3, 2026-07-15): todo login bem-sucedido de uma conta que JÁ
+// possui personagem roda SyncCharacterRoutine antes de ir pro 01_MainMenu — compara o
 // SelectedProfileHolder.currentProfile de hoje com o que existe em
 // users/{uid}/characters/{characterId} no Firestore, aplica o mais recente (por
-// updatedAtTicks) e garante que os dois lados fiquem consistentes. "Pular (offline)" não passa
-// por isso — comportamento de hoje preservado 100% nesse caminho.
+// updatedAtTicks) e garante que os dois lados fiquem consistentes.
 public class LoginController : MonoBehaviour
 {
     [SerializeField] private UITheme theme;
     [SerializeField] private SelectedProfileHolder selectedProfileHolder;
+    // Necessário pra EnsureValidSelectedCharacterRoutine reconstruir um personagem do roster via
+    // PlayerProfileConverter.FromCharacterDTO (mesmo padrão de CharacterSelectController/
+    // MainMenuController) — ver comentário completo nesse método.
+    [SerializeField] private CharacterDatabase characterDatabase;
 
     private GameObject _loadingGo;
     private GameObject _formGo;
@@ -41,7 +51,6 @@ public class LoginController : MonoBehaviour
     private Button _enterBtn;
     private Button _signUpBtn;
     private Button _googleBtn;
-    private Button _skipBtn;
 
     void Start()
     {
@@ -61,7 +70,6 @@ public class LoginController : MonoBehaviour
         BuildTitle(canvasGo.transform);
         BuildLoading(canvasGo.transform);
         BuildForm(canvasGo.transform);
-        BuildSkipButton(canvasGo.transform);
 
         ShowLoading(true);
         ShowForm(false);
@@ -109,6 +117,24 @@ public class LoginController : MonoBehaviour
         SetStatus("Sincronizando...");
         ShowLoading(true);
         ShowForm(false);
+
+        // Onboarding (2026-07-24) — conta sem NENHUM personagem no roster (nova, ou reinstalada
+        // sem personagem ainda) precisa escolher o 1º antes de entrar no jogo. Cobre sign-up,
+        // sign-in, Google e auto-login por igual (todos passam por este método) — uma conta que já
+        // possui personagem nunca vê esta tela, comportamento 100% preservado pra ela.
+        var rosterTask = RosterService.ListOwnedCharacterDocsAsync(AuthService.CurrentUser.UserId);
+        yield return new WaitUntil(() => rosterTask.IsCompleted);
+        if (rosterTask.Result == null || rosterTask.Result.Count == 0)
+        {
+            yield return StartCoroutine(LoadChooseFirstCharacterAsync());
+            yield break;
+        }
+
+        // Ver PlayerProfileConverter.EnsureValidSelection pro motivo completo (bug real
+        // corrigido 2026-07-25) — garante que SelectedProfileHolder aponte pra um personagem que
+        // esta conta REALMENTE possui antes de sincronizar/entrar no menu.
+        PlayerProfileConverter.EnsureValidSelection(selectedProfileHolder, rosterTask.Result, characterDatabase);
+
         yield return StartCoroutine(SyncCharacterRoutine());
         yield return StartCoroutine(LoadEconomyRoutine());
         yield return StartCoroutine(LoadMainMenuAsync());
@@ -173,12 +199,11 @@ public class LoginController : MonoBehaviour
     private void OnEnterClicked() => StartCoroutine(SignInRoutine());
     private void OnSignUpClicked() => StartCoroutine(SignUpRoutine());
     private void OnGoogleClicked() => StartCoroutine(SignInWithGoogleRoutine());
-    private void OnSkipClicked() => LoadMainMenu();
 
     private IEnumerator SignInWithGoogleRoutine()
     {
 #if !UNITY_ANDROID && !UNITY_IOS
-        SetStatus("Login com Google só funciona em builds Android/iOS por enquanto — use email/senha ou \"Pular\" aqui no Editor.");
+        SetStatus("Login com Google só funciona em builds Android/iOS por enquanto — use email/senha aqui no Editor.");
         yield break;
 #else
         SetInteractable(false);
@@ -252,6 +277,12 @@ public class LoginController : MonoBehaviour
     private IEnumerator LoadMainMenuAsync()
     {
         var op = SceneManager.LoadSceneAsync("01_MainMenu");
+        while (op != null && !op.isDone) yield return null;
+    }
+
+    private IEnumerator LoadChooseFirstCharacterAsync()
+    {
+        var op = SceneManager.LoadSceneAsync("ChooseFirstCharacter");
         while (op != null && !op.isDone) yield return null;
     }
 
@@ -338,18 +369,6 @@ public class LoginController : MonoBehaviour
         _statusLabel.color = theme.danger;
         _statusLabel.alignment = TextAlignmentOptions.Center;
         _statusLabel.enableWordWrapping = true;
-    }
-
-    private void BuildSkipButton(Transform parent)
-    {
-        var go = new GameObject("BtnSkip");
-        go.transform.SetParent(parent, false);
-        var rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
-        rt.pivot = new Vector2(1f, 0f);
-        rt.sizeDelta = new Vector2(220f, 44f);
-        rt.anchoredPosition = new Vector2(-30f, 30f);
-        _skipBtn = BuildButton(go, "Pular (offline)", theme.secondaryButtonAlt, OnSkipClicked);
     }
 
     private void ShowLoading(bool show) => _loadingGo.SetActive(show);

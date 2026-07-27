@@ -4,3 +4,8 @@ admin.initializeApp();
 
 export { purchaseCase } from "./purchaseCase";
 export { rerollUnlock } from "./rerollUnlock";
+export { grantStarterCharacter } from "./grantStarterCharacter";
+export { rebirthCharacter } from "./rebirthCharacter";
+export { rerollRebirthGrant } from "./rerollRebirthGrant";
+export { rerollLevelUpBoxes } from "./rerollLevelUpBoxes";
+export { purchaseNextCharacter } from "./purchaseNextCharacter";

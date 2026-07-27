@@ -21,7 +21,7 @@ public class CaseOpeningPopup : MonoBehaviour
     private const float SlotSpacing = 32f;
     private const float SlotBorderThickness = 14f; // proporcional ao novo SlotSize (era 6 pra 160)
     private const float ViewportHeight = SlotSize + 40f;
-    private const float SpinDuration = 4.5f;
+    private const float SpinDuration = 6f; // era 4.5f (2026-07-27, pedido do usuário — giro um pouco mais longo)
     private const float StartOffsetSlots = 6f; // giro começa alguns slots "antes" da faixa, não parado em 0
 
     // Quantos slots o giro percorre visualmente do início ao vencedor (duração percebida/
@@ -55,18 +55,31 @@ public class CaseOpeningPopup : MonoBehaviour
 
     private string _grantedCharacterId;
 
+    // weightedRarityFill (2026-07-27, bug visual corrigido — reportado pelo usuário: giro inteiro
+    // saía numa raridade só, ex. "só Normal" ou "só Imortal") — `reelPoolCharacterTypeIds` NUNCA
+    // foi um pool multi-raridade: é o resultado de `rollWeightedPool` no servidor, ou seja, a
+    // lista de personagens elegíveis DENTRO do tier já sorteado pro prêmio final (sempre
+    // homogêneo por raridade, de propósito). Pra pacotes `isRarityLocked` (Raro/Legendary/Imortal,
+    // cash) isso é o comportamento CERTO — giro só daquela raridade combina com "essa compra
+    // garante Raro". Pra "Próximo Personagem" (sorteio ponderado entre as 5 raridades) é ERRADO —
+    // o giro deveria misturar raridades, imitando a distribuição real. `weightedRarityFill=true`
+    // troca o preenchimento pra sortear CADA slot independentemente (mesmos pesos de
+    // `functions/src/casePackageTypes.ts` DEFAULT_TIER_WEIGHTS, ver FillRarityWeights abaixo),
+    // ignorando `reelPoolCharacterTypeIds` pro preenchimento (ainda usado só como fallback se
+    // characterDatabase não estiver disponível). `false` (default) preserva o comportamento
+    // antigo pros pacotes de raridade travada.
     public static void Show(UITheme theme, CharacterDatabase characterDatabase,
         List<string> reelPoolCharacterTypeIds, string wonCharacterTypeId, string grantedCharacterId,
-        Action onClosed)
+        Action onClosed, bool weightedRarityFill = false)
     {
         var go = new GameObject("CaseOpeningPopup (temp)");
         var popup = go.AddComponent<CaseOpeningPopup>();
-        popup.Init(theme, characterDatabase, reelPoolCharacterTypeIds, wonCharacterTypeId, grantedCharacterId, onClosed);
+        popup.Init(theme, characterDatabase, reelPoolCharacterTypeIds, wonCharacterTypeId, grantedCharacterId, onClosed, weightedRarityFill);
     }
 
     private void Init(UITheme theme, CharacterDatabase characterDatabase,
         List<string> reelPoolCharacterTypeIds, string wonCharacterTypeId, string grantedCharacterId,
-        Action onClosed)
+        Action onClosed, bool weightedRarityFill)
     {
         _theme = theme;
         _characterDatabase = characterDatabase;
@@ -115,7 +128,7 @@ public class CaseOpeningPopup : MonoBehaviour
         var content = BuildContent(viewportRt, totalSlotCount);
         BuildMarker(viewportRt);
 
-        var slotIds = BuildReelSlotIds(reelPoolCharacterTypeIds, wonCharacterTypeId, totalSlotCount, winningSlotIndex);
+        var slotIds = BuildReelSlotIds(reelPoolCharacterTypeIds, wonCharacterTypeId, totalSlotCount, winningSlotIndex, weightedRarityFill);
         PopulateSlots(content, slotIds);
 
         BuildRevealGroup(transform, onClosed);
@@ -199,12 +212,53 @@ public class CaseOpeningPopup : MonoBehaviour
         img.raycastTarget = false;
     }
 
-    private List<string> BuildReelSlotIds(List<string> pool, string winner, int slotCount, int winningIndex)
+    // Mesmos pesos de functions/src/casePackageTypes.ts (DEFAULT_TIER_WEIGHTS) — mantidos em
+    // sincronia manual. Usado SÓ pra decorar o giro (weightedRarityFill=true); o sorteio REAL do
+    // prêmio final é sempre 100% server-side, nunca decidido aqui. [Normal, Uncommon, Rare,
+    // Legendary, Immortal], mesma ordem/índices de CharacterRarity.
+    private static readonly float[] FillRarityWeights = { 0.68f, 0.20f, 0.08f, 0.035f, 0.005f };
+
+    private static CharacterRarity WeightedRandomFillRarity()
     {
-        if (pool == null || pool.Count == 0) pool = new List<string> { winner };
+        float total = 0f;
+        foreach (var w in FillRarityWeights) total += w;
+        float roll = UnityEngine.Random.value * total;
+        float cumulative = 0f;
+        for (int i = 0; i < FillRarityWeights.Length; i++)
+        {
+            cumulative += FillRarityWeights[i];
+            if (roll < cumulative) return (CharacterRarity)i;
+        }
+        return (CharacterRarity)(FillRarityWeights.Length - 1);
+    }
+
+    // Personagem aleatório de uma raridade específica, direto de characterDatabase.
+    // unlockedCharacters (mesma fonte que ResolveIcon já usa) — puramente decorativo, não exclui
+    // já possuídos (diferente do sorteio real, que não importa aqui).
+    private string RandomCharacterOfRarity(CharacterRarity rarity, string fallback)
+    {
+        if (_characterDatabase?.unlockedCharacters == null) return fallback;
+        var candidates = new List<string>();
+        foreach (var p in _characterDatabase.unlockedCharacters)
+            if (p != null && p.rarity == rarity) candidates.Add(p.name);
+        if (candidates.Count == 0) return fallback;
+        return candidates[UnityEngine.Random.Range(0, candidates.Count)];
+    }
+
+    private List<string> BuildReelSlotIds(List<string> pool, string winner, int slotCount, int winningIndex, bool weightedRarityFill)
+    {
         var slots = new List<string>(slotCount);
-        for (int i = 0; i < slotCount; i++)
-            slots.Add(pool[UnityEngine.Random.Range(0, pool.Count)]);
+        if (weightedRarityFill)
+        {
+            for (int i = 0; i < slotCount; i++)
+                slots.Add(RandomCharacterOfRarity(WeightedRandomFillRarity(), winner));
+        }
+        else
+        {
+            if (pool == null || pool.Count == 0) pool = new List<string> { winner };
+            for (int i = 0; i < slotCount; i++)
+                slots.Add(pool[UnityEngine.Random.Range(0, pool.Count)]);
+        }
         slots[winningIndex] = winner;
         return slots;
     }

@@ -10,4 +10,17 @@
 public static class PendingCharacterSelection
 {
     public static string PendingCharacterId;
+
+    // true só quando o pedido vem do onboarding (ChooseFirstCharacterController) — 2026-07-25,
+    // bug real reportado pelo usuário: conta nova concede o 1º personagem, mas se o jogador
+    // fecha o painel de detalhe em 02_SelectCharacter em vez de clicar "Selecionar",
+    // SelectedProfileHolder nunca é atualizado (comportamento normal/intencional pro fluxo de
+    // case opening, onde "só ver" o personagem sem trocar o ativo é válido) e fica preso no
+    // default do asset (Medieval Warrior) — personagem que essa conta não possui de verdade,
+    // causando "Missing or insufficient permissions" ao ler energia dele. Numa conta nova não
+    // existe nenhuma seleção anterior válida pra preservar, então este flag faz
+    // CharacterSelectController.ResolvePendingCharacterSelectionAsync confirmar automaticamente
+    // o personagem concedido, independente de qual botão o jogador clicar depois. CaseOpeningPopup
+    // nunca seta isto (fica false), preservando o comportamento de sempre pra ele.
+    public static bool AutoConfirmSelection;
 }

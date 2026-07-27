@@ -26,9 +26,9 @@ MonoBehaviour:
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
   maxHealth: 70
-  str: 4
+  str: 3
   agility: 4
-  speed: 4
+  speed: 5
   armor: 0
   evasion: 0
   accuracy: 0
@@ -42,6 +42,15 @@ MonoBehaviour:
   skills: []
   pets: []
   caseUnlocksResolved: 0
+  caseUnlocksAcceptedCount: 0
+  pendingUnlockIndex: 0
+  pendingUnlockKind: 
+  pendingUnlockName: 
+  pendingUnlockTier: 0
+  pendingUnlockRerollsUsed: 0
+  hasPendingLevelUpChoice: 0
+  pendingLevelUpBoxes: []
+  pendingLevelUpRerollsUsed: 0
   level: 1
   winRate: 0
   xpCurrent: 0

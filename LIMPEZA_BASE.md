@@ -49,12 +49,36 @@ da nuvem:
   ver ARQUITETURA.md/"Firestore PersistenceEnabled"), rodar
   **Tools → AutoArms → Reset All Profiles to Level 1** antes de testar de novo.
 
+## 4. Reiniciar o Play Mode/a Unity (recomendado, ver bug real abaixo)
+
+**Contexto (2026-07-25)**: `ProjectSettings/EditorSettings.asset` tem o Domain Reload do Play Mode
+DESLIGADO (`m_EnterPlayModeOptionsEnabled: 1`/`m_EnterPlayModeOptions: 1` — mitigação pro Editor
+travar em "Waiting for Unity's code to finish executing" ao fechar, causado por threads nativas do
+Firebase não sobrevivendo a um Domain Reload). Efeito colateral: parar/reiniciar o Play Mode
+**não zera mais nenhum estado estático (C#) do processo** — antes disso era de graça a cada sessão
+de Play, então os passos 1-3 acima sempre bastavam sozinhos.
+
+Dois caches estáticos que dependiam desse reset de graça já foram corrigidos (2026-07-25):
+`RosterService.SessionCache` (agora escopado por uid — nunca mais devolve personagem de uma conta
+diferente) e os 4 caches de sprite de `UIShapeUtil.cs` (agora checam se o objeto cacheado ainda é
+válido). Na prática, os passos 1-3 sozinhos já bastam de novo pra uma conta 100% limpa, MESMO sem
+reiniciar a Unity — inclusive apagando a conta antiga direto pelo Firebase Console (sem clicar
+"Sair da Conta" no app), que é o fluxo normal deste guia.
+
+Ainda assim, **reiniciar o Play Mode (parar e apertar Play de novo) ou fechar e reabrir a Unity é
+uma margem de segurança barata** contra qualquer outro estático que ainda não tenha sido mapeado —
+sem custo real (poucos segundos), recomendado antes de cada rodada de teste "do zero" enquanto o
+Domain Reload continuar desligado. Só fechar e reabrir a Unity de fato garante 100% (Domain Reload
+não roda nem parando/reiniciando o Play Mode agora), mas parar/reiniciar já cobre a maioria dos
+casos práticos (destrói e reconstrói toda a hierarquia de GameObjects/MonoBehaviours da cena, só
+não toca em estáticos).
+
 ## Verificação
 
-Depois dos 3 passos: criar uma conta nova, confirmar que ela vem 100% vazia (nenhum personagem,
-level 1 se algum profile for tocado) e que `opponents_index`/`05_SelectOpponent` não mostra nenhum
-adversário real (cai no pool local de fallback, já que não há mais nenhuma conta com personagem
-salvo).
+Depois dos passos acima: criar uma conta nova, confirmar que ela vem 100% vazia (nenhum
+personagem, level 1 se algum profile for tocado) e que `opponents_index`/`05_SelectOpponent` não
+mostra nenhum adversário real (cai no pool local de fallback, já que não há mais nenhuma conta com
+personagem salvo).
 
 ## Automatizar (não feito ainda)
 

@@ -16,7 +16,7 @@ MonoBehaviour:
   characterId: 
   characterPrefab: {fileID: 1545498302350534, guid: 927828765a1dfce40ad37a9e0b167b7b, type: 3}
   isUnlockedForSelection: 1
-  isPlayable: 1
+  isPlayable: 0
   isFavorite: 0
   previewIcon: {fileID: 21300000, guid: acde409e0b6e5794e80031314f35d193, type: 3}
   splashArt: {fileID: 21300000, guid: df638e56e9b61c04191f6b46d33af88a, type: 3}
@@ -25,10 +25,10 @@ MonoBehaviour:
   weapons: []
   scale: {x: 1, y: 1, z: 1}
   startPos: {x: -6.3, y: -2.407897}
-  maxHealth: 70
-  str: 3
-  agility: 4
-  speed: 5
+  maxHealth: 60
+  str: 6
+  agility: 5
+  speed: 3
   armor: 0
   evasion: 0
   accuracy: 0
@@ -42,6 +42,15 @@ MonoBehaviour:
   skills: []
   pets: []
   caseUnlocksResolved: 0
+  caseUnlocksAcceptedCount: 0
+  pendingUnlockIndex: 0
+  pendingUnlockKind: 
+  pendingUnlockName: 
+  pendingUnlockTier: 0
+  pendingUnlockRerollsUsed: 0
+  hasPendingLevelUpChoice: 0
+  pendingLevelUpBoxes: []
+  pendingLevelUpRerollsUsed: 0
   level: 1
   winRate: 0
   xpCurrent: 0

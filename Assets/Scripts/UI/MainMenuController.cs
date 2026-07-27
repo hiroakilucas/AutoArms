@@ -37,21 +37,24 @@ public class MainMenuController : MonoBehaviour
     {
         _energySettings = Resources.Load<EnergySettings>("EnergySettings");
 
-        // Bug real corrigido (2026-07-25, reportado pelo usuário — NullReferenceException em
-        // CharacterPanel.RefreshAll ao reabrir o app) — SelectedProfileHolder.currentProfile pode
-        // ser uma instância RUNTIME (personagem concedido via case opening,
-        // PlayerProfile.isRuntimeInstance) "sem referência estável entre sessões" (comentário já
-        // existente em SelectedProfileHolder.characterId, nunca implementado até agora): se a
-        // conta ativa era um desses personagens quando o app fechou, a instância morre junto do
-        // processo e currentProfile chega NULO nesta nova sessão — travava
-        // characterPanel.Setup() logo abaixo (RefreshAll não espera currentProfile nulo). Não é
-        // causado pelo código de resiliência do level-up — é uma lacuna pré-existente no sistema
-        // de roster, só exposta agora que a conta de teste tem um personagem de case opening
-        // ativo. Reconstrói ANTES de qualquer coisa depender do profile.
-        if (selectedProfileHolder != null && selectedProfileHolder.currentProfile == null
-            && !string.IsNullOrEmpty(selectedProfileHolder.characterId))
+        // Bug real corrigido (2026-07-25, reportado pelo usuário — "quando eu paro a aplicação e
+        // starto novamente no Unity, o primeiro personagem não aparece selecionado na main menu",
+        // além do NullReferenceException original em CharacterPanel.RefreshAll ao reabrir o app)
+        // — `SelectedProfileHolder` é um ScriptableObject ASSET; a Unity reverte QUALQUER mutação
+        // feita nele durante o Play Mode assim que ele para (comportamento SEMPRE existiu, não é
+        // ligado ao Domain Reload) — `currentProfile`/`characterId` voltam pro default serializado
+        // do asset (hoje `Medieval Warrior`/vazio) toda vez que uma sessão nova começa, mesmo pra
+        // uma conta que já tem personagem de verdade escolhido. A checagem antiga (só
+        // `currentProfile == null`) quase nunca era verdadeira (o default do asset não é nulo, é
+        // só o personagem ERRADO) — por isso raramente disparava. `PlayerProfileConverter.
+        // EnsureValidSelection` (compartilhado com `LoginController.OnAuthSuccessRoutine`, que
+        // cobre o fluxo normal via `00_Login`) cobre também o caso de abrir o Play Mode direto
+        // nesta cena (comum ao iterar em UI no Editor, pulando o login) — busca o roster de novo
+        // se logado e corrige `currentProfile` antes de qualquer coisa depender dele abaixo.
+        if (selectedProfileHolder != null && AuthService.IsSignedIn)
         {
-            await ReconstructSelectedProfileIfMissingAsync();
+            var owned = await RosterService.ListOwnedCharacterDocsAsync(AuthService.CurrentUser.UserId);
+            PlayerProfileConverter.EnsureValidSelection(selectedProfileHolder, owned, characterDatabase);
         }
 
         // Restaura o save local (2026-07-14, ver LocalSaveService.cs) ANTES de qualquer leitura
@@ -91,45 +94,6 @@ public class MainMenuController : MonoBehaviour
         // ResumePendingLevelUpChoiceIfAny/AttackSequencer.OnCombatEnd.
         if (selectedProfileHolder != null)
             CombatResultPanel.ResumePendingLevelUpChoiceIfAny(selectedProfileHolder.currentProfile, theme);
-    }
-
-    // Reconstrói selectedProfileHolder.currentProfile a partir de characterId (2026-07-25, ver
-    // comentário em InitializeAsync acima) — dois casos possíveis, mesma ordem de prioridade que
-    // OpponentId()/CharacterSelectController já usam em outros pontos:
-    // 1. Personagem ORIGINAL/molde (characterId caiu no fallback de PlayerProfile.OpponentId(),
-    //    que é o próprio nome do asset Unity quando o campo characterId está vazio) — basta achar
-    //    o asset persistente correspondente em characterDatabase.unlockedCharacters por nome.
-    // 2. Personagem de ROSTER (case opening) — characterId é o ID real do documento Firestore
-    //    (users/{uid}/characters/{characterId}); reconstrói via RosterService.
-    //    GetOwnedCharacterDocAsync + PlayerProfileConverter.FromCharacterDTO, mesmo padrão já
-    //    usado por CharacterSelectController.ResolvePendingCharacterSelectionAsync/
-    //    MainMenuCharacterPreview.LoadRosterAndMergeOrderedProfilesAsync.
-    private async Task ReconstructSelectedProfileIfMissingAsync()
-    {
-        string characterId = selectedProfileHolder.characterId;
-
-        if (characterDatabase != null)
-        {
-            foreach (var template in characterDatabase.unlockedCharacters)
-            {
-                if (template != null && template.name == characterId)
-                {
-                    selectedProfileHolder.SetProfile(template);
-                    return;
-                }
-            }
-        }
-
-        if (!AuthService.IsSignedIn) return;
-
-        var dto = await RosterService.GetOwnedCharacterDocAsync(AuthService.CurrentUser.UserId, characterId);
-        if (dto == null) return;
-
-        var runtime = PlayerProfileConverter.FromCharacterDTO(dto, characterDatabase);
-        if (runtime == null) return;
-
-        LocalSaveService.ApplyIfSaved(runtime);
-        selectedProfileHolder.SetProfile(runtime);
     }
 
     // Moeda/diamante — canto superior direito da TELA (2026-07-20, redesenho mobile).

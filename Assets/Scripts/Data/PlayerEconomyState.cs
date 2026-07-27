@@ -39,6 +39,15 @@ public static class PlayerEconomyState
     // deve nascer sem o selo "1ª compra: N diamantes".
     public static readonly HashSet<int> UsedFirstPurchaseBonusAmounts = new HashSet<int>();
 
+    // "Próximo Personagem" (Coins, aba Personagens da Loja, 2026-07-26) — quantas vezes esta
+    // conta já comprou via `purchaseNextCharacter` (mesmo campo persistido em
+    // users/{uid}.nextCharacterPurchaseCount, contador server-authoritative). Populado por
+    // ShopController.LoadPersistedShopStateAsync (WalletService.LoadNextCharacterPurchaseCountAsync)
+    // antes de montar os cards, pra mostrar o preço real da PRÓXIMA compra em vez de sempre "1ª
+    // compra" — ao contrário do antigo contador em memória (ShopItem.Purchased), que resetava a
+    // cada carregamento de cena.
+    public static int NextCharacterPurchaseCount;
+
     public static void Set(int coins, int diamonds, int energyCurrent, int energyMax)
     {
         Coins = coins;

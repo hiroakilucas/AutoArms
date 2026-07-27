@@ -64,16 +64,30 @@ diamantes (não escala) e limite de 2 refreshes por unlock individual, ambos val
 100% server-side (Admin SDK lê `users/{uid}.diamonds` e o contador
 `users/{uid}/characters/{characterId}.unlockRerollCounts`, nunca confia em nada enviado pelo
 cliente) — mesma transaction debita o diamante e incrementa o contador atomicamente com o
-resorteio. **Deliberadamente um sistema econômico separado** do "Novo Sorteio" do level-up de
-combate (`CombatResultPanel.cs`, `WalletService.SpendDiamondsAsync`, placeholder client-writable,
-custo progressivo 50/100/200) — pedido explícito do usuário pra não compartilhar lógica de custo
-entre os dois, só a mecânica de "gastar diamante pra resortear". O sorteio ORIGINAL de cada
-unlock (sem custo) continua 100% client-side (`CharacterUnlockEngine.DrawUnlock`, mesmo nível de
-confiança client-authoritative de qualquer recompensa do level-up de combate) — só o REFRESH, por
-gastar dinheiro premium de verdade, precisou de Cloud Function. `functions/src/unlockCatalog.json`
-(gerado por `Tools > AutoArms > Export Unlock Catalog for Cloud Function`) é o espelho server-side
-dos databases de skill/arma/pet (odds + quais tiers cada família realmente tem), mesmo papel de
-`characterCatalog.json` pra `purchaseCase`.
+resorteio. O sorteio ORIGINAL de cada unlock (sem custo) continua 100% client-side
+(`CharacterUnlockEngine.DrawUnlock`, mesmo nível de confiança client-authoritative de qualquer
+recompensa do level-up de combate) — só o REFRESH, por gastar dinheiro premium de verdade,
+precisou de Cloud Function. `functions/src/unlockCatalog.json` (gerado por `Tools > AutoArms >
+Export Unlock Catalog for Cloud Function`) é o espelho server-side dos databases de skill/arma/pet
+(odds + quais tiers cada família realmente tem), mesmo papel de `characterCatalog.json` pra
+`purchaseCase`. A validação/sorteio/débito em si (`performSlotReroll`) foi extraída pra
+`functions/src/rerollShared.ts` (2026-07-26) — reaproveitada por `rerollRebirthGrant.ts` (reroll
+individual dos itens concedidos pelo Renascimento, campo de contador PRÓPRIO
+`rebirthUnlockRerollCounts`, nunca reaproveita `unlockRerollCounts` pra não colidir).
+
+**TODO de segurança do "Novo Sorteio" (level-up de combate, `CombatResultPanel.cs`) fechado em
+2026-07-26** — antes gastava diamante direto do cliente (`WalletService.SpendDiamondsAsync`,
+placeholder client-writable) com custo PROGRESSIVO (50→100→200). Nova Cloud Function
+`rerollLevelUpBoxes.ts` valida/debita sempre no servidor, custo agora FIXO (reusa
+`REROLL_COST_DIAMONDS=15` de `rerollShared.ts`, o MESMO valor de `rerollUnlock` — não um valor
+novo), limite de 3 usos por level-up escopado por `levelUpRerollCount`/`levelUpRerollAtLevel`
+(reinicia sozinho quando o `level` do documento muda, sem precisar de "session id"). Escopo
+DELIBERADAMENTE reduzido em relação a `rerollUnlock`/`rerollRebirthGrant`: só a AUTORIZAÇÃO do
+gasto é server-side — o sorteio das N caixas em si continua client-side (pirâmide + resume
+`pendingLevelUpBoxes`, sistema já validado e com histórico extenso de bugs corrigidos; portar o
+motor de sorteio inteiro pra fechar uma brecha de baixo valor econômico — o conteúdo de cada caixa
+já é obtível de graça no level-up normal, "Novo Sorteio" é só conveniência — não valeu o risco de
+regressão). Revisitar se essa brecha residual virar um problema real medido em produção.
 
 ## Regras de segurança do Firestore — `users/{uid}/characters`
 
@@ -227,11 +241,17 @@ documento nessa mesma subcoleção.
   `FromCharacterMap(map, templateCatalog)` continua existindo como wrapper fino sobre
   `FromCharacterDTO` pra quem só tem o `Dictionary` cru de um `DocumentSnapshot`.
 
-**Quem concede um personagem**: só a Cloud Function `purchaseCase` (Admin SDK, ver
-`functions/src/purchaseCase.ts`) cria um documento novo em `users/{uid}/characters/{id}` — o
-cliente nunca cria um documento de personagem do zero, só atualiza um que já possui (mesmo fluxo
-de sempre, `FirestoreService.SaveCharacterAsync`). `RosterService.ListOwnedCharacterDocsAsync`
-(cliente) só LÊ o roster inteiro.
+**Quem concede um personagem**: só Cloud Functions (Admin SDK) criam um documento novo em
+`users/{uid}/characters/{id}` — o cliente nunca cria um documento de personagem do zero, só
+atualiza um que já possui (mesmo fluxo de sempre, `FirestoreService.SaveCharacterAsync`).
+`RosterService.ListOwnedCharacterDocsAsync` (cliente) só LÊ o roster inteiro. Três functions
+concedem personagem hoje, todas reaproveitando o mesmo shape de documento
+(`functions/src/grantCharacter.ts`, extraído 2026-07-27 pra não duplicar entre elas):
+`purchaseCase.ts` (case opening, cash/diamante), `purchaseNextCharacter.ts` (2026-07-26, "Próximo
+Personagem" na Loja, preço em Coins escalando por contador do jogador em vez de preço fixo por
+pacote) e `grantStarterCharacter.ts` (onboarding, 1x por conta). `rebirthCharacter.ts` (2026-07-26,
+Renascimento) é diferente — não cria personagem novo, RESETA um já existente pro Level 1 com
+loadout/stats re-sorteados, mesmo princípio de nunca confiar no cliente.
 
 **Migração de `CharacterSelectController`/`SelectedProfileHolder`/`MainMenuCharacterPreview`
 concluída em 2026-07-24** (estava deliberadamente pendente desde 2026-07-23 — ver histórico no
@@ -284,6 +304,36 @@ selecionado" entre reinícios do app — `LoginController` continua carregando
 `SelectedProfileHolder.currentProfile` a partir do valor "wireado no Inspector" (comportamento
 documentado, preservado de propósito); esta migração funciona só dentro de uma sessão em
 execução.
+
+**3ª implementação real da regra "quem concede um personagem" (2026-07-24) — onboarding/escolha
+do 1º personagem**: Cloud Function `grantStarterCharacter` (`functions/src/
+grantStarterCharacter.ts`), deliberadamente SEPARADA de `purchaseCase` (pedido explícito do
+usuário — um fluxo grátis de onboarding não deve se acoplar à lógica de preço/recibo/contador de
+compras que `purchaseCase` já tem, risco de bug futuro num fluxo que já funciona). Concede 1 dos 4
+personagens "normais" de onboarding (Medieval Warrior/Medieval Warrior Girl/Citizen 1/Citizen
+Women 2) — Admin SDK, dentro de uma transaction que primeiro verifica se a conta já possui
+QUALQUER personagem (não só deste template); se sim, `failed-precondition`. Sem regra de `delete`
+em `characters/{id}`, esse gate é definitivo (não existe caminho client-side de "concede, apaga,
+concede de novo"). Stats vêm de uma constante fixa por template (hardcoded na function, extraída
+dos `.asset` reais — só 4 personagens, não justifica um catálogo/pipeline de export dedicado como
+`unlockCatalog.json`). A 1ª skill é sorteada 100% server-side (nunca no cliente): pondera pelos
+odds reais de `unlockCatalog.json` (tier 1) pra achar 2 candidatos distintos, decide entre os dois
+com uma moeda justa (`crypto.randomInt`) — "sortear entre 2 opções, sem escolha manual", pedido
+explícito do usuário. Documento gravado com `caseUnlocksResolved: true` (diferente de um
+personagem de case opening real) — sem isso, `CharacterSelectController.ResolveCaseUnlocksAsync`
+trataria esta instância como "case opening ainda não revelado" e concederia mais 1 item (o bônus
+de boas-vindas que `CharacterUnlockEngine.UnlockCountForRarity(Normal) == 1` dá a qualquer
+personagem Normal), duplicando a concessão de item pro onboarding.
+
+Consequência da mudança: `Medieval Warrior.asset` (o único personagem com `isPlayable=true` desde
+2026-07-14, ver CHANGELOG.md — usado como "personagem de teste" fixo, sem escolha real) voltou pra
+`isPlayable=false`, igual aos outros 71 — jogabilidade agora vem exclusivamente de instância
+possuída no roster (concedida por `purchaseCase` OU `grantStarterCharacter`), nunca mais do asset
+base compartilhado. **Contas de teste anteriores a esta mudança** têm `characters/Medieval
+Warrior` com `characterTypeId` vazio (padrão "personagem original" pré-2026-07-23, ver acima) —
+precisam de backfill manual desse campo (script Admin SDK avulso, mesmo estilo de
+`functions/src/scripts/seedCasePackages.ts`) ou simplesmente recriar a conta, senão ficam sem
+nenhum personagem jogável depois desta mudança.
 
 ## Stat base vs. stat efetivo — nunca confundir os dois em UI voltada a PvP
 

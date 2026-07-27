@@ -364,4 +364,41 @@ public static class PlayerProfileConverter
     // sem passar por RosterService) — mantém a assinatura antiga funcionando.
     public static PlayerProfile FromCharacterMap(Dictionary<string, object> map, CharacterDatabase templateCatalog)
         => FromCharacterDTO(CharacterDTOMap.FromMap(map), templateCatalog);
+
+    // Bug real corrigido (2026-07-25, reportado pelo usuário — "quando eu paro a aplicação e
+    // starto novamente no Unity, o primeiro personagem não aparece selecionado na main menu") —
+    // `SelectedProfileHolder` é um ScriptableObject ASSET; a Unity reverte QUALQUER mutação feita
+    // nele durante o Play Mode assim que ele para (comportamento SEMPRE existiu, não é ligado ao
+    // Domain Reload — `SetProfile()` só muda o objeto em memória, nunca grava de volta no `.asset`
+    // em disco). `currentProfile`/`characterId` voltam a ser o default serializado do asset (hoje
+    // `Medieval Warrior`/vazio) toda vez que uma sessão de Play/app começa do zero — mesmo pra uma
+    // conta que já tem personagem de verdade escolhido. Compartilhado entre
+    // `LoginController.OnAuthSuccessRoutine` (fluxo normal, via `00_Login`) e
+    // `MainMenuController.InitializeAsync` (Play Mode iniciado direto em `01_MainMenu`, pulando
+    // `00_Login` — cenário comum ao iterar em UI no Editor) pra cobrir os dois jeitos de uma
+    // sessão nova começar. Valida se `holder.currentProfile` corresponde a um personagem que a
+    // conta REALMENTE possui (por `characterId`) e, se não, reconstrói o 1º personagem do roster
+    // com `characterTypeId` preenchido (sistema de roster real, não o doc "legado" pré-2026-07-23)
+    // como fallback.
+    public static void EnsureValidSelection(SelectedProfileHolder holder, List<CharacterDTO> owned, CharacterDatabase templateCatalog)
+    {
+        if (holder == null || owned == null || owned.Count == 0) return;
+
+        string currentId = holder.currentProfile != null ? holder.currentProfile.OpponentId() : null;
+        if (!string.IsNullOrEmpty(currentId))
+        {
+            foreach (var dto in owned)
+                if (dto != null && dto.characterId == currentId) return; // já é um personagem de verdade desta conta
+        }
+
+        CharacterDTO chosen = null;
+        foreach (var dto in owned)
+            if (dto != null && !string.IsNullOrEmpty(dto.characterTypeId)) { chosen = dto; break; }
+        if (chosen == null) return; // só doc "legado" sem characterTypeId — fora do escopo deste fix, ver migração manual em CHANGELOG.md
+
+        var runtime = FromCharacterDTO(chosen, templateCatalog);
+        if (runtime == null) return;
+        LocalSaveService.ApplyIfSaved(runtime);
+        holder.SetProfile(runtime);
+    }
 }

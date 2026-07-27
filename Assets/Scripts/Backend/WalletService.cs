@@ -46,6 +46,27 @@ public static class WalletService
         }
     }
 
+    // "Próximo Personagem" (2026-07-26) — só LEITURA do contador persistido pela Cloud Function
+    // purchaseNextCharacter (users/{uid}.nextCharacterPurchaseCount); o cliente nunca escreve
+    // este campo (mesma regra de "moeda premium", aplicada aqui porque o contador decide preço,
+    // não só exibição). Usado por ShopController pra mostrar o preço real da próxima compra antes
+    // do 1º clique da sessão.
+    public static async Task<int> LoadNextCharacterPurchaseCountAsync(string uid)
+    {
+        try
+        {
+            FirestoreService.TryEnsurePersistence();
+            DocumentSnapshot snap = await WalletDoc(uid).GetSnapshotAsync();
+            if (snap.Exists && snap.TryGetValue<long>("nextCharacterPurchaseCount", out var count)) return (int)count;
+            return 0;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[WalletService] Falha ao carregar nextCharacterPurchaseCount de '{uid}': {e.Message}");
+            return 0;
+        }
+    }
+
     public static async Task<bool> AddCoinsAsync(string uid, int amount)
     {
         if (amount == 0) return true;

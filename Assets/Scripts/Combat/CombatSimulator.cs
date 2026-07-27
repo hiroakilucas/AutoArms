@@ -956,6 +956,21 @@ public class CombatSimulator
     private void SimulatePetTurn(PetState pet, PlayerState petOwner, PlayerState enemy, List<PetState> enemyPets)
     {
         int petIndex = petOwner.pets.IndexOf(pet);
+
+        // Bug real corrigido (2026-07-25) — ArgumentOutOfRangeException reportado pelo usuário
+        // (travava a luta inteira, antes de qualquer animação). `BuildInitiativeRoster()` monta a
+        // fila de iniciativa UMA ÚNICA VEZ no início da luta, com um dono FIXO por pet — mas
+        // Hypnosis (e o Mimic que a copia, ver TryActivateMimic case "Hypnosis") pode roubar um
+        // pet inimigo em pleno combate (`defender.pets.RemoveAt`/`attacker.pets.Add`), trocando o
+        // dono de verdade sem nunca reconstruir a fila. A entrada antiga continua agendando o
+        // turno desse pet pro dono ORIGINAL — quando ela finalmente dispara, o pet já não está
+        // mais em `petOwner.pets` (`IndexOf` devolve -1), e `petOwner.pets[petIndex]` em
+        // SimulatePetHit estourava o índice. Sem uma forma barata de re-registrar o pet na fila
+        // sob o novo dono a partir daqui, o turno é simplesmente ignorado — o pet roubado some da
+        // ordem de iniciativa pro resto da luta (continua vivo/pertencendo ao novo dono, só não
+        // age mais) em vez de travar a simulação inteira.
+        if (petIndex < 0) return;
+
         Emit(new CombatEvent { type = CombatEventType.PetTurnStart, playerIndex = petOwner.index, petIndex = petIndex });
 
         if (!pet.isAlive || pet.netEnsnared)

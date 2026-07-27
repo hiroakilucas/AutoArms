@@ -61,6 +61,14 @@ public class ShopController : MonoBehaviour
         // diamante); OnBuyClicked desvia pra HandleCasePurchaseAsync antes do incremento síncrono
         // genérico, já que comprar um case chama a Cloud Function purchaseCase (assíncrono).
         public string CasePackageId;
+
+        // "Próximo Personagem" (Coins, 2026-07-26) — substitui o antigo "Case Geral" (diamante).
+        // Mesmo espírito de CasePackageId: identifica o item pra OnBuyClicked desviar pra
+        // HandleNextCharacterPurchaseAsync (chama purchaseNextCharacter, assíncrono) em vez do
+        // incremento síncrono genérico. Não usa CasePackageId porque não existe um doc
+        // casePackages/{id} fixo pra ele — o preço escala com um contador POR JOGADOR, não por
+        // pacote (ver purchaseNextCharacter.ts).
+        public bool IsNextCharacterPurchase;
     }
 
     // Região compartilhada por Sidebar e ScrollView (2026-07-20, layout em sidebar) — mesmo topo/
@@ -95,11 +103,11 @@ public class ShopController : MonoBehaviour
     private const string Slot2Title = "Slot de Skill 2";
     private const string Slot3Title = "Slot de Skill 3";
 
-    // Aba Personagens — card de liberação de slot por MOEDA (soft currency, MONETIZACAO.md seção
-    // 6, 2026-07-20). Preço dinâmico: `item.Purchased` (contador genérico já existente em
-    // ShopItem, incrementado por OnBuyClicked em toda compra) dobra como "quantas liberações já
-    // foram feitas nesta sessão" — a próxima liberação é sempre `item.Purchased + 1`. Ver
-    // CharacterSlotCost/OnBuyClicked.
+    // Aba Personagens — "Próximo Personagem" (Coins, 2026-07-26 — compra REAL, substitui o antigo
+    // "Case Geral" de diamante). Preço escala com um contador PERSISTIDO por jogador
+    // (PlayerEconomyState.NextCharacterPurchaseCount, espelhando users/{uid}.
+    // nextCharacterPurchaseCount gravado pela Cloud Function purchaseNextCharacter) — não mais um
+    // contador de sessão em memória. Ver CharacterSlotCost/HandleNextCharacterPurchaseAsync.
     private const string CharacterSlotTitle = "Próximo Personagem";
 
     // Aba Personagens — sistema de compra de personagens/case opening (2026-07-23). IDs batem
@@ -110,7 +118,6 @@ public class ShopController : MonoBehaviour
     private const string PackageIdRare = "case_rare";
     private const string PackageIdLegendary = "case_legendary";
     private const string PackageIdImmortal = "case_immortal";
-    private const string PackageIdMoedaGeral = "case_moeda_geral";
 
     // Diamantes (2 linhas): dimensiona pra caber ~4 colunas visíveis na largura do ScrollView.
     private const float CardWidthMulti = 320f;
@@ -167,6 +174,9 @@ public class ShopController : MonoBehaviour
         BuildBackground(canvasGo.transform);
         BuildHeader(canvasGo.transform);
         BuildDiamondCounter(canvasGo.transform);
+#if UNITY_EDITOR
+        BuildDevCoinButton(canvasGo.transform);
+#endif
         BuildSidebar(canvasGo.transform);
         BuildScrollView(canvasGo.transform);
 
@@ -187,6 +197,7 @@ public class ShopController : MonoBehaviour
         var (coins, diamonds) = await WalletService.LoadAsync(uid);
         PlayerEconomyState.Coins = coins;
         PlayerEconomyState.Diamonds = diamonds;
+        PlayerEconomyState.NextCharacterPurchaseCount = await WalletService.LoadNextCharacterPurchaseCountAsync(uid);
         await ShopStateService.LoadAsync(uid);
         await LoadCasePackageStateAsync(uid);
 
@@ -201,7 +212,7 @@ public class ShopController : MonoBehaviour
     // (users/{uid}/casePurchases/{packageId}), pra BuildItemData mostrar preço/limite/"restantes"
     // reais em vez do fallback hardcoded. Falha silenciosa por pacote (CasePackageService já loga
     // erro) — card cai pro fallback se o documento não existir ainda (ex: seed não rodado).
-    private static readonly string[] AllPackageIds = { PackageIdRare, PackageIdLegendary, PackageIdImmortal, PackageIdMoedaGeral };
+    private static readonly string[] AllPackageIds = { PackageIdRare, PackageIdLegendary, PackageIdImmortal };
 
     private async Task LoadCasePackageStateAsync(string uid)
     {
@@ -317,9 +328,7 @@ public class ShopController : MonoBehaviour
 
         // Cor de acento por raridade (MONETIZACAO.md seção 8) — reaproveita os tokens que já
         // existem em UITheme (rarityRare/rarityLegendary/rarityImmortal), mesmos usados por
-        // CharacterCardUI pro fundo do portrait — sem precisar inventar cor nova. Card de
-        // liberação por moeda (seção 6) vem primeiro — preço em moeda (ícone Coin, não Diamond),
-        // dinâmico a partir de CharacterSlotCost(1) pra próxima liberação nesta sessão.
+        // CharacterCardUI pro fundo do portrait — sem precisar inventar cor nova.
         // Sistema de compra de personagens/case opening (2026-07-23) — preço/limite lidos de
         // CasePackageState (populado por LoadCasePackageStateAsync a partir de casePackages/),
         // com fallback pros mesmos valores de MONETIZACAO.md enquanto isso não carrega ainda (ou
@@ -340,24 +349,24 @@ public class ShopController : MonoBehaviour
         immortalItem.CasePackageId = PackageIdImmortal;
         immortalItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdImmortal, out var immortalCount) ? immortalCount : 0;
 
-        // Case Geral (moeda/diamante, 2026-07-23) — 4º pacote, distinto do card "Próximo
-        // Personagem" acima (moeda/soft currency, liberação de slot sem odds de raridade,
-        // MONETIZACAO.md seção 6). Pool = todos os personagens de todas as raridades, sorteados
-        // pelas tierWeights (seção 7); sem limite de compras.
-        var moedaGeralItem = NewItem("Case Geral",
-            "Sorteio entre TODOS os personagens do jogo, por raridade (odds da distribuição real).\nSem limite de compras.",
-            CaseCurrencyPriceLabel(PackageIdMoedaGeral, currencyFallback: 500), _diamondIconSprite,
-            limit: CasePurchaseLimit(PackageIdMoedaGeral, 0));
-        moedaGeralItem.CasePackageId = PackageIdMoedaGeral;
-        moedaGeralItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdMoedaGeral, out var moedaCount) ? moedaCount : 0;
+        // "Próximo Personagem" (Coins, 2026-07-26) — substitui o antigo "Case Geral" (diamante,
+        // `case_moeda_geral`, removido). Mesmo sorteio ponderado de raridade que o Case Geral já
+        // usava (todas as 5 raridades, odds da distribuição real — ver purchaseNextCharacter.ts),
+        // só que pago em Coins com preço escalando por CONTADOR DO JOGADOR (não por pacote — ver
+        // CharacterSlotCost) em vez de preço fixo. Preço mostrado a partir da contagem REAL
+        // (PlayerEconomyState.NextCharacterPurchaseCount, carregada em LoadPersistedShopStateAsync),
+        // não mais um contador de sessão.
+        var nextCharacterItem = NewItem(CharacterSlotTitle,
+            "Sorteio entre TODOS os personagens do jogo, por raridade (odds da distribuição real).\nCusto aumenta a cada compra.",
+            $"{CharacterSlotCost(PlayerEconomyState.NextCharacterPurchaseCount + 1)} moedas", coinIcon);
+        nextCharacterItem.IsNextCharacterPurchase = true;
 
         _items[Tab.Personagens] = new List<ShopItem>
         {
-            NewItem(CharacterSlotTitle, "Libera o próximo personagem disponível.\nCusto aumenta a cada liberação.", $"{CharacterSlotCost(1)} moedas", coinIcon),
+            nextCharacterItem,
             rareItem,
             legendaryItem,
             immortalItem,
-            moedaGeralItem,
         };
     }
 
@@ -370,12 +379,6 @@ public class ShopController : MonoBehaviour
     private static int CasePurchaseLimit(string packageId, int limitFallback)
     {
         return CasePackageState.Packages.TryGetValue(packageId, out var info) ? info.PurchaseLimitPerPlayer : limitFallback;
-    }
-
-    private static string CaseCurrencyPriceLabel(string packageId, int currencyFallback)
-    {
-        int cost = CasePackageState.Packages.TryGetValue(packageId, out var info) ? info.CurrencyCost : currencyFallback;
-        return $"{cost} diamantes";
     }
 
     private static ShopItem NewItem(string title, string subtitle, string price, Sprite icon = null, int limit = 0, Color? accent = null)
@@ -400,19 +403,17 @@ public class ShopController : MonoBehaviour
         };
     }
 
-    // MONETIZACAO.md seção 6 — custo em moeda da N-ésima liberação de slot de personagem
-    // (unlockNumber é 1-based: 1ª liberação, 2ª liberação...). 1ª-6ª seguem a tabela explícita;
-    // 7ª em diante soma +400 a cada liberação em cima do teto de 1000 da 6ª.
-    private static int CharacterSlotCost(int unlockNumber) => unlockNumber switch
-    {
-        1 => 100,
-        2 => 200,
-        3 => 400,
-        4 => 600,
-        5 => 800,
-        6 => 1000,
-        _ => 1000 + 400 * (unlockNumber - 6),
-    };
+    // Custo em Coins da N-ésima compra de "Próximo Personagem" (unlockNumber é 1-based: 1ª
+    // compra, 2ª compra...). Tabela FINAL (2026-07-26, correção de escopo — substitui a tabela
+    // antiga de MONETIZACAO.md §6, 100/200/400/600/800/1000/+400, que valia pro card decorativo
+    // anterior). Só pra EXIBIÇÃO — a cobrança real é sempre a de purchaseNextCharacter.ts
+    // (PRICE_TABLE lá), mantida em sincronia manual com esta.
+    private static readonly int[] CharacterSlotPriceTable = { 25, 50, 100, 200, 400, 800, 1200, 1400, 1600, 1800, 2000, 2200 };
+    private const int CharacterSlotPriceStepAfterTable = 200;
+
+    private static int CharacterSlotCost(int unlockNumber) => unlockNumber <= CharacterSlotPriceTable.Length
+        ? CharacterSlotPriceTable[unlockNumber - 1]
+        : CharacterSlotPriceTable[CharacterSlotPriceTable.Length - 1] + CharacterSlotPriceStepAfterTable * (unlockNumber - CharacterSlotPriceTable.Length);
 
     // Regra de ativação (pedido do usuário, 2026-07-21 — revisada: Básico e Pro são
     // INDEPENDENTES, não existe mais "tier único"/upgrade entre os dois). Comprar soma +30 dias
@@ -645,6 +646,67 @@ public class ShopController : MonoBehaviour
         _diamondValueTxt.color = theme.textOnDark;
         _diamondValueTxt.alignment = TextAlignmentOptions.MidlineLeft;
     }
+
+#if UNITY_EDITOR
+    // Botão de DEV, só existe em builds de Editor (`#if UNITY_EDITOR`, nunca compilado num build
+    // de verdade) — pedido do usuário (2026-07-27) pra facilitar testar "Próximo Personagem" sem
+    // precisar jogar/vencer combates só pra acumular Coins. Usa o MESMO WalletService.
+    // AddCoinsAsync já usado em qualquer crédito de moeda do jogo (client-writable, sem Cloud
+    // Function — Coins nunca teve a mesma regra de segurança de Diamantes, ver WalletService.cs);
+    // nenhuma lógica nova, só um atalho de UI pra uma chamada que já existe.
+    private const int DevCoinGrantAmount = 5000;
+
+    private void BuildDevCoinButton(Transform parent)
+    {
+        var btnGo = new GameObject("DevCoinButton (Editor only)");
+        btnGo.transform.SetParent(parent, false);
+        var btnRt = btnGo.AddComponent<RectTransform>();
+        btnRt.anchorMin = btnRt.anchorMax = new Vector2(1f, 1f);
+        btnRt.pivot = new Vector2(1f, 1f);
+        btnRt.sizeDelta = new Vector2(220f, 48f);
+        btnRt.anchoredPosition = new Vector2(-30f, -100f); // logo abaixo do DiamondCounter (-30,-30, altura 64)
+        var btnImg = btnGo.AddComponent<Image>();
+        btnImg.sprite = UIShapeUtil.RoundedRect(new Color(0.25f, 0.55f, 0.25f, 0.85f), 12f);
+        btnImg.type = Image.Type.Sliced;
+        var btn = btnGo.AddComponent<Button>();
+        btn.targetGraphic = btnImg;
+
+        var labelGo = new GameObject("Label");
+        labelGo.transform.SetParent(btnGo.transform, false);
+        var labelRt = labelGo.AddComponent<RectTransform>();
+        labelRt.anchorMin = Vector2.zero; labelRt.anchorMax = Vector2.one;
+        labelRt.offsetMin = labelRt.offsetMax = Vector2.zero;
+        var labelTxt = labelGo.AddComponent<TextMeshProUGUI>();
+        labelTxt.text = $"DEV: +{DevCoinGrantAmount} coins";
+        labelTxt.fontSize = 20f;
+        labelTxt.fontStyle = FontStyles.Bold;
+        labelTxt.color = Color.white;
+        labelTxt.alignment = TextAlignmentOptions.Center;
+
+        btn.onClick.AddListener(() => _ = GrantDevCoinsAsync(labelTxt));
+    }
+
+    private async Task GrantDevCoinsAsync(TMP_Text label)
+    {
+        if (AuthService.IsSignedIn)
+        {
+            string uid = AuthService.CurrentUser.UserId;
+            bool ok = await WalletService.AddCoinsAsync(uid, DevCoinGrantAmount);
+            if (!ok)
+            {
+                Debug.LogError("[Shop][DEV] Falha ao creditar moedas de teste — ver log de WalletService acima.");
+                return;
+            }
+        }
+        else
+        {
+            PlayerEconomyState.Coins += DevCoinGrantAmount;
+        }
+
+        Debug.Log($"[Shop][DEV] +{DevCoinGrantAmount} coins (saldo agora: {PlayerEconomyState.Coins}).");
+        if (label != null) label.text = $"Saldo: {PlayerEconomyState.Coins} coins";
+    }
+#endif
 
     // Dispara o efeito de "diamantes voando" (FlyingDiamondIcon.Burst) do card comprado até o
     // ícone do contador — 5 a 8 ícones (pedido do usuário), cada um carregando uma fração de
@@ -917,6 +979,14 @@ public class ShopController : MonoBehaviour
             return;
         }
 
+        // "Próximo Personagem" (Coins, 2026-07-26) — mesmo desvio de CasePackageId acima: chama a
+        // Cloud Function purchaseNextCharacter (assíncrono), nunca sorteia/debita nada localmente.
+        if (item.IsNextCharacterPurchase)
+        {
+            _ = HandleNextCharacterPurchaseAsync(item, card);
+            return;
+        }
+
         item.Purchased++;
 
         // Pacote de diamante — bônus de 1ª compra (ver NewDiamondItem/ShopItem.
@@ -1069,17 +1139,6 @@ public class ShopController : MonoBehaviour
             return;
         }
 
-        // Card de liberação por moeda — preço muda a cada compra (ver CharacterSlotCost), então
-        // precisa reconstruir o card (RefreshPurchaseState sozinho só atualiza o texto de status/
-        // botão, não o texto de preço). `item.Purchased` já foi incrementado acima — a próxima
-        // liberação é sempre `item.Purchased + 1`.
-        if (item.Title == CharacterSlotTitle)
-        {
-            item.PriceLabel = $"{CharacterSlotCost(item.Purchased + 1)} moedas";
-            RebuildGrid();
-            return;
-        }
-
         card.RefreshPurchaseState(item.Purchased, item.PurchaseLimit);
     }
 
@@ -1095,12 +1154,12 @@ public class ShopController : MonoBehaviour
             return;
         }
 
-        // Cash (Raro/Legendary/Imortal) exige um "recibo" — mock por enquanto (sem gateway de
-        // pagamento real, ver MONETIZACAO.md/ARQUITETURA.md "Moeda premium"). A Cloud Function já
-        // está pronta pra validar de verdade (TODO explícito em purchaseCase.ts); só o que entra
-        // aqui muda quando o gateway (Google Play Billing/Apple StoreKit) existir.
-        bool isCash = item.CasePackageId != PackageIdMoedaGeral;
-        string mockReceipt = isCash ? $"mock-receipt-{Guid.NewGuid()}" : null;
+        // Cash (Raro/Legendary/Imortal — os 3 únicos CasePackageId que sobraram depois da remoção
+        // do Case Geral/diamante em 2026-07-26) exige um "recibo" — mock por enquanto (sem
+        // gateway de pagamento real, ver MONETIZACAO.md/ARQUITETURA.md "Moeda premium"). A Cloud
+        // Function já está pronta pra validar de verdade (TODO explícito em purchaseCase.ts); só
+        // o que entra aqui muda quando o gateway (Google Play Billing/Apple StoreKit) existir.
+        string mockReceipt = $"mock-receipt-{Guid.NewGuid()}";
 
         var result = await CaseService.PurchaseCaseAsync(item.CasePackageId, mockReceipt);
         if (!result.Success)
@@ -1136,16 +1195,52 @@ public class ShopController : MonoBehaviour
         CasePackageState.PurchasedCounts[item.CasePackageId] = item.Purchased;
         card.RefreshPurchaseState(item.Purchased, item.PurchaseLimit);
 
-        // Diamante já foi debitado no servidor (dentro da transaction de purchaseCase) — só
-        // espelha localmente pro contador do header não esperar um reload de PlayerEconomyState.
-        if (item.CasePackageId == PackageIdMoedaGeral && CasePackageState.Packages.TryGetValue(item.CasePackageId, out var pkgInfo))
+        // Cash não debita diamante nenhum (pagamento já validado via recibo) — os 3 cards
+        // restantes (Raro/Legendary/Imortal) são todos cash, então não há mais nenhum débito de
+        // diamante a espelhar aqui (Case Geral, o único pago em diamante, foi removido).
+        // weightedRarityFill: false — cada card é travado numa raridade ÚNICA (isRarityLocked),
+        // giro só daquela raridade é o comportamento correto (ver comentário em
+        // CaseOpeningPopup.Show).
+        CaseOpeningPopup.Show(theme, characterDatabase, result.ReelPoolCharacterTypeIds, result.WonCharacterTypeId,
+            result.GrantedCharacterId, onClosed: null, weightedRarityFill: false);
+    }
+
+    // "Próximo Personagem" (Coins, 2026-07-26) — chama a Cloud Function purchaseNextCharacter
+    // (NextCharacterService), nunca sorteia/debita nada localmente. Mesmo formato de
+    // HandleCasePurchaseAsync acima, adaptado pro preço escalar por CONTADOR DO JOGADOR em vez de
+    // por pacote fixo.
+    private async Task HandleNextCharacterPurchaseAsync(ShopItem item, ShopCardUI card)
+    {
+        if (!AuthService.IsSignedIn)
         {
-            PlayerEconomyState.Diamonds = Mathf.Max(0, PlayerEconomyState.Diamonds - pkgInfo.CurrencyCost);
-            _displayedDiamonds = PlayerEconomyState.Diamonds;
-            if (_diamondValueTxt != null) _diamondValueTxt.text = _displayedDiamonds.ToString();
+            ShowInfoPopup("É necessário estar logado para comprar personagens.");
+            return;
         }
 
+        var result = await NextCharacterService.PurchaseNextCharacterAsync();
+        if (!result.Success)
+        {
+            string message = (result.ErrorMessage ?? "").Contains("pool esgotada")
+                ? "Você já possui todos os personagens do jogo — pool esgotada."
+                : result.ErrorCode == "failed-precondition"
+                    ? "Saldo de moedas insuficiente."
+                    : "Não foi possível completar a compra. Tente novamente.";
+            ShowInfoPopup(message);
+            return;
+        }
+
+        // Moeda já foi debitada no servidor (dentro da transaction de purchaseNextCharacter) — só
+        // espelha localmente pro HUD de moeda não esperar um reload de PlayerEconomyState.
+        PlayerEconomyState.Coins = result.NewCoinsBalance;
+        PlayerEconomyState.NextCharacterPurchaseCount++;
+
+        item.PriceLabel = $"{result.NextPurchaseCost} moedas";
+        RebuildGrid();
+
+        // weightedRarityFill: true (2026-07-27) — Próximo Personagem sorteia entre as 5
+        // raridades, então o giro deve misturar raridades também (diferente dos 3 cards cash
+        // acima, cada um travado numa raridade única — ver comentário em CaseOpeningPopup.Show).
         CaseOpeningPopup.Show(theme, characterDatabase, result.ReelPoolCharacterTypeIds, result.WonCharacterTypeId,
-            result.GrantedCharacterId, onClosed: null);
+            result.GrantedCharacterId, onClosed: null, weightedRarityFill: true);
     }
 }

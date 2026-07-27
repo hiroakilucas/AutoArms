@@ -26,7 +26,15 @@ public static class UIShapeUtil
     {
         radius = Mathf.Clamp(radius, 0f, TextureSize / 2f);
         var key = (color, radius);
-        if (_cache.TryGetValue(key, out var cached)) return cached;
+        // `cached != null` (2026-07-25, bug real corrigido — reportado pelo usuário: botões/fundos
+        // brancos em todas as telas, só depois de reiniciar o Play Mode sem fechar o Editor) —
+        // Domain Reload desligado (ver ProjectSettings/EditorSettings.asset) faz este cache
+        // estático SOBREVIVER entre sessões de Play, mas os Sprite/Texture2D gerados em runtime na
+        // sessão ANTERIOR são destruídos pela própria Unity ao sair do Play Mode — sem essa
+        // checagem, `TryGetValue` continuava achando a entrada (a chave em si nunca expira) e
+        // devolvia um Sprite "morto" (`!= null` do Unity detecta objeto destruído mesmo com
+        // referência C# não-nula), renderizando como branco. Mesmo fix nos outros 3 caches abaixo.
+        if (_cache.TryGetValue(key, out var cached) && cached != null) return cached;
 
         var texture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Bilinear;
@@ -62,7 +70,7 @@ public static class UIShapeUtil
     public static Sprite VerticalGradient(Color top, Color bottom, int resolution = 64)
     {
         var key = (top, bottom);
-        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+        if (_gradientCache.TryGetValue(key, out var cached) && cached != null) return cached;
 
         var texture = new Texture2D(1, resolution, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Bilinear;
@@ -91,7 +99,7 @@ public static class UIShapeUtil
     public static Sprite Star(Color color, bool filled)
     {
         var key = (color, filled);
-        if (_starCache.TryGetValue(key, out var cached)) return cached;
+        if (_starCache.TryGetValue(key, out var cached) && cached != null) return cached;
 
         var texture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Bilinear;
@@ -131,7 +139,7 @@ public static class UIShapeUtil
 
     public static Sprite PlayTriangle(Color color)
     {
-        if (_playTriangleCache.TryGetValue(color, out var cached)) return cached;
+        if (_playTriangleCache.TryGetValue(color, out var cached) && cached != null) return cached;
 
         var texture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Bilinear;

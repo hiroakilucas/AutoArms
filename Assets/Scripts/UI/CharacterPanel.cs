@@ -826,6 +826,7 @@ public class CharacterPanel : MonoBehaviour
 
         BuildDetailsToggle(content);
         BuildResetCharacterButton(content);
+        BuildRebirthButton(content);
     }
 
     // Botão "REPLAYS" (2026-07-18, movido pro menu principal — MainMenuController.
@@ -1410,6 +1411,299 @@ public class CharacterPanel : MonoBehaviour
         else PlayerEconomyState.Coins += coinsReward;
 
         RefreshAll();
+    }
+
+    // "Renascimento" (Reset Nível 10+, 2026-07-26) — feature NOVA, separada do "Resetar
+    // Personagem" acima: só libera em level >= 10, DEBITA moeda (via Cloud Function
+    // rebirthCharacter, nunca client-side) e CONCEDE N skills/armas/pets aleatórios (pela
+    // raridade do personagem) em vez de limpar o loadout. Requer conta logada + personagem com
+    // `characterId` real (documento em users/{uid}/characters) — personagens locais/pré-autorados
+    // sem conta sincronizada não têm onde a Cloud Function gravar o resultado.
+    private void BuildRebirthButton(Transform content)
+    {
+        var btnGo = new GameObject("RebirthButton");
+        btnGo.transform.SetParent(content, false);
+        btnGo.AddComponent<RectTransform>();
+        var le = btnGo.AddComponent<LayoutElement>();
+        le.preferredHeight = _bottomAnchored ? 64f : 44f; le.flexibleWidth = 1f;
+        var btnImg = btnGo.AddComponent<Image>();
+        btnImg.sprite = UIShapeUtil.RoundedRect(_theme.primaryActionAlt, 10f);
+        btnImg.type = Image.Type.Sliced;
+        var btn = btnGo.AddComponent<Button>();
+        btn.targetGraphic = btnImg;
+        btn.onClick.AddListener(OnRebirthClicked);
+        var label = AddLabel(btnGo, "RENASCIMENTO", _bottomAnchored ? 40 : 18, TextColor);
+        label.fontStyle = FontStyles.Bold;
+
+        var hintGo = new GameObject("RebirthHint");
+        hintGo.transform.SetParent(content, false);
+        hintGo.AddComponent<RectTransform>();
+        var hintLe = hintGo.AddComponent<LayoutElement>();
+        hintLe.preferredHeight = _bottomAnchored ? 40f : 20f; hintLe.flexibleWidth = 1f;
+        var hintTxt = hintGo.AddComponent<TextMeshProUGUI>();
+        hintTxt.fontSize = _bottomAnchored ? 26 : 14;
+        hintTxt.color = _theme.secondaryButtonAlt;
+        hintTxt.alignment = TextAlignmentOptions.MidlineLeft;
+
+        var profile = CurrentProfile();
+        bool eligible = profile != null && profile.level >= RebirthMinLevel && !string.IsNullOrEmpty(profile.characterId) && AuthService.IsSignedIn;
+        btn.interactable = eligible;
+        hintTxt.text = eligible
+            ? "Reseta pro Level 1 e concede itens novos pela raridade."
+            : $"Disponível a partir do Level {RebirthMinLevel}, com conta sincronizada.";
+    }
+
+    // Mesmo valor de REBIRTH_MIN_LEVEL em functions/src/rebirthCharacter.ts — a checagem real
+    // (que decide se o botão de fato funciona) é sempre a do servidor; este valor aqui só decide
+    // se o botão aparece habilitado, puramente cosmético.
+    private const int RebirthMinLevel = 10;
+
+    private void OnRebirthClicked()
+    {
+        var profile = CurrentProfile();
+        if (profile == null) return;
+
+        var settings = Resources.Load<CharacterRebirthSettings>("CharacterRebirthSettings");
+        int coinRewardPerLevel = settings != null ? settings.coinRewardPerLevel : 10;
+        int reward = profile.level * coinRewardPerLevel;
+
+        ShowRebirthConfirmPopup(profile, coinRewardPerLevel, reward);
+    }
+
+    // Mesmo idioma visual de ShowResetConfirmPopup (overlay+painel+2 botões, confirmação
+    // explícita pra ação destrutiva) — Renascimento é GRATUITO (correção de escopo, 2026-07-26):
+    // o jogador não paga nada, GANHA moedas e itens novos, mas ainda PERDE o progresso/loadout
+    // atual, por isso a confirmação explícita continua necessária.
+    private void ShowRebirthConfirmPopup(PlayerProfile profile, int coinRewardPerLevel, int reward)
+    {
+        var canvasGo = new GameObject("RebirthConfirmPopupCanvas (temp)");
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 2000;
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        var overlayGo = new GameObject("Overlay");
+        overlayGo.transform.SetParent(canvasGo.transform, false);
+        var overlayRt = overlayGo.AddComponent<RectTransform>();
+        overlayRt.anchorMin = Vector2.zero; overlayRt.anchorMax = Vector2.one;
+        overlayRt.offsetMin = overlayRt.offsetMax = Vector2.zero;
+        var overlayImg = overlayGo.AddComponent<Image>();
+        overlayImg.color = new Color(0f, 0f, 0f, 0.7f);
+        var overlayBtn = overlayGo.AddComponent<Button>();
+        overlayBtn.targetGraphic = overlayImg;
+        overlayBtn.transition = Selectable.Transition.None;
+        overlayBtn.onClick.AddListener(() => Destroy(canvasGo)); // clicar fora cancela
+
+        var panelGo = new GameObject("Panel");
+        panelGo.transform.SetParent(canvasGo.transform, false);
+        var panelRt = panelGo.AddComponent<RectTransform>();
+        panelRt.anchorMin = panelRt.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRt.sizeDelta = new Vector2(680f, 440f);
+        panelRt.anchoredPosition = Vector2.zero;
+        var panelImg = panelGo.AddComponent<Image>();
+        panelImg.sprite = UIShapeUtil.RoundedRect(_theme.panelBackgroundAlt, 24f);
+        panelImg.type = Image.Type.Sliced;
+        var panelBtn = panelGo.AddComponent<Button>(); // sem onClick — só bloqueia o bubbling pro overlay
+        panelBtn.targetGraphic = panelImg;
+
+        int itemCount = CharacterUnlockEngine.UnlockCountForRarity(profile.rarity);
+        var msgGo = new GameObject("Message");
+        msgGo.transform.SetParent(panelGo.transform, false);
+        var msgRt = msgGo.AddComponent<RectTransform>();
+        msgRt.anchorMin = new Vector2(0.08f, 0.30f); msgRt.anchorMax = new Vector2(0.92f, 0.92f);
+        msgRt.offsetMin = msgRt.offsetMax = Vector2.zero;
+        var msgTxt = msgGo.AddComponent<TextMeshProUGUI>();
+        msgTxt.text = $"Renascer {profile.profileName}?\n\n" +
+            $"Você vai PERDER todo o progresso de nível, status, skills, armas e pets deste " +
+            $"personagem, voltando ao Level 1 com status base sorteados do zero.\n\n" +
+            $"Em troca, recebe {itemCount} skill(s)/arma(s)/pet(s) aleatório(s), pela raridade " +
+            $"deste personagem ({profile.rarity}), e ganha {reward} moedas " +
+            $"(Level {profile.level} × {coinRewardPerLevel} moedas/nível) — Renascimento é " +
+            $"GRATUITO, não custa moedas nem diamantes.\n\n" +
+            $"Essa ação não pode ser desfeita.";
+        msgTxt.fontSize = 24;
+        msgTxt.color = _theme.textOnDark;
+        msgTxt.alignment = TextAlignmentOptions.Center;
+        msgTxt.enableWordWrapping = true;
+
+        var confirmGo = new GameObject("BtnConfirm");
+        confirmGo.transform.SetParent(panelGo.transform, false);
+        var confirmRt = confirmGo.AddComponent<RectTransform>();
+        confirmRt.anchorMin = confirmRt.anchorMax = new Vector2(0.73f, 0.14f);
+        confirmRt.sizeDelta = new Vector2(280f, 64f);
+        confirmRt.anchoredPosition = Vector2.zero;
+        var confirmImg = confirmGo.AddComponent<Image>();
+        confirmImg.sprite = UIShapeUtil.RoundedRect(_theme.primaryActionAlt, 14f);
+        confirmImg.type = Image.Type.Sliced;
+        var confirmBtn = confirmGo.AddComponent<Button>();
+        confirmBtn.targetGraphic = confirmImg;
+        confirmBtn.onClick.AddListener(() => { Destroy(canvasGo); _ = ExecuteRebirthAsync(profile); });
+        AddLabel(confirmGo, "RENASCER", 20, _theme.textOnDark).fontStyle = FontStyles.Bold;
+
+        var cancelGo = new GameObject("BtnCancel");
+        cancelGo.transform.SetParent(panelGo.transform, false);
+        var cancelRt = cancelGo.AddComponent<RectTransform>();
+        cancelRt.anchorMin = cancelRt.anchorMax = new Vector2(0.27f, 0.14f);
+        cancelRt.sizeDelta = new Vector2(280f, 64f);
+        cancelRt.anchoredPosition = Vector2.zero;
+        var cancelImg = cancelGo.AddComponent<Image>();
+        cancelImg.sprite = UIShapeUtil.RoundedRect(_theme.secondaryButtonAlt, 14f);
+        cancelImg.type = Image.Type.Sliced;
+        var cancelBtn = cancelGo.AddComponent<Button>();
+        cancelBtn.targetGraphic = cancelImg;
+        cancelBtn.onClick.AddListener(() => Destroy(canvasGo));
+        AddLabel(cancelGo, "CANCELAR", 20, _theme.textOnDark).fontStyle = FontStyles.Bold;
+    }
+
+    // Minimalista (mensagem + OK), reaproveitado só pra reportar falha do rebirthCharacter (saldo
+    // insuficiente, level insuficiente — pode ter mudado entre abrir o popup e confirmar — ou
+    // falha de rede) — mesmo idioma visual dos outros popups deste arquivo.
+    private void ShowSimpleErrorPopup(string message)
+    {
+        var canvasGo = new GameObject("RebirthErrorPopupCanvas (temp)");
+        var canvas = canvasGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 2000;
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        canvasGo.AddComponent<GraphicRaycaster>();
+
+        var panelGo = new GameObject("Panel");
+        panelGo.transform.SetParent(canvasGo.transform, false);
+        var panelRt = panelGo.AddComponent<RectTransform>();
+        panelRt.anchorMin = panelRt.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRt.sizeDelta = new Vector2(600f, 300f);
+        panelRt.anchoredPosition = Vector2.zero;
+        var panelImg = panelGo.AddComponent<Image>();
+        panelImg.sprite = UIShapeUtil.RoundedRect(_theme.panelBackgroundAlt, 24f);
+        panelImg.type = Image.Type.Sliced;
+
+        var msgGo = new GameObject("Message");
+        msgGo.transform.SetParent(panelGo.transform, false);
+        var msgRt = msgGo.AddComponent<RectTransform>();
+        msgRt.anchorMin = new Vector2(0.08f, 0.32f); msgRt.anchorMax = new Vector2(0.92f, 0.9f);
+        msgRt.offsetMin = msgRt.offsetMax = Vector2.zero;
+        var msgTxt = msgGo.AddComponent<TextMeshProUGUI>();
+        msgTxt.text = string.IsNullOrEmpty(message) ? "Não foi possível completar a ação." : message;
+        msgTxt.fontSize = 22;
+        msgTxt.color = _theme.textOnDark;
+        msgTxt.alignment = TextAlignmentOptions.Center;
+        msgTxt.enableWordWrapping = true;
+
+        var okGo = new GameObject("BtnOk");
+        okGo.transform.SetParent(panelGo.transform, false);
+        var okRt = okGo.AddComponent<RectTransform>();
+        okRt.anchorMin = okRt.anchorMax = new Vector2(0.5f, 0.14f);
+        okRt.sizeDelta = new Vector2(240f, 60f);
+        okRt.anchoredPosition = Vector2.zero;
+        var okImg = okGo.AddComponent<Image>();
+        okImg.sprite = UIShapeUtil.RoundedRect(_theme.secondaryButtonAlt, 14f);
+        okImg.type = Image.Type.Sliced;
+        var okBtn = okGo.AddComponent<Button>();
+        okBtn.targetGraphic = okImg;
+        okBtn.onClick.AddListener(() => Destroy(canvasGo));
+        AddLabel(okGo, "OK", 20, _theme.textOnDark).fontStyle = FontStyles.Bold;
+    }
+
+    // Chama a Cloud Function (nível/custo/sorteio 100% server-side, nunca decidido aqui), aplica
+    // o resultado já persistido ao PlayerProfile local e revela os itens concedidos em sequência
+    // (MESMA UI de reveal do case-opening) — cada item pode ser rerolado individualmente (sempre
+    // em diamante, custo fixo, servidor) antes de fechar.
+    // A revelação dos itens concedidos NÃO acontece mais aqui (2026-07-26, pedido do usuário
+    // depois de testar — "melhor o reset ir pra tela onde tem a splashart do personagem"): esta
+    // função aplica o resultado da Cloud Function e navega pra 02_SelectCharacter, que já tem a
+    // splash art em tela cheia (CharacterSelectController.UpdateFrameArt) e a MESMA
+    // CharacterUnlockRevealPanel usada pelo reveal de case-opening — CharacterPanel só entrega o
+    // handoff (PendingRebirthReveal) e sai de cena. Mesmo princípio de UX de
+    // CaseOpeningPopup/PendingCharacterSelection (personagem recém-modificado sempre aparece em
+    // destaque nessa tela, nunca revelado em cima de onde o botão foi clicado).
+    private async Task ExecuteRebirthAsync(PlayerProfile profile)
+    {
+        // Garante que o documento users/{uid}/characters/{characterId} existe E reflete o estado
+        // ATUAL (level/rarity) antes de chamar a Cloud Function — LocalSaveService.Save() empurra
+        // pro Firestore em fire-and-forget (não esperado em nenhum outro call site do projeto),
+        // então não há garantia de que o doc já existe (bug real, 2026-07-26: 1ª chamada de
+        // rebirthCharacter numa sessão nova voltava "not-found" — o personagem nunca tinha sido
+        // salvo na nuvem ainda) nem de que reflete o level mais recente (level-ups locais sem
+        // nenhum Save() intermediário deixariam o servidor validando level >= 10 contra um
+        // snapshot desatualizado). Aguardado aqui, ao contrário do fire-and-forget de sempre,
+        // porque esta é a única chamada do projeto onde o servidor LÊ esse documento pra decidir
+        // algo com dinheiro real antes de qualquer outra escrita local acontecer.
+        if (AuthService.IsSignedIn)
+        {
+            var syncDto = PlayerProfileConverter.ToDTO(profile);
+            var (syncOk, syncError) = await FirestoreService.SaveCharacterAsync(AuthService.CurrentUser.UserId, syncDto);
+            if (!syncOk)
+            {
+                ShowSimpleErrorPopup("Falha ao sincronizar personagem com a nuvem: " + syncError);
+                return;
+            }
+        }
+
+        var result = await RebirthService.RebirthAsync(profile.characterId);
+        if (!result.Success)
+        {
+            ShowSimpleErrorPopup(result.ErrorMessage);
+            return;
+        }
+
+        profile.level = result.Level;
+        profile.xpCurrent = 0;
+        profile.battlesRemaining = 6;
+        profile.xpRequired = XpSystem.XpRequired(result.Level);
+        profile.maxHealth = result.MaxHealth;
+        profile.str = result.Str;
+        profile.agility = result.Agility;
+        profile.speed = result.Speed;
+        profile.skills.Clear();
+        profile.pets.Clear();
+        profile.weapons.Clear();
+
+        // Aplica cada item concedido (já persistido no servidor) ao profile local — mesma
+        // resolução kind/name/tier -> asset Unity real já usada pelo reroll de case-opening. A
+        // revelação em si (02_SelectCharacter) só precisa do shape kind/name/tier de volta —
+        // ver PendingRebirthReveal.
+        var pendingItems = new List<PendingRebirthReveal.GrantedItemRef>();
+        foreach (var item in result.GrantedItems)
+        {
+            var opt = CharacterUnlockEngine.ResolveServerResult(item.Kind, item.Name, item.Tier);
+            if (!opt.HasValue) continue;
+            LevelUpEngine.ApplyOption(opt.Value, profile);
+            pendingItems.Add(new PendingRebirthReveal.GrantedItemRef { Kind = item.Kind, Name = item.Name, Tier = item.Tier });
+        }
+
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(profile);
+#endif
+        // Awaited (não o fire-and-forget normal de LocalSaveService.Save) — 02_SelectCharacter
+        // recarrega o roster do Firestore ao abrir; sem esperar aqui, o novo level/stats/loadout
+        // poderia não estar visível ainda quando a tela seguinte ler os dados (mesma classe de bug
+        // já corrigida acima, pro "not-found" da própria chamada).
+        if (AuthService.IsSignedIn)
+        {
+            var postDto = PlayerProfileConverter.ToDTO(profile);
+            await FirestoreService.SaveCharacterAsync(AuthService.CurrentUser.UserId, postDto);
+        }
+        LocalSaveService.Save(profile);
+
+        if (AuthService.IsSignedIn) PlayerEconomyState.Coins = result.NewCoinsBalance;
+
+        // PendingCharacterSelection é o que faz 02_SelectCharacter abrir o detalhe deste
+        // personagem AUTOMATICAMENTE ao carregar (mesmo handoff de CaseOpeningPopup) — sem isso a
+        // cena só mostraria a grade normal, e OnCharacterSelected (onde PendingRebirthReveal é
+        // consumido, ver CharacterSelectController) só rodaria se o jogador clicasse o card na
+        // mão. PendingRebirthReveal viaja junto, consumido no mesmo OnCharacterSelected.
+        PendingCharacterSelection.PendingCharacterId = profile.characterId;
+        if (pendingItems.Count > 0)
+        {
+            PendingRebirthReveal.PendingCharacterId = profile.characterId;
+            PendingRebirthReveal.GrantedItems = pendingItems;
+        }
+        UnityEngine.SceneManagement.SceneManager.LoadScene("02_SelectCharacter");
     }
 
     private TMP_Text BuildPassiveRow(Transform parent, string label)

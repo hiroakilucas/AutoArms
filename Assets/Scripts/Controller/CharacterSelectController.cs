@@ -151,6 +151,17 @@ public class CharacterSelectController : MonoBehaviour
         // temporário próprio (`ShowPendingSelectionCover`/`HidePendingSelectionCover`), puramente
         // visual, sem nunca desativar a hierarquia da grade.
         bool hasPendingSelection = !string.IsNullOrEmpty(PendingCharacterSelection.PendingCharacterId);
+        // Bug real corrigido (2026-07-25, reportado pelo usuário — conta nova ficava com
+        // SelectedProfileHolder no default do asset "Medieval Warrior" mesmo tendo escolhido
+        // "Medieval Warrior Girl" no onboarding) — o "Voltar" fixo do canto superior esquerdo
+        // NUNCA foi coberto/bloqueado pelo `pendingSelectionCoverGo` (só a grade é coberta), então
+        // dava pra sair da cena via SceneManager.LoadScene ANTES de
+        // ResolvePendingCharacterSelectionAsync (fetch assíncrono do roster) terminar de chamar
+        // `selectedProfileHolder.SetProfile(match)` — o auto-confirm do onboarding (ver
+        // PendingCharacterSelection.AutoConfirmSelection) nunca chegava a rodar a tempo, e
+        // 01_MainMenu carregava com o profile ainda no default nunca sobrescrito. Bloqueado
+        // enquanto a resolução estiver em andamento.
+        _resolvingPendingSelection = hasPendingSelection;
         if (hasPendingSelection) ShowPendingSelectionCover();
 
         PopulateCharacterGrid();
@@ -172,8 +183,15 @@ public class CharacterSelectController : MonoBehaviour
             // cobertura, nunca rodaria) e o PendingCharacterId nunca seria limpo.
             PendingCharacterSelection.PendingCharacterId = null;
             HidePendingSelectionCover();
+            _resolvingPendingSelection = false;
         }
     }
+
+    // Ver comentário em Start() (hasPendingSelection) — true só entre o momento em que uma
+    // PendingCharacterSelection é detectada e o momento em que
+    // ResolvePendingCharacterSelectionAsync termina de verdade (match encontrado + SetProfile
+    // aplicado, OU falha real logada). Bloqueia "Voltar" nesse meio-tempo.
+    private bool _resolvingPendingSelection;
 
     // Painel opaco temporário (mesma cor do overlay de detalhe, `theme.panelBackgroundAlt`) que
     // cobre a tela enquanto uma seleção pendente do case opening é resolvida — ver comentário em
@@ -247,6 +265,8 @@ public class CharacterSelectController : MonoBehaviour
         string pendingId = PendingCharacterSelection.PendingCharacterId;
         if (string.IsNullOrEmpty(pendingId)) return;
         PendingCharacterSelection.PendingCharacterId = null;
+        bool autoConfirm = PendingCharacterSelection.AutoConfirmSelection;
+        PendingCharacterSelection.AutoConfirmSelection = false;
 
         PlayerProfile match = null;
         foreach (var profile in _rosterProfiles)
@@ -284,6 +304,11 @@ public class CharacterSelectController : MonoBehaviour
 
         if (match != null)
         {
+            // Onboarding (ver PendingCharacterSelection.AutoConfirmSelection) — confirma já aqui,
+            // antes do jogador poder fechar o painel sem selecionar. SetProfile() (não atribuição
+            // direta) mantém SelectedProfileHolder.characterId em sincronia.
+            if (autoConfirm) selectedProfileHolder.SetProfile(match);
+
             // OnCharacterSelected já dispara/retoma ResolveCaseUnlocksAsync sozinho quando
             // necessário (ver comentário lá) — cobre tanto este caminho (recém-concedido) quanto
             // reabrir um personagem cuja sequência ficou incompleta numa sessão anterior.
@@ -300,6 +325,11 @@ public class CharacterSelectController : MonoBehaviour
             // que já loga o motivo exato da falha de match de molde separadamente).
             Debug.LogError($"[CharacterSelectController] PendingCharacterSelection '{pendingId}' não encontrado (nem na listagem geral, nem no fallback direto ao servidor) — caindo na grade normal.");
         }
+
+        // Libera "Voltar" (ver _resolvingPendingSelection/Start()) — chegou até aqui com o
+        // auto-confirm já aplicado (se era o caso) ou com a falha real já logada acima; não há
+        // mais nada a proteger contra uma saída prematura da cena.
+        _resolvingPendingSelection = false;
     }
 
     // Cria (escondido) o painel de reveal dos unlocks de skill/arma/pet do case opening — ver
@@ -987,6 +1017,103 @@ public class CharacterSelectController : MonoBehaviour
         {
             _ = ResolveCaseUnlocksAsync(profile);
         }
+
+        // Renascimento (2026-07-26, pedido do usuário) — itens concedidos pelo Cloud Function
+        // rebirthCharacter (ver CharacterPanel.ExecuteRebirthAsync) já foram aplicados ao profile
+        // ANTES de chegar aqui; PendingRebirthReveal só carrega o handoff (quais itens, pra
+        // revelar em sequência) pra esta tela, que já tem a splash art em tela cheia — mesmo
+        // espírito visual do reveal de case-opening acima, consumido uma única vez.
+        if (PendingRebirthReveal.PendingCharacterId == profile.characterId && PendingRebirthReveal.GrantedItems != null)
+        {
+            var rebirthItems = PendingRebirthReveal.GrantedItems;
+            PendingRebirthReveal.PendingCharacterId = null;
+            PendingRebirthReveal.GrantedItems = null;
+            _ = ResolveRebirthRevealAsync(profile, rebirthItems);
+        }
+    }
+
+    // Revela em sequência os itens concedidos pelo Renascimento (mesma CharacterUnlockRevealPanel
+    // do reveal de case-opening, ver BuildUnlockRevealPanel/ResolveCaseUnlocksAsync acima) —
+    // diferença: os itens JÁ ESTÃO aplicados/persistidos (CharacterPanel.ExecuteRebirthAsync),
+    // então não há "rascunho"/retomada — é só cerimônia visual. O botão de refresh de cada item
+    // chama rerollRebirthGrant (custo fixo em diamante, servidor) e substitui o item daquele slot
+    // no profile local.
+    private async Task ResolveRebirthRevealAsync(PlayerProfile profile, List<PendingRebirthReveal.GrantedItemRef> grantedItems)
+    {
+        var options = new List<LevelUpOption>();
+        foreach (var item in grantedItems)
+        {
+            var opt = CharacterUnlockEngine.ResolveServerResult(item.Kind, item.Name, item.Tier);
+            if (opt.HasValue) options.Add(opt.Value);
+        }
+        if (options.Count == 0) return;
+
+        btnSelecionarGo.SetActive(false);
+        btnFecharGo.SetActive(false);
+
+        int total = options.Count;
+        for (int i = 1; i <= total; i++)
+        {
+            var option = options[i - 1];
+            int remainingRerolls = RebirthRerollService.MaxRerollsPerSlot;
+
+            while (true)
+            {
+                var tcs = new TaskCompletionSource<bool>(); // true = Continuar, false = Refresh
+                unlockRevealPanel.Show(i, total, option, remainingRerolls,
+                    onContinueClicked: () => tcs.TrySetResult(true),
+                    onRefreshClicked: () => tcs.TrySetResult(false));
+                bool accepted = await tcs.Task;
+                if (accepted) break;
+
+                unlockRevealPanel.SetBusy(true);
+                var rerollResult = await RebirthRerollService.RerollAsync(profile.characterId, i);
+                if (!rerollResult.Success)
+                {
+                    unlockRevealPanel.ShowRefreshError(rerollResult.ErrorMessage);
+                    continue;
+                }
+
+                var newOption = CharacterUnlockEngine.ResolveServerResult(rerollResult.Kind, rerollResult.Name, rerollResult.Tier);
+                if (newOption.HasValue)
+                {
+                    RemoveRebirthGrantedOption(profile, option);
+                    LevelUpEngine.ApplyOption(newOption.Value, profile);
+                    option = newOption.Value;
+                    LocalSaveService.Save(profile);
+                    characterPanel.Refresh();
+                }
+                remainingRerolls = rerollResult.RemainingRerolls;
+                // Diamante já debitado no servidor dentro da mesma transaction do sorteio — só
+                // espelha localmente (mesmo padrão de ResolveCaseUnlocksAsync).
+                PlayerEconomyState.Diamonds = Mathf.Max(0, PlayerEconomyState.Diamonds - RebirthRerollService.CostDiamonds);
+            }
+        }
+
+        unlockRevealPanel.Hide();
+        btnSelecionarGo.SetActive(true);
+        btnFecharGo.SetActive(true);
+    }
+
+    // Remove a referência do item ANTERIOR concedido num slot antes de aplicar o novo (reroll
+    // pode trocar de família inteiramente, não só evoluir tier — LevelUpEngine.ApplyOption só
+    // remove o tier anterior da MESMA família, não cobre esse caso). Remoção por referência de
+    // asset (não por nome) porque CharacterUnlockEngine.ResolveServerResult sempre resolve pro
+    // MESMO ScriptableObject singleton já usado em profile.skills/weapons/pets.
+    private static void RemoveRebirthGrantedOption(PlayerProfile profile, LevelUpOption opt)
+    {
+        switch (opt.kind)
+        {
+            case LevelUpOption.Kind.Skill:
+                if (opt.skill != null) profile.skills.Remove(opt.skill);
+                break;
+            case LevelUpOption.Kind.Weapon:
+                if (opt.weapon != null) profile.weapons.Remove(opt.weapon);
+                break;
+            case LevelUpOption.Kind.Pet:
+                if (opt.petData != null) profile.pets.Remove(opt.petData);
+                break;
+        }
     }
 
     // "Fechar" (dentro da visualização expandida, diferente do "Voltar" fixo do canto superior
@@ -1011,6 +1138,11 @@ public class CharacterSelectController : MonoBehaviour
 
     public void OnClickBackToMenu()
     {
+        // Guard (ver _resolvingPendingSelection) — sair antes do onboarding confirmar o
+        // personagem concedido (auto-confirm assíncrono, ver ResolvePendingCharacterSelectionAsync)
+        // deixava SelectedProfileHolder preso no default do asset. Ignora o clique nesse meio-tempo
+        // em vez de deixar a cena trocar antes da hora.
+        if (_resolvingPendingSelection) return;
         SceneManager.LoadScene("01_MainMenu");
     }
 

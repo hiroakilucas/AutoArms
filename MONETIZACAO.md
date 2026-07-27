@@ -61,16 +61,22 @@ daquela raridade — considerando toda a coleção do jogador (não só compras
 desse gacha), incluindo personagens obtidos por level up normal, evento ou
 passe.
 
-## 6. Moeda (soft currency) — liberação de slot de personagem
-| Liberação | Custo (moeda) |
-|---|---|
-| 1ª | 100 |
-| 2ª | 200 |
-| 3ª | 400 |
-| 4ª | 600 |
-| 5ª | 800 |
-| 6ª | 1000 |
-| 7ª em diante | +400 a cada liberação |
+## 6. Moeda (soft currency) — "Próximo Personagem" (compra real, 2026-07-26)
+Substitui "Case Geral" (diamante, seção 13 antiga) — mesmo sorteio ponderado de raridade (seção
+7 abaixo), mesma regra de não-repetição da seção 5, mas pago em Coins com preço escalando por um
+contador PERSISTIDO por jogador (`users/{uid}.nextCharacterPurchaseCount`, Cloud Function
+`purchaseNextCharacter`) em vez de preço fixo por pacote. Tabela FINAL (substitui a antiga
+100/200/400/600/800/1000/+400):
+| Compra | Custo (moeda) | | Compra | Custo (moeda) |
+|---|---|---|---|---|
+| 1ª | 25 | | 7ª | 1200 |
+| 2ª | 50 | | 8ª | 1400 |
+| 3ª | 100 | | 9ª | 1600 |
+| 4ª | 200 | | 10ª | 1800 |
+| 5ª | 400 | | 11ª | 2000 |
+| 6ª | 800 | | 12ª | 2200 |
+
+13ª em diante: +200 a cada compra (2400, 2600, 2800...).
 
 ## 7. Distribuição de raridade de personagens
 | Raridade | Qtd. personagens | % de chance total |
@@ -141,12 +147,13 @@ servidor). Ver `ARQUITETURA.md` ("Modelo de roster multi-personagem") pro desenh
   server-side (Cloud Function `purchaseCase`), sem repetição (exclui personagens já possuídos),
   concede um documento novo em `users/{uid}/characters`. Limite de compras (10/3/1) continua **por
   jogador** (`users/{uid}/casePurchases/{packageId}`), não um estoque global.
-- **Novo 4º pacote "Case Geral"** (moeda/diamante, `case_moeda_geral`): pool = todos os
-  personagens de todas as raridades, sorteados pelas `tierWeights` da seção 7 (Normal 68% /
-  Uncommon 20% / Raro 8% / Legendary 3,5% / Imortal 0,5%). Sem limite de compras. Preço em
-  diamantes ajustável em `functions/src/scripts/seedCasePackages.ts` (`currencyCost`).
-  **Distinto** do card "Próximo Personagem" da seção 6 (liberação de slot por moeda escalando
-  100/200/400...) — esse mecanismo continua intocado, sem relação com odds de raridade.
+- **"Case Geral" (4º pacote, moeda/diamante, `case_moeda_geral`) foi REMOVIDO em 2026-07-26** —
+  substituído por "Próximo Personagem" (seção 6), que passou a fazer o MESMO sorteio ponderado
+  entre as 5 raridades (`rollWeightedPool`/`DEFAULT_TIER_WEIGHTS`, extraído pra
+  `functions/src/caseRoll.ts` e reaproveitado por `purchaseCase.ts`/`purchaseNextCharacter.ts`
+  sem duplicar), só que pago em Coins com preço por contador-do-jogador em vez de diamante a
+  preço fixo por pacote. O doc `casePackages/case_moeda_geral` ficou órfão no Firestore
+  (inofensivo); removido de `functions/src/scripts/seedCasePackages.ts`.
 - Validação de recibo IAP (cash): **mock** por enquanto — a function aceita qualquer
   `paymentReceipt` não vazio. `// TODO` explícito no código (`purchaseCase.ts`) marcando onde a
   validação real (App Store Server API / Google Play Developer API) deve entrar antes de

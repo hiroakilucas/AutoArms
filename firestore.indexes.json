@@ -1,4 +1,13 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "opponents_index",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "levelBucket", "order": "ASCENDING" },
+        { "fieldPath": "randomSeed", "order": "DESCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

@@ -515,14 +515,17 @@ public class CombatResultPanel : MonoBehaviour
         diamondValueTxt.alignment = TextAlignmentOptions.MidlineLeft;
 
         // Botão "Novo Sorteio" (pedido do usuário, 2026-07-21) — gasta diamante e refaz o sorteio
-        // (incluindo a roleta de novo). Canto INFERIOR direito. Preço PROGRESSIVO (pedido do
-        // usuário, 2026-07-21, 2ª rodada): 1º sorteio novo = 50, 2º = 100, 3º = 200 — depois disso
-        // o botão trava (RerollLimit = 3, "deixe o limite para só 3 resets"). TODO SEGURANÇA
-        // (mesmo padrão de WalletService/ShopController, ver ARQUITETURA.md "Moeda premium"):
-        // gasto client-writable, placeholder de Fase 1.
-        int[] RerollCosts = { 50, 100, 200 };
-        // Retomando (resumeRerollsUsed): continua do custo real já pago antes de fechar o app,
-        // em vez de voltar pra 50 diamantes de graça (ver comentário de resumeOptions acima).
+        // (incluindo a roleta de novo). Canto INFERIOR direito. Preço FIXO (2026-07-26, corrigido
+        // — era progressivo 50/100/200 e gasto direto do cliente, TODO de segurança sinalizado
+        // desde 2026-07-21; ver functions/src/rerollLevelUpBoxes.ts). Agora reusa o MESMO valor
+        // fixo de rerollUnlock/rerollRebirthGrant (LevelUpRerollService.CostDiamonds, 15
+        // diamantes), validado/debitado sempre no servidor antes de refazer o sorteio local —
+        // limite de usos por level-up também passa a ser server-side
+        // (LevelUpRerollService.MaxRerollsPerLevelUp).
+        // Retomando (resumeRerollsUsed): continua da contagem real já usada antes de fechar o
+        // app, em vez de voltar pra "3 disponíveis" de graça (ver comentário de resumeOptions
+        // acima) — só é usado de fato quando não há conta sincronizada (ver handler abaixo); com
+        // conta, a contagem real vem sempre do servidor (levelUpRerollCount/levelUpRerollAtLevel).
         int rerollCount = resumeRerollsUsed;
         // MakeButton sempre registra um listener que invoca `onClick()` sem checar nulo — passar
         // um no-op aqui (em vez de null) evita NullReferenceException nesse listener; o handler
@@ -542,9 +545,9 @@ public class CombatResultPanel : MonoBehaviour
 
         void UpdateRerollButtonLabel()
         {
-            resetBtnLabel.text = rerollCount >= RerollCosts.Length
+            resetBtnLabel.text = rerollCount >= LevelUpRerollService.MaxRerollsPerLevelUp
                 ? "Limite de sorteios atingido"
-                : $"Novo Sorteio ({RerollCosts[rerollCount]} diamantes)";
+                : $"Novo Sorteio ({LevelUpRerollService.CostDiamonds} diamantes)";
         }
         UpdateRerollButtonLabel();
 
@@ -552,7 +555,7 @@ public class CombatResultPanel : MonoBehaviour
         void OnOneCardLanded()
         {
             spinsRemaining--;
-            if (spinsRemaining <= 0) resetBtn.interactable = rerollCount < RerollCosts.Length;
+            if (spinsRemaining <= 0) resetBtn.interactable = rerollCount < LevelUpRerollService.MaxRerollsPerLevelUp;
         }
 
         // Consumido na 1ª chamada de DrawAndBuildCards (seja usando resumeOptions, seja sorteando
@@ -631,32 +634,51 @@ public class CombatResultPanel : MonoBehaviour
 
         resetBtn.onClick.AddListener(async () =>
         {
-            if (rerollCount >= RerollCosts.Length) return;
-            int cost = RerollCosts[rerollCount];
-            if (PlayerEconomyState.Diamonds < cost) return; // Fase 1: sem popup de saldo insuficiente ainda, só ignora o clique
+            if (rerollCount >= LevelUpRerollService.MaxRerollsPerLevelUp) return;
 
-            resetBtn.interactable = false; // evita duplo clique enquanto a gravação (se houver conta) está em andamento
+            resetBtn.interactable = false; // evita duplo clique enquanto a chamada está em andamento
             bool spent;
-            if (AuthService.IsSignedIn)
+            if (AuthService.IsSignedIn && !string.IsNullOrEmpty(profile.characterId))
             {
-                // Gasto persistido de verdade (2026-07-21) — mesmo WalletService.SpendDiamondsAsync
-                // já usado em MainMenuController.SpendAndContinueRoutine; só decrementa
-                // PlayerEconomyState.Diamonds DEPOIS de confirmar a escrita no Firestore (evita
-                // contar o gasto duas vezes, já que o método já espelha o campo internamente).
-                spent = await WalletService.SpendDiamondsAsync(AuthService.CurrentUser.UserId, cost);
+                // Correção de segurança (2026-07-26) — custo FIXO, validado/debitado sempre no
+                // servidor (rerollLevelUpBoxes, ver comentário acima) antes de refazer o sorteio
+                // local; era WalletService.SpendDiamondsAsync (client-writable, TODO de segurança
+                // sinalizado desde 2026-07-21).
+                var auth = await LevelUpRerollService.SpendRerollAsync(profile.characterId);
+                spent = auth.Success;
+                if (spent)
+                {
+                    PlayerEconomyState.Diamonds = auth.RemainingDiamonds;
+                    // rerollCount server-side é a fonte de verdade (levelUpRerollCount/
+                    // levelUpRerollAtLevel) — deriva daqui pra manter o label/limite local em
+                    // sincronia mesmo se o contador local (resumeRerollsUsed) estivesse
+                    // desatualizado.
+                    rerollCount = LevelUpRerollService.MaxRerollsPerLevelUp - auth.RemainingUses;
+                }
             }
             else
             {
-                PlayerEconomyState.Diamonds -= cost;
-                spent = true;
+                // Sem conta sincronizada (ou personagem sem characterId real) — mesmo fallback
+                // "cliente confiável" já usado em outros pontos do jogo sem conta (ver
+                // ExecuteReset/PlayerEconomyState) — nada pra validar no servidor sem um
+                // characterId real.
+                if (PlayerEconomyState.Diamonds < LevelUpRerollService.CostDiamonds)
+                {
+                    spent = false;
+                }
+                else
+                {
+                    PlayerEconomyState.Diamonds -= LevelUpRerollService.CostDiamonds;
+                    rerollCount++;
+                    spent = true;
+                }
             }
             if (!spent)
             {
-                resetBtn.interactable = rerollCount < RerollCosts.Length;
+                resetBtn.interactable = rerollCount < LevelUpRerollService.MaxRerollsPerLevelUp;
                 return;
             }
 
-            rerollCount++;
             diamondValueTxt.text = PlayerEconomyState.Diamonds.ToString();
             UpdateRerollButtonLabel();
             DrawAndBuildCards();
