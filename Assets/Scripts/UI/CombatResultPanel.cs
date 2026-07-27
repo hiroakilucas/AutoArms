@@ -267,7 +267,7 @@ public class CombatResultPanel : MonoBehaviour
 
         if (ShowAllOptionsForTesting)
         {
-            ShowAllOptionsChoice(canvasRoot, profile, availableSkills, availableWeapons, availablePets, onChosen);
+            ShowAllOptionsChoice(canvasRoot, profile, availableSkills, availableWeapons, availablePets, theme, onChosen);
             return;
         }
 
@@ -628,7 +628,7 @@ public class CombatResultPanel : MonoBehaviour
                         // cena depois da escolha.
                         if (detailPanelGo != null) Object.Destroy(detailPanelGo);
                         onChosen();
-                    });
+                    }, theme);
             }
         }
 
@@ -660,8 +660,7 @@ public class CombatResultPanel : MonoBehaviour
             {
                 // Sem conta sincronizada (ou personagem sem characterId real) — mesmo fallback
                 // "cliente confiável" já usado em outros pontos do jogo sem conta (ver
-                // ExecuteReset/PlayerEconomyState) — nada pra validar no servidor sem um
-                // characterId real.
+                // PlayerEconomyState) — nada pra validar no servidor sem um characterId real.
                 if (PlayerEconomyState.Diamonds < LevelUpRerollService.CostDiamonds)
                 {
                     spent = false;
@@ -830,7 +829,8 @@ public class CombatResultPanel : MonoBehaviour
     // a uma (availableWeapons mantido como parâmetro, sem uso, pra reativar depois bastando
     // descomentar o foreach abaixo).
     private static void ShowAllOptionsChoice(Transform canvasRoot, PlayerProfile profile,
-        List<SkillData> availableSkills, List<WeaponData> availableWeapons, List<PetData> availablePets, System.Action onChosen)
+        List<SkillData> availableSkills, List<WeaponData> availableWeapons, List<PetData> availablePets,
+        UITheme theme, System.Action onChosen)
     {
         var allOptions = new List<LevelUpOption>();
         for (int i = 0; i < 10; i++)
@@ -913,7 +913,7 @@ public class CombatResultPanel : MonoBehaviour
             // pro fluxo real, que constrói e passa um). spinPool: null (sem roleta neste modo —
             // mostra o resultado direto, mesmo comportamento de sempre).
             MakeLevelUpCard(content, capturedOpt, Vector2.zero, 1f, null, null, 0f, null,
-                () => { ApplyBonus(capturedOpt, profile); Object.Destroy(root); onChosen(); });
+                () => { ApplyBonus(capturedOpt, profile); Object.Destroy(root); onChosen(); }, theme);
         }
     }
 
@@ -924,7 +924,7 @@ public class CombatResultPanel : MonoBehaviour
     // animação e mostra o resultado direto, mesmo comportamento de antes desta mudança.
     private static void MakeLevelUpCard(GameObject parent, LevelUpOption opt, Vector2 pos, float scale,
         CharacterPanel detailPanel, List<Sprite> spinPool, float spinDuration,
-        System.Action onSpinComplete, System.Action onClick)
+        System.Action onSpinComplete, System.Action onClick, UITheme theme = null)
     {
         var card = new GameObject("Card");
         card.transform.SetParent(parent.transform, false);
@@ -938,6 +938,31 @@ public class CombatResultPanel : MonoBehaviour
         // nenhum valor de layout individual.
         rt.localScale = Vector3.one * scale;
         card.AddComponent<Image>().color = new Color(0.09f, 0.09f, 0.22f, 1f);
+
+        // Borda colorida por tier (T1/T2/T3, cinza/verde/azul — ver UITheme.TierColor), atrás do
+        // ícone — só para Skill/Weapon/Pet (Attribute não tem tier, não é um item). Local novo
+        // (2026-07-27, pedido do usuário): esta tela nunca teve indicação de tier nenhuma antes,
+        // igual à mesma borda já usada em CharacterPanel/ArsenalSlotUI/CharacterUnlockRevealPanel.
+        if (opt.kind != LevelUpOption.Kind.Attribute && theme != null)
+        {
+            int borderTier = opt.kind switch
+            {
+                LevelUpOption.Kind.Skill  => opt.skill != null ? opt.skill.tier : 1,
+                LevelUpOption.Kind.Weapon => opt.weapon != null ? opt.weapon.tier : 1,
+                LevelUpOption.Kind.Pet    => opt.petData != null ? opt.petData.tier : 1,
+                _ => 1,
+            };
+            var borderGo = new GameObject("TierBorder");
+            borderGo.transform.SetParent(card.transform, false);
+            var borderRt = borderGo.AddComponent<RectTransform>();
+            borderRt.anchorMin = borderRt.anchorMax = new Vector2(0.5f, 0.5f);
+            borderRt.sizeDelta = new Vector2(164f, 164f);
+            borderRt.anchoredPosition = new Vector2(0, 45f);
+            var borderImg = borderGo.AddComponent<Image>();
+            borderImg.sprite = UIShapeUtil.RoundedRect(theme.TierColor(borderTier), 12f);
+            borderImg.type = Image.Type.Sliced;
+            borderImg.raycastTarget = false;
+        }
 
         // Icon
         var iconGo = new GameObject("Icon");

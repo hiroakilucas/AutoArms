@@ -59,13 +59,25 @@ Objetivo: nenhuma cor de interface deve ser hardcoded num prefab/script novo —
 | `textOnLight` | `#2B2118` | Texto sobre fundo claro (`backgroundTop`/`backgroundBottom`) |
 | `textOnDark` | `#F5E9D3` | Texto sobre fundo escuro (`panelBackground`/`panelBackgroundAlt`) |
 
-### Tiers de Skill/Arma (T1/T2/T3)
+### Tiers de Skill/Arma/Pet (T1/T2/T3)
+
+**Fonte única: `UITheme.TierColor(int tier)`** (2026-07-27) — retorna `rarityNormal`/
+`rarityUncommon`/`rarityRare` (mesma progressão de cor da raridade de personagem, ver tabela
+abaixo), substituindo o antigo esquema bronze/prata/ouro em TODOS os locais que mostram borda de
+skill/arma/pet por tier: Main Menu/Chibers/`02_SelectCharacter` (`CharacterPanel.TierColor`,
+delega pro método central), botão Arsenal (`ArsenalSlotUI.TierColor`), tela de escolha de skill no
+level-up (`CombatResultPanel.MakeLevelUpCard` — borda nova, essa tela nunca teve indicação de tier
+antes) e o reveal de case-opening/Renascimento (`CharacterUnlockRevealPanel.TierColor`). Antes
+desta unificação, a mesma lógica bronze/prata/ouro estava duplicada em 3 switches independentes
+(`CharacterPanel`, `ArsenalSlotUI`, `CharacterUnlockRevealPanel`). T4/T5 (Legendary/Imortal,
+laranja/vermelho) reservados pra quando essas evoluções existirem de verdade — adicionar
+`case 4`/`case 5` só em `UITheme.TierColor`, sem tocar em nenhum consumidor.
 
 | Campo | Hex | Uso |
 |---|---|---|
-| `tierBronze` | `#CD7F32` | Borda do ícone de skill/arma **T1** (`CharacterPanel`, seções HABILIDADES/ARMAS) |
-| `tierSilver` | `#C0C0C0` | Borda do ícone de skill/arma **T2** |
-| `tierGold` | `#FFD700` | Borda do ícone de skill/arma **T3** — tom distinto de `currencyGold` (mais saturado/"medalha"), de propósito, pra não confundir com moeda |
+| `tierBronze` | `#CD7F32` | **Não usado pra borda de tier desde 2026-07-27** — hoje só colore a tag `WeaponType.Heavy` na linha "Types" do popup de detalhe de arma (`CharacterPanel.TypeColor`) |
+| `tierSilver` | `#C0C0C0` | Reservado — sem uso ativo desde 2026-07-27 (campo mantido, não removido) |
+| `tierGold` | `#FFD700` | Reservado — sem uso ativo desde 2026-07-27 (campo mantido, não removido); tom distinto de `currencyGold` (mais saturado/"medalha"), de propósito, pra não confundir com moeda |
 
 ### Raridade de Personagem (`PlayerProfile.rarity`)
 
@@ -96,7 +108,7 @@ duplicar hex. `CombatResultPanel`/`WeaponHUD`/`02_SelectCharacter` ainda não mi
 - `textOnDark`/`textOnLight` — texto sobre os painéis escuros e sobre o badge de level dourado,
   respectivamente.
 - `danger` — fundo do botão de fechar (X) do painel lateral.
-- `tierBronze`/`tierSilver`/`tierGold` (2026-07-07) — borda ao redor de cada ícone nas seções HABILIDADES/ARMAS do `CharacterPanel`, conforme o tier (T1/T2/T3) da skill/arma equipada; reaproveitados também na estrela de raridade (★) do popup de detalhe de arma.
-- `secondaryButton`/`tierBronze`/`secondaryButtonAlt`/`currencyGold`/`currencyGem`/`success`/`danger` (2026-07-07) — cor própria por `WeaponType` (Blunt/Heavy/Long/Fast/Thrown/Ranged/Sharp) na linha "Types" do popup de detalhe de arma; e `primaryActionAlt`/`success`/`secondaryButtonAlt` pro destaque de tier atual vs. os outros dois nos campos `[T1/T2/T3]` (Damage/Draw Chance laranja, Crit Bonus verde, inativos cinza).
+- `rarityNormal`/`rarityUncommon`/`rarityRare` via `UITheme.TierColor` (2026-07-07, migrado pra esta fonte em 2026-07-27 — ver seção **Tiers de Skill/Arma/Pet** acima) — borda ao redor de cada ícone nas seções HABILIDADES/ARMAS/PETS do `CharacterPanel`, conforme o tier (T1/T2/T3) da skill/arma/pet equipada.
+- `secondaryButton`/`tierBronze`/`secondaryButtonAlt`/`currencyGold`/`currencyGem`/`success`/`danger` (2026-07-07) — cor própria por `WeaponType` (Blunt/Heavy/Long/Fast/Thrown/Ranged/Sharp) na linha "Types" do popup de detalhe de arma (`tierBronze` aqui é só a cor da tag Heavy, não relacionada a tier de progressão); e `primaryActionAlt`/`success`/`secondaryButtonAlt` pro destaque de tier atual vs. os outros dois nos campos `[T1/T2/T3]` (Damage/Draw Chance laranja, Crit Bonus verde, inativos cinza).
 - `secondaryButton`/`panelBackgroundAlt`/`textOnDark`/`panelBackground`/`danger` (2026-07-14) — `CharacterCardButtonStyle` (`Btn_SelectCharacter`/"Chibers" em `01_MainMenu`): fundo do card (`secondaryButton`, mesmo token já documentado acima pra esse botão), faixa de label (`panelBackgroundAlt`), texto+outline do label (`textOnDark`/`panelBackground`) e badge circular de notificação (`danger`). Ícone placeholder usa um tint claro (`Color.Lerp` com branco) do próprio `secondaryButton`, mesmo padrão de derivar variantes já usado pra SPD em `AttributePipBar`.
 - `rarityNormal`/`rarityUncommon`/`rarityRare`/`rarityLegendary`/`rarityImmortal` (2026-07-14) — `CharacterCardUI.BuildPortraitBox` (02_SelectCharacter): fundo do `PortraitBox` de cada card, escolhido por `PlayerProfile.rarity` em vez do hash-do-nome usado antes (paleta arco-íris sem significado). Bloqueado usa a mesma cor passada por `Desaturate` (padrão já existente).

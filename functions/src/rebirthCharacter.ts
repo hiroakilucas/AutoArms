@@ -3,9 +3,9 @@ import * as admin from "firebase-admin";
 import { drawUnlock, CharacterRosterDoc, UnlockResult } from "./unlockEngine";
 import { generateLevel1Stats, xpRequiredForLevel } from "./characterStats";
 
-// "Renascimento" (Reset Nível 10+, 2026-07-26) — feature NOVA, separada do "Resetar Personagem"
-// antigo (100% client-side, CharacterPanel.ExecuteReset: grátis, sem gate de level, CREDITA
-// moeda, limpa o loadout). ECONOMIA INVERTIDA (correção de escopo, 2026-07-26, mesmo dia —
+// "Renascimento" (Reset Nível 10+, 2026-07-26) — substituiu por completo o antigo "Resetar
+// Personagem" (100% client-side, grátis, sem gate de level, removido 2026-07-27 — Renascimento
+// cobre o mesmo papel em todos os aspectos). ECONOMIA INVERTIDA (correção de escopo, 2026-07-26, mesmo dia —
 // versão original desta function DEBITAVA moeda; o usuário corrigiu o requisito: Renascimento é
 // 100% GRATUITO, e além disso CREDITA `nível_antes × CharacterRebirthSettings.coinRewardPerLevel`
 // moedas, mesma fórmula de valor, só que como recompensa em vez de custo). Só libera em

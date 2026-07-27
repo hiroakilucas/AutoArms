@@ -54,6 +54,59 @@ public static class FirestoreService
     // próprio uso, em vez de descobrir o bug acima por conta própria.
     public static void TryEnsurePersistence() => EnsurePersistence();
 
+    // "Agora" confiável sem Cloud Function (2026-07-27, extraído de EnergyService.
+    // ReadServerNowAsync — mesmo truque, generalizado pra qualquer documento/campo, pra
+    // DailyRewardsService reaproveitar sem duplicar a lógica de retry): não existe uma leitura
+    // direta de "hora do servidor" no SDK client-side, mas grava um campo qualquer com
+    // FieldValue.ServerTimestamp (resolvido pelo próprio Firestore no servidor no instante da
+    // escrita) e lê de volta forçando Source.Server (ignora cache local). `probeField` deve ser
+    // exclusivo do chamador (ex: "_energyServerTimeProbe"/"_dailyRewardsServerTimeProbe") — dois
+    // chamadores diferentes escrevendo o MESMO campo no MESMO documento poderiam pisar um no
+    // outro entre a escrita e a leitura seguinte, numa corrida rara.
+    //
+    // `logTag` só entra na mensagem de erro do fallback (identifica quem chamou no Console).
+    // `DateTime.UtcNow` do device só entra como ÚLTIMO recurso, se as 3 tentativas falharem —
+    // nunca no caminho normal, então não abre a brecha de "trapacear adiantando o relógio local"
+    // que este método existe pra evitar.
+    //
+    // SetAsync(..., MergeAll) em vez de UpdateAsync (2026-07-27, bug real corrigido) — Update
+    // exige que o documento já EXISTA, e falha com "not-found" se não existir ainda (ex: conta
+    // nova, `users/{uid}` nunca escrito por nenhum outro fluxo até este ponto). Como só gravamos
+    // UM campo descartável, um Set com merge é estritamente mais seguro (cria o doc se faltar,
+    // mescla se já existir) sem mudar nada pro caso comum (doc já existe).
+    public static async Task<DateTime> ReadServerNowAsync(DocumentReference doc, string probeField, string logTag = "FirestoreService")
+    {
+        await doc.SetAsync(new Dictionary<string, object> { { probeField, FieldValue.ServerTimestamp } }, SetOptions.MergeAll);
+
+        const int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            DocumentSnapshot snap = await doc.GetSnapshotAsync(Source.Server);
+            // Bug real corrigido (2026-07-27) — `TryGetValue<Timestamp>` PODE lançar "Unable to
+            // convert null value to Firebase.Firestore.Timestamp" em vez de devolver `false`,
+            // quando o valor ainda está resolvendo no servidor (mesma corrida rara já documentada
+            // no histórico de EnergyService — o nome "Try" sugere que nunca lança, mas essa versão
+            // do SDK lança mesmo assim nesse caso específico). Sem o try/catch, essa exceção saía
+            // do loop de retry inteiro na 1ª tentativa, sem nunca chegar nas 2 tentativas
+            // seguintes que existem exatamente pra cobrir essa janela.
+            try
+            {
+                if (snap.TryGetValue(probeField, out Timestamp probe))
+                    return probe.ToDateTime();
+            }
+            catch (Exception)
+            {
+                // Tratado como "ainda não resolveu" — cai no mesmo delay/retry abaixo.
+            }
+
+            if (attempt < maxAttempts) await Task.Delay(250);
+        }
+
+        Debug.LogError($"[{logTag}] ReadServerNowAsync: sentinela de hora do servidor não resolveu " +
+            "depois de 3 tentativas — usando DateTime.UtcNow do device como último recurso.");
+        return DateTime.UtcNow;
+    }
+
     private static DocumentReference CharacterDoc(string uid, string characterId) =>
         Db.Collection("users").Document(uid).Collection("characters").Document(characterId);
 

@@ -82,13 +82,13 @@ Hoje é **100% número + texto**, sem nenhum ícone/glyph, via `AttributePipBar.
 
 ---
 
-## 6. Bordas/molduras de tier (bronze/prata/ouro)
+## 6. Bordas/molduras de tier (cinza/verde/azul — era bronze/prata/ouro até 2026-07-27)
 
-**Confirmado: são só cor aplicada via código, não sprites de moldura.** `CharacterPanel.cs`, `BuildTierIconCell`: a borda é o próprio `RoundedRect(TierColor(tier), 10f)` preenchendo a célula inteira por baixo, com um quadrado de fundo (`panelBackgroundAlt`) por cima, e o ícone (skill/arma) inset ainda mais por cima disso — três camadas de retângulo arredondado, nenhuma delas sprite.
+**Confirmado: são só cor aplicada via código, não sprites de moldura.** `CharacterPanel.cs`, `BuildTierIconCell`: a borda é o próprio `RoundedRect(TierColor(tier), 10f)` preenchendo a célula inteira por baixo, com um quadrado de fundo (`panelBackgroundAlt`) por cima, e o ícone (skill/arma) inset ainda mais por cima disso — três camadas de retângulo arredondado, nenhuma delas sprite. `TierColor(tier)` delega pra `UITheme.TierColor` (fonte única desde 2026-07-27, ver UI_PALETTE.md) em vez de um switch bronze/prata/ouro próprio.
 
-- `tierBronze = #CD7F32` (T1)
-- `tierSilver = #C0C0C0` (T2)
-- `tierGold = #FFD700` (T3)
+- `rarityNormal = #9E9E9E` (T1, cinza)
+- `rarityUncommon = #43A047` (T2, verde)
+- `rarityRare = #1E88E5` (T3, azul)
 - Tamanho: célula 70×70 nas grades HABILIDADES/ARMAS; 96×96 no ícone do popup.
 
 Se for gerar molduras reais (em vez de continuar só com cor), pensar em 3 variantes (bronze/prata/ouro) desenhadas como frame vazado (para o ícone aparecer por dentro), no mesmo tamanho quadrado acima.

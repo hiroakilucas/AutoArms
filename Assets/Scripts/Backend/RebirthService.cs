@@ -6,8 +6,8 @@ using Firebase.Functions;
 using UnityEngine;
 
 // Cliente da Cloud Function `rebirthCharacter` (2026-07-26) — feature "Renascimento" (Reset
-// Nível 10+), separada do "Resetar Personagem" antigo (grátis, sem gate, 100% client-side, ver
-// CharacterPanel.ExecuteReset). Nunca decide nível/sorteio localmente — só envia a INTENÇÃO
+// Nível 10+), que substituiu por completo o antigo "Resetar Personagem" (grátis, sem gate,
+// 100% client-side, removido 2026-07-27). Nunca decide nível/sorteio localmente — só envia a INTENÇÃO
 // (characterId) e aplica o que o servidor já persistiu (level, stats, itens concedidos, moeda
 // creditada), mesmo princípio de segurança de CaseService/UnlockRerollService (ARQUITETURA.md
 // "Moeda premium" — vale igual pra moeda comum aqui, nunca creditada pelo cliente).

@@ -69,6 +69,14 @@ public class ShopController : MonoBehaviour
         // casePackages/{id} fixo pra ele — o preço escala com um contador POR JOGADOR, não por
         // pacote (ver purchaseNextCharacter.ts).
         public bool IsNextCharacterPurchase;
+
+        // Resgates gratuitos de diamante — Diário/Semanal/Mensal (2026-07-27), aba Diamantes.
+        // Mesmo espírito de IsNextCharacterPurchase/CasePackageId: não-nulo identifica o item pra
+        // OnBuyClicked desviar pra HandleClaimRewardAsync (chama claimDailyDiamonds/
+        // claimWeeklyDiamonds/claimMonthlyDiamonds, assíncrono) em vez do incremento síncrono
+        // genérico. `PurchaseLimit`/`Purchased` ficam em 0 pra estes itens — disponibilidade é
+        // decidida por PlayerEconomyState.*DiamondsAvailable (ver RebuildGrid), não por contador.
+        public DailyRewardsService.RewardType? ClaimRewardType;
     }
 
     // Região compartilhada por Sidebar e ScrollView (2026-07-20, layout em sidebar) — mesmo topo/
@@ -103,12 +111,14 @@ public class ShopController : MonoBehaviour
     private const string Slot2Title = "Slot de Skill 2";
     private const string Slot3Title = "Slot de Skill 3";
 
-    // Aba Personagens — "Próximo Personagem" (Coins, 2026-07-26 — compra REAL, substitui o antigo
-    // "Case Geral" de diamante). Preço escala com um contador PERSISTIDO por jogador
+    // Aba Personagens — "Chibers Aleatório" (Coins, 2026-07-26 — compra REAL, substitui o antigo
+    // "Case Geral" de diamante; renomeado de "Próximo Personagem" em 2026-07-27, pedido do
+    // usuário). Preço escala com um contador PERSISTIDO por jogador
     // (PlayerEconomyState.NextCharacterPurchaseCount, espelhando users/{uid}.
     // nextCharacterPurchaseCount gravado pela Cloud Function purchaseNextCharacter) — não mais um
-    // contador de sessão em memória. Ver CharacterSlotCost/HandleNextCharacterPurchaseAsync.
-    private const string CharacterSlotTitle = "Próximo Personagem";
+    // contador de sessão em memória. Ver NextCharacterService.NextPurchaseCost/
+    // HandleNextCharacterPurchaseAsync.
+    private const string CharacterSlotTitle = "Chibers Aleatório";
 
     // Aba Personagens — sistema de compra de personagens/case opening (2026-07-23). IDs batem
     // 1:1 com os documentos casePackages/{packageId} no Firestore (ver
@@ -134,6 +144,21 @@ public class ShopController : MonoBehaviour
     private readonly Dictionary<Tab, Image> _tabBackgrounds = new Dictionary<Tab, Image>();
     private readonly Dictionary<Tab, List<ShopItem>> _items = new Dictionary<Tab, List<ShopItem>>();
 
+    // Bolinha vermelha de "compra disponível" (2026-07-27, pedido do usuário) — aparece na aba
+    // PERSONAGENS sempre que `NextCharacterService.CanAffordNextPurchase()` for true, recalculada
+    // a cada `RebuildGrid()` (chamado em todo ponto que muda `PlayerEconomyState.Coins`/
+    // `NextCharacterPurchaseCount` dentro desta classe — load persistido, botão DEV, compra de
+    // "Chibers Aleatório", troca de aba). Reativo por reavaliação, não por evento de "sumir ao
+    // comprar" — ver comentário no card em RebuildGrid pro mesmo indicador no próprio card.
+    private GameObject _personagensTabBadge;
+
+    // Mesmo indicador, aba DIAMANTES (2026-07-27) — aparece quando QUALQUER um dos 3 resgates
+    // gratuitos (Diário/Semanal/Monthly) está disponível (`DailyRewardsService.
+    // AnyClaimAvailable`), reavaliada no mesmo `RebuildGrid()` que atualiza `_personagensTabBadge`
+    // acima. Reaproveita a MESMA lógica de agregação/disponibilidade — não duplica um cálculo
+    // próprio, só lê o que `DailyRewardsService`/`PlayerEconomyState` já centralizam.
+    private GameObject _diamantesTabBadge;
+
     // Contador de diamante no header + efeito de "diamantes voando" (2026-07-21, pedido do
     // usuário) — ver BuildDiamondCounter/SpawnDiamondBurst/FlyingDiamondIcon.cs.
     private Transform _canvasTransform;
@@ -142,11 +167,22 @@ public class ShopController : MonoBehaviour
     private RectTransform _diamondIconRt;
     private int _displayedDiamonds;
 
+    // Contador de moeda no header (2026-07-27, pedido do usuário — "colocar o coin ao lado
+    // esquerdo do diamante no mercado, pra verificar quanto de moeda tem"). Antes a Loja só
+    // mostrava diamante (o card "Próximo Personagem" já mostra o próprio preço em moeda, mas não
+    // havia nenhum jeito de ver o SALDO de moeda sem sair da tela). Só exibe — sem efeito de
+    // "voando" (`SpawnDiamondBurst`/`FlyingDiamondIcon`), já que nada na Loja credita moeda com
+    // essa animação hoje; `RefreshCoinText()` é chamado sempre que `PlayerEconomyState.Coins`
+    // muda dentro desta classe (load persistido, botão DEV, compra de "Próximo Personagem").
+    private Sprite _coinIconSprite;
+    private TMP_Text _coinValueTxt;
+
     void Start()
     {
         if (theme == null) return;
 
         _diamondIconSprite = Resources.Load<Sprite>("UI/Economy/Diamond");
+        _coinIconSprite = Resources.Load<Sprite>("UI/Economy/Coin");
         BuildItemData();
 
         var canvasGo = new GameObject("Canvas");
@@ -173,6 +209,7 @@ public class ShopController : MonoBehaviour
 
         BuildBackground(canvasGo.transform);
         BuildHeader(canvasGo.transform);
+        BuildCoinCounter(canvasGo.transform);
         BuildDiamondCounter(canvasGo.transform);
 #if UNITY_EDITOR
         BuildDevCoinButton(canvasGo.transform);
@@ -200,11 +237,13 @@ public class ShopController : MonoBehaviour
         PlayerEconomyState.NextCharacterPurchaseCount = await WalletService.LoadNextCharacterPurchaseCountAsync(uid);
         await ShopStateService.LoadAsync(uid);
         await LoadCasePackageStateAsync(uid);
+        await DailyRewardsService.RefreshStatusAsync(uid);
 
         BuildItemData();
         RebuildGrid();
         _displayedDiamonds = PlayerEconomyState.Diamonds;
         if (_diamondValueTxt != null) _diamondValueTxt.text = _displayedDiamonds.ToString();
+        if (_coinValueTxt != null) _coinValueTxt.text = PlayerEconomyState.Coins.ToString();
     }
 
     // Sistema de compra de personagens/case opening (2026-07-23) — carrega os 4 pacotes
@@ -244,10 +283,34 @@ public class ShopController : MonoBehaviour
         // _diamondIconSprite já carregado em Start() (reaproveitado também pelo header/efeito de
         // "diamantes voando" — ver BuildDiamondCounter/SpawnDiamondBurst).
         var coinIcon = Resources.Load<Sprite>("UI/Economy/Coin");
+        // Resgates gratuitos de diamante (2026-07-27, pedido do usuário) — 3 primeiros cards da
+        // aba, antes dos pacotes pagos (mais visíveis, já que não custam nada). Disponibilidade
+        // real (locked/lockedReason/contagem regressiva) só é decidida em RebuildGrid, a partir
+        // de PlayerEconomyState.*DiamondsAvailable/*NextResetUtc (sincronizados por
+        // DailyRewardsService.RefreshStatusAsync em LoadPersistedShopStateAsync) — aqui só o
+        // texto/ícone/valor fixos de cada card.
+        var dailyRewardItem = NewItem("Resgate Diário",
+            "5 diamantes grátis — libera toda meia-noite (horário de Brasília).",
+            $"+{DailyRewardsService.AmountFor(DailyRewardsService.RewardType.Daily)} diamantes", _diamondIconSprite);
+        dailyRewardItem.ClaimRewardType = DailyRewardsService.RewardType.Daily;
+
+        var weeklyRewardItem = NewItem("Resgate Semanal",
+            "30 diamantes grátis — libera toda segunda-feira (horário de Brasília).",
+            $"+{DailyRewardsService.AmountFor(DailyRewardsService.RewardType.Weekly)} diamantes", _diamondIconSprite);
+        weeklyRewardItem.ClaimRewardType = DailyRewardsService.RewardType.Weekly;
+
+        var monthlyRewardItem = NewItem("Resgate Mensal",
+            "100 diamantes grátis — libera todo dia 1º do mês (horário de Brasília).",
+            $"+{DailyRewardsService.AmountFor(DailyRewardsService.RewardType.Monthly)} diamantes", _diamondIconSprite);
+        monthlyRewardItem.ClaimRewardType = DailyRewardsService.RewardType.Monthly;
+
         // Bônus de 1ª compra (+25%, arredondado pra cima) — ver NewDiamondItem. Preço em R$
         // inalterado; só a quantidade entregue na 1ª compra de CADA pacote muda.
         _items[Tab.Diamantes] = new List<ShopItem>
         {
+            dailyRewardItem,
+            weeklyRewardItem,
+            monthlyRewardItem,
             NewDiamondItem(30, "R$ 4,90", _diamondIconSprite),
             NewDiamondItem(80, "R$ 9,90", _diamondIconSprite),
             NewDiamondItem(170, "R$ 19,90", _diamondIconSprite),
@@ -334,31 +397,31 @@ public class ShopController : MonoBehaviour
         // com fallback pros mesmos valores de MONETIZACAO.md enquanto isso não carrega ainda (ou
         // se o seed nunca rodou). `Purchased` vem do contador real por jogador
         // (casePurchases/{packageId}), não mais um contador de sessão em memória.
-        var rareItem = NewItem("Personagem Raro", "Sorteio entre 19 personagens raros, sem repetição.",
+        var rareItem = NewItem("Chibers Raro", "Sorteio garantido entre chibers Raros, sem repetição",
             CasePriceLabel(PackageIdRare, cashFallback: 99.00), limit: CasePurchaseLimit(PackageIdRare, 10), accent: theme.rarityRare);
         rareItem.CasePackageId = PackageIdRare;
         rareItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdRare, out var rareCount) ? rareCount : 0;
 
-        var legendaryItem = NewItem("Personagem Legendary", "Sorteio entre 11 personagens legendary, sem repetição.",
+        var legendaryItem = NewItem("Chibers Lendário", "Sorteio garantido entre chibers Lendários, sem repetição",
             CasePriceLabel(PackageIdLegendary, cashFallback: 199.00), limit: CasePurchaseLimit(PackageIdLegendary, 3), accent: theme.rarityLegendary);
         legendaryItem.CasePackageId = PackageIdLegendary;
         legendaryItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdLegendary, out var legendaryCount) ? legendaryCount : 0;
 
-        var immortalItem = NewItem("Personagem Imortal", "Sorteio entre 3 personagens imortais, sem repetição.",
+        var immortalItem = NewItem("Chibers Imortal", "Sorteio garantido entre chibers Imortais, sem repetição",
             CasePriceLabel(PackageIdImmortal, cashFallback: 249.00), limit: CasePurchaseLimit(PackageIdImmortal, 1), accent: theme.rarityImmortal);
         immortalItem.CasePackageId = PackageIdImmortal;
         immortalItem.Purchased = CasePackageState.PurchasedCounts.TryGetValue(PackageIdImmortal, out var immortalCount) ? immortalCount : 0;
 
-        // "Próximo Personagem" (Coins, 2026-07-26) — substitui o antigo "Case Geral" (diamante,
+        // "Chibers Aleatório" (Coins, 2026-07-26) — substitui o antigo "Case Geral" (diamante,
         // `case_moeda_geral`, removido). Mesmo sorteio ponderado de raridade que o Case Geral já
         // usava (todas as 5 raridades, odds da distribuição real — ver purchaseNextCharacter.ts),
         // só que pago em Coins com preço escalando por CONTADOR DO JOGADOR (não por pacote — ver
-        // CharacterSlotCost) em vez de preço fixo. Preço mostrado a partir da contagem REAL
-        // (PlayerEconomyState.NextCharacterPurchaseCount, carregada em LoadPersistedShopStateAsync),
-        // não mais um contador de sessão.
+        // NextCharacterService.NextPurchaseCost) em vez de preço fixo. Preço mostrado a partir da
+        // contagem REAL (PlayerEconomyState.NextCharacterPurchaseCount, carregada em
+        // LoadPersistedShopStateAsync), não mais um contador de sessão.
         var nextCharacterItem = NewItem(CharacterSlotTitle,
-            "Sorteio entre TODOS os personagens do jogo, por raridade (odds da distribuição real).\nCusto aumenta a cada compra.",
-            $"{CharacterSlotCost(PlayerEconomyState.NextCharacterPurchaseCount + 1)} moedas", coinIcon);
+            "Sorteio entre todos os personagens — Normal 68% · Incomum 20% · Raro 8% · Lendário 3,5% · Imortal 0,5%. Custo aumenta a cada compra.",
+            $"{NextCharacterService.NextPurchaseCost(PlayerEconomyState.NextCharacterPurchaseCount + 1)} moedas", coinIcon);
         nextCharacterItem.IsNextCharacterPurchase = true;
 
         _items[Tab.Personagens] = new List<ShopItem>
@@ -402,18 +465,6 @@ public class ShopController : MonoBehaviour
             DiamondBonusAmount = bonusAmount,
         };
     }
-
-    // Custo em Coins da N-ésima compra de "Próximo Personagem" (unlockNumber é 1-based: 1ª
-    // compra, 2ª compra...). Tabela FINAL (2026-07-26, correção de escopo — substitui a tabela
-    // antiga de MONETIZACAO.md §6, 100/200/400/600/800/1000/+400, que valia pro card decorativo
-    // anterior). Só pra EXIBIÇÃO — a cobrança real é sempre a de purchaseNextCharacter.ts
-    // (PRICE_TABLE lá), mantida em sincronia manual com esta.
-    private static readonly int[] CharacterSlotPriceTable = { 25, 50, 100, 200, 400, 800, 1200, 1400, 1600, 1800, 2000, 2200 };
-    private const int CharacterSlotPriceStepAfterTable = 200;
-
-    private static int CharacterSlotCost(int unlockNumber) => unlockNumber <= CharacterSlotPriceTable.Length
-        ? CharacterSlotPriceTable[unlockNumber - 1]
-        : CharacterSlotPriceTable[CharacterSlotPriceTable.Length - 1] + CharacterSlotPriceStepAfterTable * (unlockNumber - CharacterSlotPriceTable.Length);
 
     // Regra de ativação (pedido do usuário, 2026-07-21 — revisada: Básico e Pro são
     // INDEPENDENTES, não existe mais "tier único"/upgrade entre os dois). Comprar soma +30 dias
@@ -586,10 +637,59 @@ public class ShopController : MonoBehaviour
         titleTxt.alignment = TextAlignmentOptions.Center;
     }
 
+    // Contador de moeda do header (2026-07-27) — MESMO estilo/tamanho do contador de diamante
+    // abaixo, posicionado à ESQUERDA dele (`CounterWidth + CounterGap` = 220+14 = 234px a mais de
+    // margem direita que o diamante, mesmo valor usado lá). Estático (sem efeito de "voando") —
+    // ver comentário do campo `_coinValueTxt` acima pro porquê.
+    private const float CounterWidth = 220f;
+    private const float CounterGap = 14f;
+
+    private void BuildCoinCounter(Transform parent)
+    {
+        var rowGo = new GameObject("CoinCounter");
+        rowGo.transform.SetParent(parent, false);
+        var rowRt = rowGo.AddComponent<RectTransform>();
+        rowRt.anchorMin = rowRt.anchorMax = new Vector2(1f, 1f);
+        rowRt.pivot = new Vector2(1f, 1f);
+        rowRt.sizeDelta = new Vector2(CounterWidth, 64f);
+        rowRt.anchoredPosition = new Vector2(-30f - CounterWidth - CounterGap, -30f);
+        var rowBg = rowGo.AddComponent<Image>();
+        rowBg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.35f), 14f);
+        rowBg.type = Image.Type.Sliced;
+
+        var layout = rowGo.AddComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(10, 14, 6, 6);
+        layout.spacing = 8f;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = true;
+
+        var iconGo = new GameObject("Icon");
+        iconGo.transform.SetParent(rowGo.transform, false);
+        iconGo.AddComponent<RectTransform>();
+        var iconLe = iconGo.AddComponent<LayoutElement>();
+        iconLe.preferredWidth = 52f; iconLe.preferredHeight = 52f;
+        var iconImg = iconGo.AddComponent<Image>();
+        iconImg.sprite = _coinIconSprite;
+        iconImg.preserveAspect = true;
+
+        var valueGo = new GameObject("Value");
+        valueGo.transform.SetParent(rowGo.transform, false);
+        valueGo.AddComponent<RectTransform>();
+        var valueLe = valueGo.AddComponent<LayoutElement>();
+        valueLe.preferredWidth = 120f; valueLe.flexibleWidth = 1f;
+        _coinValueTxt = valueGo.AddComponent<TextMeshProUGUI>();
+        _coinValueTxt.text = PlayerEconomyState.Coins.ToString();
+        _coinValueTxt.fontSize = 30f;
+        _coinValueTxt.fontStyle = FontStyles.Bold;
+        _coinValueTxt.color = theme.textOnDark;
+        _coinValueTxt.alignment = TextAlignmentOptions.MidlineLeft;
+    }
+
     // Contador de diamante do header (2026-07-21, pedido do usuário) — canto superior direito,
-    // mesmo canto/estilo do HUD de moeda do MainMenuController, mas só diamante (a Loja não vende
-    // nada com moeda ainda além do card "Próximo Personagem", que já mostra o próprio preço em
-    // moeda no card — não precisa de um segundo contador de moeda aqui). Reflete
+    // mesmo canto/estilo do HUD de moeda do MainMenuController. Reflete
     // `PlayerEconomyState.Diamonds` (mesmo campo estático usado no resto do app pro HUD de
     // moeda/diamante) — `_diamondIconRt` é o destino real do efeito de "diamantes voando"
     // (SpawnDiamondBurst); `_diamondValueTxt`/`_displayedDiamonds` são atualizados aos poucos
@@ -603,7 +703,7 @@ public class ShopController : MonoBehaviour
         var rowRt = rowGo.AddComponent<RectTransform>();
         rowRt.anchorMin = rowRt.anchorMax = new Vector2(1f, 1f);
         rowRt.pivot = new Vector2(1f, 1f);
-        rowRt.sizeDelta = new Vector2(220f, 64f);
+        rowRt.sizeDelta = new Vector2(CounterWidth, 64f);
         rowRt.anchoredPosition = new Vector2(-30f, -30f);
         var rowBg = rowGo.AddComponent<Image>();
         rowBg.sprite = UIShapeUtil.RoundedRect(new Color(0f, 0f, 0f, 0.35f), 14f);
@@ -705,6 +805,10 @@ public class ShopController : MonoBehaviour
 
         Debug.Log($"[Shop][DEV] +{DevCoinGrantAmount} coins (saldo agora: {PlayerEconomyState.Coins}).");
         if (label != null) label.text = $"Saldo: {PlayerEconomyState.Coins} coins";
+        if (_coinValueTxt != null) _coinValueTxt.text = PlayerEconomyState.Coins.ToString();
+        // Recalcula a bolinha de "compra disponível" (tab + card) — sem isso, o botão DEV só
+        // provaria o crédito de moeda em si, não o indicador que ele existe pra facilitar testar.
+        RebuildGrid();
     }
 #endif
 
@@ -828,8 +932,33 @@ public class ShopController : MonoBehaviour
             txt.fontSizeMin = 14f;
             txt.fontSizeMax = 30f;
 
+            if (tab == Tab.Personagens) _personagensTabBadge = BuildAvailableBadge(btnGo.transform);
+            if (tab == Tab.Diamantes) _diamantesTabBadge = BuildAvailableBadge(btnGo.transform);
+
             _tabBackgrounds[tab] = img;
         }
+    }
+
+    // Bolinha vermelha reutilizável (2026-07-27) — canto superior direito do `parent`, mesmo
+    // círculo em todos os 3 lugares (aba PERSONAGENS, card "Chibers Aleatório" aqui na Loja, e o
+    // botão LOJA do Main Menu tem o próprio, `MainMenuController.BuildAvailableBadge`, já que fica
+    // numa cena/classe diferente — mesmo visual, sem componente compartilhado só por isso).
+    // `UIShapeUtil.RoundedRect` com raio = metade do lado vira um círculo, mesmo truque já usado
+    // pro badge circular de `AttributePipBar`. Começa inativo — quem chama decide quando ativar.
+    private GameObject BuildAvailableBadge(Transform parent, bool startActive = false)
+    {
+        var badgeGo = new GameObject("AvailableBadge");
+        badgeGo.transform.SetParent(parent, false);
+        var rt = badgeGo.AddComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.sizeDelta = new Vector2(22f, 22f);
+        rt.anchoredPosition = new Vector2(-6f, -6f);
+        var img = badgeGo.AddComponent<Image>();
+        img.sprite = UIShapeUtil.RoundedRect(theme.danger, 11f);
+        img.raycastTarget = false;
+        badgeGo.SetActive(startActive);
+        return badgeGo;
     }
 
     private static string TabLabel(Tab tab) => tab switch
@@ -939,7 +1068,43 @@ public class ShopController : MonoBehaviour
         bool isPassesTab = _activeTab == Tab.Passes;
         bool isProgressaoTab = _activeTab == Tab.Progressao;
 
-        foreach (var item in _items[_activeTab])
+        // Bolinha vermelha de "compra disponível" (2026-07-27) — reavaliada aqui porque
+        // `RebuildGrid` já roda em todo ponto que muda `PlayerEconomyState.Coins`/
+        // `NextCharacterPurchaseCount` (load persistido, troca de aba, botão DEV, compra de
+        // "Chibers Aleatório"), independente de qual aba está ativa no momento — a aba PERSONAGENS
+        // precisa refletir o estado real mesmo enquanto o jogador está vendo outra aba.
+        bool canAffordNext = NextCharacterService.CanAffordNextPurchase();
+        if (_personagensTabBadge != null) _personagensTabBadge.SetActive(canAffordNext);
+
+        // Mesmo indicador, aba DIAMANTES (2026-07-27) — QUALQUER um dos 3 resgates gratuitos
+        // disponível. Ver comentário do campo `_diamantesTabBadge`.
+        bool anyDiamondClaim = DailyRewardsService.AnyClaimAvailable;
+        if (_diamantesTabBadge != null) _diamantesTabBadge.SetActive(anyDiamondClaim);
+
+        // Reordena a aba DIAMANTES (2026-07-27, pedido do usuário): resgate já feito (indisponível
+        // até o próximo período) vai pro FINAL da lista — mais à direita no grid (FixedRowCount
+        // preenche coluna a coluna). Partição ESTÁVEL (não `List.Sort`, que não garante ordem
+        // relativa) em duas listas — "ainda disponível ou não é resgate" primeiro, "resgate já
+        // feito" depois — preservando a ordem original dentro de cada grupo (os 3 cards de resgate
+        // continuam Diário/Semanal/Mensal entre si, e os 8 pacotes pagos continuam na mesma ordem).
+        // Recalculada a cada `RebuildGrid()` (mesmo ponto que já reavalia locked/countdown/badge
+        // acima), então um resgate reabilitado (`RefreshDiamondRewardsAndRebuildAsync`) volta
+        // sozinho pro início na próxima reconstrução.
+        var itemsToRender = _items[_activeTab];
+        if (_activeTab == Tab.Diamantes)
+        {
+            var notClaimed = new List<ShopItem>();
+            var alreadyClaimed = new List<ShopItem>();
+            foreach (var it in itemsToRender)
+            {
+                bool claimedLocked = it.ClaimRewardType.HasValue && !DailyRewardsService.IsAvailable(it.ClaimRewardType.Value);
+                (claimedLocked ? alreadyClaimed : notClaimed).Add(it);
+            }
+            notClaimed.AddRange(alreadyClaimed);
+            itemsToRender = notClaimed;
+        }
+
+        foreach (var item in itemsToRender)
         {
             var cardGo = new GameObject("Card", typeof(RectTransform));
             cardGo.transform.SetParent(_contentRoot, false);
@@ -952,13 +1117,62 @@ public class ShopController : MonoBehaviour
             string statusOverride = isPassesTab ? PassStatusOverride(item.Title) : null;
             System.Action onInfo = isPassesTab ? ShowPassInfoPopup : (System.Action)null;
             // Progressão (2026-07-21): Slot 2/3 bloqueados até o slot anterior ser comprado — ver
-            // ProgressionLockState. `false`/`null` pras outras 4 abas, nunca bloqueadas por
-            // pré-requisito.
-            (bool locked, string lockedReason) = isProgressaoTab ? ProgressionLockState(item) : (false, null);
+            // ProgressionLockState. Resgates de diamante (2026-07-27): "bloqueado" reaproveita o
+            // MESMO mecanismo de trava (botão desabilitado, sem trocar o texto do botão) só que
+            // pra "ainda não liberou de novo" em vez de "requer o slot anterior" — `lockedReason`
+            // começa com a contagem regressiva ESTÁTICA (substituída por um `CountdownLabel` logo
+            // abaixo, que a mantém viva tick a tick). `false`/`null` pras outras 3 abas.
+            (bool locked, string lockedReason) = isProgressaoTab ? ProgressionLockState(item)
+                : item.ClaimRewardType.HasValue ? ClaimRewardLockState(item.ClaimRewardType.Value)
+                : (false, null);
+            string buyLabel = item.ClaimRewardType.HasValue ? "RESGATAR" : null;
             card.Build(theme, item.Title, item.Subtitle, item.PriceLabel, item.Icon, item.AccentColor,
                 item.Purchased, item.PurchaseLimit, cardH, soldOutLabel: null, statusOverride: statusOverride,
-                onInfo: onInfo, locked: locked, lockedReason: lockedReason, onBuy: () => OnBuyClicked(capturedItem, card));
+                onInfo: onInfo, locked: locked, lockedReason: lockedReason, onBuy: () => OnBuyClicked(capturedItem, card),
+                buyLabel: buyLabel);
+
+            // Mesma bolinha no próprio card "Chibers Aleatório" (só existe na aba PERSONAGENS, mas
+            // o guard por `IsNextCharacterPurchase` já restringe sozinho, sem precisar checar a
+            // aba aqui) e, agora, em cada card de resgate disponível na aba DIAMANTES.
+            if (item.IsNextCharacterPurchase && canAffordNext) BuildAvailableBadge(cardGo.transform, startActive: true);
+            if (item.ClaimRewardType.HasValue && !locked) BuildAvailableBadge(cardGo.transform, startActive: true);
+
+            // Contagem regressiva viva (2026-07-27) — só quando bloqueado (aguardando o próximo
+            // período). Reaproveita `CountdownLabel` (mesmo componente do timer de energia,
+            // `MainMenuCharacterPreview.BuildEnergyTimer`/`MainMenuController.
+            // ShowRefillConfirmPopup`) em vez de escrever um polling próprio. `onDone` dispara um
+            // re-sync com o servidor + reconstrói a grade assim que o countdown chega em zero —
+            // mesmo princípio de `PlayerEconomyState.EnergyCountdownAtZero`, sem esperar o jogador
+            // trocar de aba manualmente pra ver o botão reabilitado.
+            if (item.ClaimRewardType.HasValue && locked)
+            {
+                var rewardType = item.ClaimRewardType.Value;
+                var countdown = cardGo.AddComponent<CountdownLabel>();
+                countdown.Init(card.StatusText,
+                    () => PlayerEconomyState.FormatCountdownUntil(DailyRewardsService.NextResetUtcFor(rewardType)),
+                    tickInterval: 1f,
+                    isDoneCheck: () => DateTime.UtcNow >= DailyRewardsService.NextResetUtcFor(rewardType),
+                    onDone: () => _ = RefreshDiamondRewardsAndRebuildAsync());
+            }
         }
+    }
+
+    // Trava de disponibilidade dos resgates de diamante (2026-07-27) — mesmo formato de retorno
+    // de ProgressionLockState (bool + texto), só a fonte de verdade muda: PlayerEconomyState.
+    // *DiamondsAvailable/*NextResetUtc (sincronizados por DailyRewardsService.RefreshStatusAsync),
+    // nunca recalculado de forma independente aqui.
+    private (bool locked, string lockedReason) ClaimRewardLockState(DailyRewardsService.RewardType type)
+    {
+        if (DailyRewardsService.IsAvailable(type)) return (false, null);
+        return (true, PlayerEconomyState.FormatCountdownUntil(DailyRewardsService.NextResetUtcFor(type)));
+    }
+
+    // Re-sincroniza o estado dos resgates com o servidor e reconstrói a grade — chamado quando o
+    // countdown local de um card bloqueado chega em zero (ver CountdownLabel.onDone acima).
+    private async Task RefreshDiamondRewardsAndRebuildAsync()
+    {
+        if (AuthService.IsSignedIn) await DailyRewardsService.RefreshStatusAsync(AuthService.CurrentUser.UserId);
+        RebuildGrid();
     }
 
     // FASE 1 (placeholder, pedido explícito do usuário): nenhuma gravação real — só log +
@@ -984,6 +1198,15 @@ public class ShopController : MonoBehaviour
         if (item.IsNextCharacterPurchase)
         {
             _ = HandleNextCharacterPurchaseAsync(item, card);
+            return;
+        }
+
+        // Resgates gratuitos de diamante (2026-07-27) — mesmo desvio acima: chama
+        // claimDailyDiamonds/claimWeeklyDiamonds/claimMonthlyDiamonds (assíncrono), nunca credita
+        // nada localmente antes da resposta do servidor.
+        if (item.ClaimRewardType.HasValue)
+        {
+            _ = HandleClaimRewardAsync(item, card, item.ClaimRewardType.Value);
             return;
         }
 
@@ -1233,6 +1456,7 @@ public class ShopController : MonoBehaviour
         // espelha localmente pro HUD de moeda não esperar um reload de PlayerEconomyState.
         PlayerEconomyState.Coins = result.NewCoinsBalance;
         PlayerEconomyState.NextCharacterPurchaseCount++;
+        if (_coinValueTxt != null) _coinValueTxt.text = PlayerEconomyState.Coins.ToString();
 
         item.PriceLabel = $"{result.NextPurchaseCost} moedas";
         RebuildGrid();
@@ -1242,5 +1466,33 @@ public class ShopController : MonoBehaviour
         // acima, cada um travado numa raridade única — ver comentário em CaseOpeningPopup.Show).
         CaseOpeningPopup.Show(theme, characterDatabase, result.ReelPoolCharacterTypeIds, result.WonCharacterTypeId,
             result.GrantedCharacterId, onClosed: null, weightedRarityFill: true);
+    }
+
+    // Resgates gratuitos de diamante — Diário/Semanal/Mensal (2026-07-27) — chama a Cloud
+    // Function correspondente (DailyRewardsService), nunca credita nada localmente antes da
+    // resposta do servidor. Mesmo formato de HandleNextCharacterPurchaseAsync acima; reaproveita
+    // SpawnDiamondBurst pro mesmo efeito de "diamantes voando" até o contador do header que a
+    // compra paga já usa.
+    private async Task HandleClaimRewardAsync(ShopItem item, ShopCardUI card, DailyRewardsService.RewardType type)
+    {
+        if (!AuthService.IsSignedIn)
+        {
+            ShowInfoPopup("É necessário estar logado para resgatar diamantes.");
+            return;
+        }
+
+        var result = await DailyRewardsService.ClaimAsync(type);
+        if (!result.Success)
+        {
+            string message = result.ErrorCode == "failed-precondition"
+                ? "Este resgate já foi feito neste período — volte depois do próximo horário de liberação."
+                : "Não foi possível completar o resgate. Tente novamente.";
+            ShowInfoPopup(message);
+            RebuildGrid(); // reflete o estado real (ClaimAsync já resincronizou em caso de corrida)
+            return;
+        }
+
+        SpawnDiamondBurst(card, result.DiamondsGranted);
+        RebuildGrid();
     }
 }

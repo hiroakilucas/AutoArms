@@ -64,10 +64,25 @@ public class ShopCardUI : MonoBehaviour
     private bool _locked;
     private string _lockedReason;
 
+    // Rótulo do botão de ação (2026-07-27, pedido do usuário — cards de resgate gratuito da aba
+    // Diamantes: "RESGATAR" em vez de "COMPRAR", nos dois estados — disponível e bloqueado/
+    // contagem regressiva). `null` (default) mantém "COMPRAR" pra todo card existente, sem mudar
+    // nenhum comportamento anterior a esta mudança.
+    private string _buyLabel;
+
     // Posição de MUNDO do botão "COMPRAR" (2026-07-21, pedido do usuário — efeito de "diamante
     // voando" deve sair do BOTÃO especificamente, não do centro do card inteiro). Fallback pro
     // centro do card só se o botão nunca foi construído (não deveria acontecer em uso normal).
     public Vector3 BuyButtonWorldPosition => _buyBtn != null ? _buyBtn.transform.position : transform.position;
+
+    // Exposto (2026-07-27) pra permitir anexar um `CountdownLabel` por cima (cards de resgate
+    // gratuito — contagem regressiva até o próximo período, ver ShopController) sem duplicar o
+    // componente de ticking já usado pelo timer de energia (MainMenuCharacterPreview/
+    // MainMenuController). `RefreshPurchaseState`/`_lockedReason` continuam controlando o texto
+    // ESTÁTICO (usado por todo card que não precisa de contagem regressiva); o `CountdownLabel`
+    // anexado por fora simplesmente sobrescreve esse texto a cada tick, sem conflito — os dois
+    // nunca escrevem no mesmo frame porque `RefreshPurchaseState` só roda uma vez por rebuild.
+    public TMP_Text StatusText => _statusTxt;
 
     // `soldOutLabel` (2026-07-20, pedido do usuário — Passes mensais): texto do botão quando o
     // item está esgotado, no lugar do "ESGOTADO" genérico — usado pelos Passes pra mostrar
@@ -80,12 +95,13 @@ public class ShopCardUI : MonoBehaviour
     public void Build(UITheme theme, string title, string subtitle, string priceLabel, Sprite icon,
         Color? accentColor, int purchased, int limit, float cardHeight, string soldOutLabel = null,
         string statusOverride = null, System.Action onInfo = null, bool locked = false,
-        string lockedReason = null, System.Action onBuy = null)
+        string lockedReason = null, System.Action onBuy = null, string buyLabel = null)
     {
         _soldOutLabel = soldOutLabel;
         _statusOverride = statusOverride;
         _locked = locked;
         _lockedReason = lockedReason;
+        _buyLabel = buyLabel ?? "COMPRAR";
         var rt = (RectTransform)transform;
         _buyColor = theme.primaryAction;
 
@@ -281,7 +297,7 @@ public class ShopCardUI : MonoBehaviour
             _statusTxt.text = _lockedReason ?? "Bloqueado";
             _buyBtn.interactable = false;
             _buyBg.color = SoldOutTint;
-            _buyLabelTxt.text = "COMPRAR";
+            _buyLabelTxt.text = _buyLabel;
             return;
         }
 
@@ -294,15 +310,16 @@ public class ShopCardUI : MonoBehaviour
             _statusTxt.text = (soldOut && _soldOutLabel != null) ? "" : $"{remaining}/{limit} restantes";
             _buyBtn.interactable = !soldOut;
             _buyBg.color = soldOut ? SoldOutTint : Color.white;
-            _buyLabelTxt.text = soldOut ? (_soldOutLabel ?? "ESGOTADO") : "COMPRAR";
+            _buyLabelTxt.text = soldOut ? (_soldOutLabel ?? "ESGOTADO") : _buyLabel;
         }
         else
         {
             // _statusOverride (Passes — "Ativo — N dias restantes") tem prioridade sobre o
-            // "Comprado Nx (sessão)" genérico; botão continua "COMPRAR" nos dois casos — Passes
-            // precisam continuar clicáveis pra acumular dias (ver ApplyPassPurchase).
+            // "Comprado Nx (sessão)" genérico; botão continua com o label de sempre nos dois
+            // casos — Passes precisam continuar clicáveis pra acumular dias (ver
+            // ApplyPassPurchase).
             _statusTxt.text = _statusOverride ?? (purchased > 0 ? $"Comprado {purchased}x (sessão)" : "");
-            _buyLabelTxt.text = "COMPRAR";
+            _buyLabelTxt.text = _buyLabel;
         }
     }
 }

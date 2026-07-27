@@ -9,3 +9,4 @@ export { rebirthCharacter } from "./rebirthCharacter";
 export { rerollRebirthGrant } from "./rerollRebirthGrant";
 export { rerollLevelUpBoxes } from "./rerollLevelUpBoxes";
 export { purchaseNextCharacter } from "./purchaseNextCharacter";
+export { claimDailyDiamonds, claimWeeklyDiamonds, claimMonthlyDiamonds } from "./dailyDiamondRewards";

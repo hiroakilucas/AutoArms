@@ -117,38 +117,13 @@ public static class EnergyService
         }
     }
 
-    // Escreve um campo descartável com FieldValue.ServerTimestamp e lê de volta forçando
-    // Source.Server (ignora cache local) — o valor resolvido é a hora real do servidor no
-    // instante da escrita, sem depender do relógio deste device.
-    //
-    // **Bug real corrigido (2026-07-21)**: `UpdateAsync` completa assim que o write é aceito, mas
-    // isso nem sempre coincide com o sentinela `FieldValue.ServerTimestamp` já estar resolvido no
-    // instante exato da 1ª leitura seguinte via `Source.Server` — corrida rara reportada pelo
-    // usuário ("Unable to convert null value to Firebase.Firestore.Timestamp"), porque `GetValue
-    // <Timestamp>` (que LANÇA exceção pra campo nulo/ausente) era usado direto na leitura. Trocado
-    // por `TryGetValue` (não lança) + até 3 tentativas com um respiro curto entre elas — cobre a
-    // janela de corrida sem mudar o caminho normal (1ª tentativa continua imediata, sem delay
-    // nenhum quando já resolve de primeira, que é o caso comum). `DateTime.UtcNow` do device só
-    // entra como ÚLTIMO recurso, se as 3 tentativas falharem — nunca no caminho normal, então não
-    // reabre a brecha de "trapacear adiantando o relógio local" que este método existe pra evitar.
-    private static async Task<DateTime> ReadServerNowAsync(DocumentReference doc)
-    {
-        await doc.UpdateAsync(new Dictionary<string, object> { { ServerTimeProbeField, FieldValue.ServerTimestamp } });
-
-        const int maxAttempts = 3;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            DocumentSnapshot snap = await doc.GetSnapshotAsync(Source.Server);
-            if (snap.TryGetValue(ServerTimeProbeField, out Timestamp probe))
-                return probe.ToDateTime();
-
-            if (attempt < maxAttempts) await Task.Delay(250);
-        }
-
-        Debug.LogError("[EnergyService] ReadServerNowAsync: sentinela de hora do servidor não resolveu " +
-            "depois de 3 tentativas — usando DateTime.UtcNow do device como último recurso.");
-        return DateTime.UtcNow;
-    }
+    // Extraído pra FirestoreService.ReadServerNowAsync (2026-07-27) — mesma implementação (grava
+    // um campo descartável com FieldValue.ServerTimestamp, lê de volta forçando Source.Server,
+    // até 3 tentativas), generalizada pra qualquer documento/campo depois que DailyRewardsService
+    // precisou do MESMO truque pros resgates de diamante. Este wrapper só existe pra não precisar
+    // mudar as 3 call sites já existentes abaixo.
+    private static Task<DateTime> ReadServerNowAsync(DocumentReference doc) =>
+        FirestoreService.ReadServerNowAsync(doc, ServerTimeProbeField, "EnergyService");
 
     // Consome 1 energia (chamado só depois de GetOrRegenAsync confirmar current > 0) — NÃO mexe
     // em lastEnergyTimestamp: consumir energia não deve resetar/adiantar o relógio de

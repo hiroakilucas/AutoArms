@@ -825,7 +825,6 @@ public class CharacterPanel : MonoBehaviour
         _petsEmpty = MakeMsg(content, "Nenhum pet ainda");
 
         BuildDetailsToggle(content);
-        BuildResetCharacterButton(content);
         BuildRebirthButton(content);
     }
 
@@ -1248,177 +1247,17 @@ public class CharacterPanel : MonoBehaviour
 
     // Profile atualmente exibido — mesma expressão usada em RefreshAll (_overrideProfile tem
     // prioridade sobre _holder.currentProfile, ver comentário em SetProfile) — extraída aqui pra
-    // ser reaproveitada por fora de RefreshAll (ver OnResetCharacterClicked abaixo).
+    // ser reaproveitada por fora de RefreshAll (ver BuildRebirthButton abaixo).
     private PlayerProfile CurrentProfile() => _overrideProfile != null ? _overrideProfile : _holder?.currentProfile;
 
-    // "Resetar Personagem" (2026-07-21, pedido do usuário) — botão destrutivo no final do
-    // Expanded (depois de Habilidades/Armas/Pets/Passivas), mesmo estilo/posição de
-    // BuildDetailsToggle, cor `danger` pra sinalizar ação irreversível. Mecanismo PARALELO ao
-    // "Reset de Build" do roadmap (ROADMAP_FUTURO.md Fase 4 — ainda não implementado, custaria
-    // diamante e manteria o nível atual): este reseta pro Level 1 (mesma lógica de
-    // Tools > AutoArms > Reset All Profiles to Level 1) e GERA moeda em vez de custar diamante.
-    private void BuildResetCharacterButton(Transform content)
-    {
-        var btnGo = new GameObject("ResetCharacterButton");
-        btnGo.transform.SetParent(content, false);
-        btnGo.AddComponent<RectTransform>();
-        var le = btnGo.AddComponent<LayoutElement>();
-        le.preferredHeight = _bottomAnchored ? 64f : 44f; le.flexibleWidth = 1f;
-        var btnImg = btnGo.AddComponent<Image>();
-        btnImg.sprite = UIShapeUtil.RoundedRect(_theme.danger, 10f);
-        btnImg.type = Image.Type.Sliced;
-        var btn = btnGo.AddComponent<Button>();
-        btn.targetGraphic = btnImg;
-        btn.onClick.AddListener(OnResetCharacterClicked);
-        var label = AddLabel(btnGo, "RESETAR PERSONAGEM", _bottomAnchored ? 40 : 18, TextColor);
-        label.fontStyle = FontStyles.Bold;
-    }
-
-    private void OnResetCharacterClicked()
-    {
-        var profile = CurrentProfile();
-        if (profile == null) return;
-
-        // CharacterResetSettings (2026-07-21) — mesmo padrão de EnergySettings: ScriptableObject
-        // em Assets/Resources/, carregado por Resources.Load sem precisar wirear no Inspector
-        // (CharacterPanel é instanciado em 3 telas diferentes — 01_MainMenu/02_SelectCharacter/
-        // 03_Arsenal — wirear um campo novo em todas exigiria editar as 3 cenas).
-        var settings = Resources.Load<CharacterResetSettings>("CharacterResetSettings");
-        int coinsPerLevel = settings != null ? settings.coinsPerLevel : 10;
-        int coinsReward = profile.level * coinsPerLevel;
-
-        ShowResetConfirmPopup(profile, coinsPerLevel, coinsReward);
-    }
-
-    // Confirmação explícita (pedido do usuário — "ação destrutiva, precisa de confirmação
-    // explícita, não pode ser 1 clique só") — mesmo idioma visual de MainMenuController.
-    // BuildPopup/ShopController.ShowPassInfoPopup (overlay+painel+texto+botões), construído sob
-    // demanda e descartado ao fechar; canvas próprio com sortingOrder alto o bastante pra ficar
-    // acima do popup de detalhe de skill/arma deste mesmo CharacterPanel (_canvasGo, sortingOrder
-    // 20) e de qualquer outra coisa da tela onde o painel estiver sendo usado.
-    private void ShowResetConfirmPopup(PlayerProfile profile, int coinsPerLevel, int coinsReward)
-    {
-        var canvasGo = new GameObject("ResetConfirmPopupCanvas (temp)");
-        var canvas = canvasGo.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 2000;
-        var scaler = canvasGo.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920, 1080);
-        canvasGo.AddComponent<GraphicRaycaster>();
-
-        var overlayGo = new GameObject("Overlay");
-        overlayGo.transform.SetParent(canvasGo.transform, false);
-        var overlayRt = overlayGo.AddComponent<RectTransform>();
-        overlayRt.anchorMin = Vector2.zero; overlayRt.anchorMax = Vector2.one;
-        overlayRt.offsetMin = overlayRt.offsetMax = Vector2.zero;
-        var overlayImg = overlayGo.AddComponent<Image>();
-        overlayImg.color = new Color(0f, 0f, 0f, 0.7f);
-        var overlayBtn = overlayGo.AddComponent<Button>();
-        overlayBtn.targetGraphic = overlayImg;
-        overlayBtn.transition = Selectable.Transition.None;
-        overlayBtn.onClick.AddListener(() => Destroy(canvasGo)); // clicar fora cancela
-
-        var panelGo = new GameObject("Panel");
-        panelGo.transform.SetParent(canvasGo.transform, false);
-        var panelRt = panelGo.AddComponent<RectTransform>();
-        panelRt.anchorMin = panelRt.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRt.sizeDelta = new Vector2(680f, 420f);
-        panelRt.anchoredPosition = Vector2.zero;
-        var panelImg = panelGo.AddComponent<Image>();
-        panelImg.sprite = UIShapeUtil.RoundedRect(_theme.panelBackgroundAlt, 24f);
-        panelImg.type = Image.Type.Sliced;
-        var panelBtn = panelGo.AddComponent<Button>(); // sem onClick — só bloqueia o bubbling pro overlay
-        panelBtn.targetGraphic = panelImg;
-
-        var msgGo = new GameObject("Message");
-        msgGo.transform.SetParent(panelGo.transform, false);
-        var msgRt = msgGo.AddComponent<RectTransform>();
-        msgRt.anchorMin = new Vector2(0.08f, 0.30f); msgRt.anchorMax = new Vector2(0.92f, 0.92f);
-        msgRt.offsetMin = msgRt.offsetMax = Vector2.zero;
-        var msgTxt = msgGo.AddComponent<TextMeshProUGUI>();
-        msgTxt.text = $"Resetar {profile.profileName}?\n\n" +
-            $"Você vai PERDER todo o progresso de nível, status, skills, armas e pets deste " +
-            $"personagem, voltando ao Level 1.\n\n" +
-            $"Em troca, recebe {coinsReward} moedas (Level {profile.level} × {coinsPerLevel} moedas/nível).\n\n" +
-            $"Essa ação não pode ser desfeita.";
-        msgTxt.fontSize = 24;
-        msgTxt.color = _theme.textOnDark;
-        msgTxt.alignment = TextAlignmentOptions.Center;
-        msgTxt.enableWordWrapping = true;
-
-        var confirmGo = new GameObject("BtnConfirm");
-        confirmGo.transform.SetParent(panelGo.transform, false);
-        var confirmRt = confirmGo.AddComponent<RectTransform>();
-        confirmRt.anchorMin = confirmRt.anchorMax = new Vector2(0.73f, 0.14f);
-        confirmRt.sizeDelta = new Vector2(280f, 64f);
-        confirmRt.anchoredPosition = Vector2.zero;
-        var confirmImg = confirmGo.AddComponent<Image>();
-        confirmImg.sprite = UIShapeUtil.RoundedRect(_theme.danger, 14f);
-        confirmImg.type = Image.Type.Sliced;
-        var confirmBtn = confirmGo.AddComponent<Button>();
-        confirmBtn.targetGraphic = confirmImg;
-        confirmBtn.onClick.AddListener(() => { Destroy(canvasGo); ExecuteReset(profile, coinsReward); });
-        AddLabel(confirmGo, "RESETAR", 20, _theme.textOnDark).fontStyle = FontStyles.Bold;
-
-        var cancelGo = new GameObject("BtnCancel");
-        cancelGo.transform.SetParent(panelGo.transform, false);
-        var cancelRt = cancelGo.AddComponent<RectTransform>();
-        cancelRt.anchorMin = cancelRt.anchorMax = new Vector2(0.27f, 0.14f);
-        cancelRt.sizeDelta = new Vector2(280f, 64f);
-        cancelRt.anchoredPosition = Vector2.zero;
-        var cancelImg = cancelGo.AddComponent<Image>();
-        cancelImg.sprite = UIShapeUtil.RoundedRect(_theme.secondaryButtonAlt, 14f);
-        cancelImg.type = Image.Type.Sliced;
-        var cancelBtn = cancelGo.AddComponent<Button>();
-        cancelBtn.targetGraphic = cancelImg;
-        cancelBtn.onClick.AddListener(() => Destroy(canvasGo));
-        AddLabel(cancelGo, "CANCELAR", 20, _theme.textOnDark).fontStyle = FontStyles.Bold;
-    }
-
-    // Reseta o profile pro Level 1 — MESMA lógica de campos de
-    // Tools > AutoArms > Reset All Profiles to Level 1 (Assets/Editor/CharacterCreationEditor.cs,
-    // ferramenta de Editor já existente): level/xpCurrent/battlesRemaining/xpRequired +
-    // HP/STR/AGI/SPD re-sorteados via CharacterCreation.GenerateLevel1Stats() + skills/pets/armas
-    // zerados. Persistido de verdade via LocalSaveService.Save (local + Firestore, mesmo caminho
-    // de sempre — ver ApplyBonus em CombatResultPanel pro mesmo padrão de EditorUtility.SetDirty
-    // + LocalSaveService.Save). Moeda creditada em cima do saldo real (WalletService, mesmo
-    // documento users/{uid} da Loja) quando há conta logada; sem conta, cai no fake local de
-    // sempre (PlayerEconomyState.Coins), mesmo padrão de ShopController.OnBuyClicked.
-    private void ExecuteReset(PlayerProfile profile, int coinsReward)
-    {
-        profile.level = 1;
-        profile.xpCurrent = 0;
-        profile.battlesRemaining = 6;
-        profile.xpRequired = XpSystem.XpRequired(1);
-
-        CharacterStats resetStats = CharacterCreation.GenerateLevel1Stats();
-        profile.maxHealth = resetStats.maxHealth;
-        profile.str = resetStats.str;
-        profile.agility = resetStats.agility;
-        profile.speed = resetStats.speed;
-
-        profile.skills.Clear();
-        profile.pets.Clear();
-        profile.weapons.Clear();
-
-#if UNITY_EDITOR
-        UnityEditor.EditorUtility.SetDirty(profile);
-#endif
-        LocalSaveService.Save(profile);
-
-        if (AuthService.IsSignedIn) _ = WalletService.AddCoinsAsync(AuthService.CurrentUser.UserId, coinsReward);
-        else PlayerEconomyState.Coins += coinsReward;
-
-        RefreshAll();
-    }
-
-    // "Renascimento" (Reset Nível 10+, 2026-07-26) — feature NOVA, separada do "Resetar
-    // Personagem" acima: só libera em level >= 10, DEBITA moeda (via Cloud Function
-    // rebirthCharacter, nunca client-side) e CONCEDE N skills/armas/pets aleatórios (pela
+    // "Renascimento" (Reset Nível 10+) — só libera em level >= 10, CREDITA moeda (via Cloud
+    // Function rebirthCharacter, nunca client-side) e CONCEDE N skills/armas/pets aleatórios (pela
     // raridade do personagem) em vez de limpar o loadout. Requer conta logada + personagem com
     // `characterId` real (documento em users/{uid}/characters) — personagens locais/pré-autorados
-    // sem conta sincronizada não têm onde a Cloud Function gravar o resultado.
+    // sem conta sincronizada não têm onde a Cloud Function gravar o resultado. Substitui por
+    // completo o antigo botão "Resetar Personagem" (2026-07-21, removido 2026-07-27 — gratuito,
+    // sem gate de level, client-side puro) — Renascimento cobre o mesmo papel em todos os
+    // aspectos (reset pro Level 1 + crédito de moeda), com a vantagem de ainda conceder itens.
     private void BuildRebirthButton(Transform content)
     {
         var btnGo = new GameObject("RebirthButton");
@@ -1470,8 +1309,9 @@ public class CharacterPanel : MonoBehaviour
         ShowRebirthConfirmPopup(profile, coinRewardPerLevel, reward);
     }
 
-    // Mesmo idioma visual de ShowResetConfirmPopup (overlay+painel+2 botões, confirmação
-    // explícita pra ação destrutiva) — Renascimento é GRATUITO (correção de escopo, 2026-07-26):
+    // Mesmo idioma visual do antigo popup de confirmação do "Resetar Personagem" (removido
+    // 2026-07-27) — overlay+painel+2 botões, confirmação explícita pra ação destrutiva.
+    // Renascimento é GRATUITO (correção de escopo, 2026-07-26):
     // o jogador não paga nada, GANHA moedas e itens novos, mas ainda PERDE o progresso/loadout
     // atual, por isso a confirmação explícita continua necessária.
     private void ShowRebirthConfirmPopup(PlayerProfile profile, int coinRewardPerLevel, int reward)
@@ -1776,17 +1616,9 @@ public class CharacterPanel : MonoBehaviour
         return go.transform;
     }
 
-    // Cor da borda por tier — T1 bronze, T2 prata, T3 ouro (ver UITheme). Qualquer tier fora de
-    // 1-3 (não existe hoje) cai no tom mais alto (ouro).
-    private Color TierColor(int tier)
-    {
-        switch (tier)
-        {
-            case 1: return _theme.tierBronze;
-            case 2: return _theme.tierSilver;
-            default: return _theme.tierGold;
-        }
-    }
+    // Cor da borda por tier — centralizada em UITheme.TierColor (2026-07-27, ver comentário lá):
+    // T1 cinza/T2 verde/T3 azul, mesma progressão da raridade de personagem.
+    private Color TierColor(int tier) => _theme.TierColor(tier);
 
     // Célula quadrada só com ícone + borda colorida por tier — usada tanto pra Skills quanto
     // pra Armas, e reaproveitada (2026-07-07) pelo ícone no topo do popup de detalhe (mesmo

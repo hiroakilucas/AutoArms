@@ -1,5 +1,143 @@
 # AutoArms — Changelog
 
+- 2026-07-27: **Aba Diamantes reordenada — resgate já feito vai pro final do grid** (pedido do
+  usuário) — `ShopController.RebuildGrid` particiona (partição ESTÁVEL, não `List.Sort`) os itens
+  da aba em "disponível ou não é resgate" primeiro, "resgate já feito" depois, mantendo a ordem
+  relativa dentro de cada grupo (Diário/Semanal/Mensal entre si, os 8 pacotes pagos entre si).
+  Recalculado a cada `RebuildGrid()` — um resgate que reabilita sozinho (countdown chegou a zero)
+  volta pro início na próxima reconstrução.
+- 2026-07-27: **Contagem regressiva dos 3 botões de resgate de diamante passou a mostrar dias**
+  (pedido do usuário) — `PlayerEconomyState.FormatCountdownUntil`: >= 1 dia de sobra mostra
+  "N dias"/"1 dia" (arredondado pra cima); abaixo de 1 dia volta pro `H:MM:SS` de sempre. Evita o
+  contador Semanal/Mensal mostrar algo tipo "144:00:00" na maior parte do tempo.
+- 2026-07-27: **2ª rodada de bugs reais corrigidos nos resgates de diamante, reportados pelo
+  usuário depois da correção anterior**:
+  - `Unable to convert null value to Firebase.Firestore.Timestamp` — `FirestoreService.
+    ReadServerNowAsync` usava `snap.TryGetValue<Timestamp>(...)`, mas essa versão do SDK do
+    Firebase Unity PODE lançar essa exceção em vez de devolver `false` quando o valor do probe
+    ainda está resolvendo no servidor (mesma corrida rara já documentada no histórico de
+    `EnergyService`, só que o `TryGetValue` não é tão "Try" assim nesse caso específico) — a
+    exceção saía direto do loop de retry (3 tentativas com 250ms de intervalo, pensado
+    exatamente pra cobrir essa janela), nunca chegando na 2ª/3ª tentativa. Corrigido com um
+    try/catch por tentativa, tratando a exceção como "ainda não resolveu" em vez de abortar.
+  - `Missing or insufficient permissions` (persistente mesmo após apontar o probe pro documento
+    certo) — a nova regra do Firestore pra `users/{uid}/rewardsState/{stateId}` (ver entrada
+    anterior) só existe no arquivo `firestore.rules` do repositório; **precisa ser publicada** no
+    projeto Firebase de verdade (`firebase deploy --only firestore:rules`) pra valer — sem isso, o
+    Firestore nega por padrão qualquer acesso a um path sem regra explícita já em produção
+    (subcoleções não herdam a regra do documento pai automaticamente). Nenhuma mudança de código
+    corrige isto — é uma ação de deploy que só o usuário/dono do projeto deve confirmar.
+
+- 2026-07-27: **Bug real corrigido — `[DailyRewardsService] Falha ao sincronizar estado dos
+  resgates: Missing or insufficient permissions`** (reportado pelo usuário logo após a
+  implementação abaixo). Causa: `RefreshStatusAsync` mirava o probe de "hora do servidor"
+  (`FirestoreService.ReadServerNowAsync`) direto no documento `users/{uid}/rewardsState/diamonds`
+  — mas esse documento tem `allow write: if false` DE PROPÓSITO (protege os campos de período
+  contra um cliente malicioso), então a própria tentativa de gravar o campo descartável do probe
+  já era rejeitada, antes de chegar na leitura de período de verdade. Corrigido mirando o probe no
+  documento PRINCIPAL da conta (`users/{uid}`, já client-writable por outros fluxos como
+  coins/diamonds) — a leitura dos campos de período continua vindo do doc protegido, só o probe
+  muda de alvo. Bônus da mesma correção: `FirestoreService.ReadServerNowAsync` trocou
+  `UpdateAsync` por `SetAsync(..., MergeAll)` — `Update` falha com "not-found" se o documento
+  alvo ainda não existir (conta nova sem nenhuma escrita prévia em `users/{uid}`); `Set` com merge
+  cria o documento se faltar, sem mudar nada pro caso comum onde ele já existe — mais seguro pros
+  dois chamadores (`EnergyService` também usa este método).
+
+- 2026-07-27: **Resgates gratuitos de diamante — Diário/Semanal/Mensal (aba Diamantes da Loja)** —
+  pedido do usuário. 5 diamantes/dia (libera à meia-noite), 30/semana (toda segunda-feira), 100/mês
+  (todo dia 1º) — fuso ÚNICO/GLOBAL America/Sao_Paulo (Horário de Brasília) pra todo mundo,
+  independente de onde o jogador está.
+  - **100% server-authoritative** (mesma regra inegociável de "moeda premium nunca
+    client-writable", ARQUITETURA.md): 3 Cloud Functions novas (`claimDailyDiamonds`/
+    `claimWeeklyDiamonds`/`claimMonthlyDiamonds`, `functions/src/dailyDiamondRewards.ts`, núcleo
+    compartilhado `claimReward` parametrizado por tipo — mesmo espírito de `rerollShared.ts`).
+    Período calculado via `Intl.DateTimeFormat` com o timeZone IANA `America/Sao_Paulo` (não um
+    offset hardcoded — Brasil não observa horário de verão desde 2019, mas isso continua correto
+    de graça se essa política mudar de novo). Chave de período: dia = `YYYY-MM-DD`, mês =
+    `YYYY-MM`, semana = data da segunda-feira que iniciou aquela semana — muda exatamente no
+    instante de liberação de cada tipo.
+  - **Estado de período em documento SEPARADO** (`users/{uid}/rewardsState/diamonds`, regra nova
+    em `firestore.rules` — `allow read` do dono, `allow write: if false`, mesmo padrão já usado
+    por `casePurchases/{packageId}`): o doc `users/{uid}` principal aceita `allow read, write`
+    irrestrito do dono hoje (TODO de segurança pré-existente pra coins/diamonds/
+    nextCharacterPurchaseCount, ver `WalletService.cs`) — se os campos de período morassem lá, um
+    cliente malicioso poderia escrevê-los direto pra uma data antiga e resgatar de novo no mesmo
+    período, já que a function só valida contra o que estiver GRAVADO no documento.
+  - Cliente: `DailyRewardsService.cs` (novo) — `ClaimAsync(type)` chama a Cloud Function
+    certa e aplica o saldo já persistido; `RefreshStatusAsync(uid)` sincroniza
+    `PlayerEconomyState.*DiamondsAvailable`/`*NextResetUtc` a partir do Firestore, reaproveitando
+    o MESMO truque de "hora do servidor sem Cloud Function" que `EnergyService` já usava
+    (escrever um campo descartável com `FieldValue.ServerTimestamp` e ler de volta forçando
+    `Source.Server`) — extraído pra `FirestoreService.ReadServerNowAsync` (generalizado por
+    documento/campo) pra não duplicar a lógica de retry entre os dois serviços. Período/próximo
+    reset calculados client-side com um offset FIXO de UTC-3 (documentado no código o porquê:
+    Brasil sem DST hoje, e TimeZoneInfo teria IDs diferentes entre plataformas pro mesmo fuso
+    IANA) — só pra decidir o que MOSTRAR; a decisão de crédito de verdade sempre revalida no
+    servidor.
+  - UI (`ShopController`/`ShopCardUI`): 3 novos cards no topo da aba Diamantes ("Resgate Diário/
+    Semanal/Mensal"), botão "RESGATAR" (`ShopCardUI` ganhou um `buyLabel` customizável, era sempre
+    "COMPRAR") — disponível: ativo; já resgatado: desabilitado + contagem regressiva viva
+    (`CountdownLabel`, mesmo componente do timer de energia do Main Menu, reaproveitado em vez de
+    escrever um polling próprio — recalcula a partir do timestamp de servidor, nunca do relógio
+    do device) que se auto-corrige (re-sync + rebuild) assim que a contagem chega em zero.
+  - **Bolinha vermelha reaproveitando o indicador já existente** ("Chibers Aleatório", ver entrada
+    anterior) em vez de duplicar a lógica de exibição: `DailyRewardsService.AnyClaimAvailable`
+    (OR dos 3 tipos) aparece na aba DIAMANTES, em cada botão individual disponível, e é agregada
+    (OR) com `NextCharacterService.CanAffordNextPurchase()` no botão "LOJA" do Main Menu — o botão
+    Loja agora significa "tem algo pra ver/pegar na Loja" de forma geral, não só um card
+    específico. Reativo por reavaliação (recalculado a cada `RebuildGrid()`/`RefreshEconomyHuds()`
+    dentro de cada controller), não um evento de "sumir ao resgatar".
+  - Ver MONETIZACAO.md seção 15.
+- 2026-07-27: **Indicador de "compra disponível" (bolinha vermelha) + cards de personagem
+  renomeados pra "Chibers"** — pedido do usuário.
+  - Renomeados: "Próximo Personagem" → "Chibers Aleatório", "Personagem Raro" → "Chibers Raro",
+    "Personagem Legendary" → "Chibers Lendário", "Personagem Imortal" → "Chibers Imortal"
+    (`ShopController.BuildItemData`). Novas descrições nos 4 cards (raro/lendário/imortal:
+    "Sorteio garantido entre chibers X, sem repetição"; aleatório: odds reais das 5 raridades por
+    extenso). Texto de quantidade restante ("X/Y restantes") inalterado — vem de `ShopCardUI`,
+    independente do título/subtítulo.
+  - Bolinha vermelha aparece simultaneamente no botão "LOJA" do Main Menu, na aba PERSONAGENS da
+    Loja e no próprio card "Chibers Aleatório", sempre que o saldo de Coins já cobre o preço da
+    próxima compra — reativa (recalculada a cada mudança de saldo dentro de cada controller, não
+    um evento de "sumir ao comprar"). Tabela de preço/contador extraídos de `ShopController` pra
+    `NextCharacterService` (`PriceTable`/`NextPurchaseCost`/`CanAffordNextPurchase`), reaproveitados
+    tanto pela Loja quanto pelo Main Menu sem duplicar a tabela; `MainMenuController.
+    RefreshEconomyOnMenuLoad` passou a carregar `NextCharacterPurchaseCount` também (antes só a
+    Loja carregava). Ver MONETIZACAO.md seção 14.
+- 2026-07-27: **Contador de moeda adicionado ao header da Loja (`06_Loja`)**, à esquerda do
+  contador de diamante já existente — pedido do usuário pra dar pra conferir o saldo de moeda sem
+  sair da tela (a Loja só mostrava diamante até agora; o card "Próximo Personagem" já mostra o
+  PREÇO em moeda, mas não o SALDO). `ShopController.BuildCoinCounter` — mesmo estilo/tamanho do
+  `BuildDiamondCounter` (chip com ícone+valor, `UI/Economy/Coin`), sem o efeito de "voando"
+  (`FlyingDiamondIcon`) que o diamante tem, já que nada na Loja credita moeda com essa animação
+  hoje. Atualizado nos 3 pontos onde `PlayerEconomyState.Coins` muda dentro do controller: load
+  persistido do Firestore, botão DEV de teste (`#if UNITY_EDITOR`) e compra de "Próximo
+  Personagem".
+- 2026-07-27: **Cor de borda de tier de Skill/Arma/Pet unificada e realinhada à raridade de
+  personagem (cinza/verde/azul p/ T1/T2/T3, era bronze/prata/ouro)** — a mesma lógica de cor por
+  tier estava duplicada em 3 switches independentes (`CharacterPanel.TierColor`,
+  `ArsenalSlotUI.TierColor`, `CharacterUnlockRevealPanel.TierColor`); centralizada num único
+  método novo, `UITheme.TierColor(int tier)` (T1→`rarityNormal`, T2→`rarityUncommon`,
+  T3→`rarityRare`, mesmos tokens já usados na raridade de `PlayerProfile`), com os 3 consumidores
+  agora só delegando pra ele. T4/T5 (Legendary/Imortal, laranja/vermelho) reservados pra quando
+  essas evoluções existirem de verdade — bastará adicionar `case 4`/`case 5` só nesse método.
+  `tierBronze`/`tierSilver`/`tierGold` (`UITheme`) não foram removidos — continuam em uso pra cor
+  da tag `WeaponType.Heavy` no popup de detalhe de arma, um uso independente da borda de tier.
+  Aplicado em todos os locais que mostram essa borda: Main Menu/Chibers/`02_SelectCharacter`,
+  botão Arsenal, reveal de case-opening/Renascimento e — novo, essa tela nunca teve indicação de
+  tier nenhuma antes — a tela de escolha de skill/arma/pet no level-up
+  (`CombatResultPanel.MakeLevelUpCard`, ganhou uma borda colorida atrás do ícone, ausente pra
+  cartas de Atributo).
+- 2026-07-27: **Feature antiga "Resetar Personagem" removida por completo** — o "Renascimento"
+  (2026-07-26) tornou-a obsoleta, cobrindo o mesmo papel em todos os aspectos (reset pro Level 1 +
+  crédito de moeda), com a vantagem de também conceder skills/armas/pets pela raridade. Removidos:
+  o botão de UI, `CharacterPanel.OnResetCharacterClicked`/`ShowResetConfirmPopup`/`ExecuteReset`, e
+  o ScriptableObject/asset `CharacterResetSettings` (`Assets/ScriptableObjects/
+  CharacterResetSettings.cs` + `Assets/Resources/CharacterResetSettings.asset`). O botão
+  "Renascimento" não reaproveitava nenhum código exclusivo da feature antiga (fluxos
+  independentes desde o início — a antiga era 100% client-side, a nova é server-authoritative via
+  Cloud Function), então nada precisou ser extraído antes de deletar.
+
 - 2026-07-27: **Bug visual corrigido — giro da roleta (`CaseOpeningPopup`) saía com raridade
   homogênea** (ex: giro inteiro só Normal ou só Imortal), reportado pelo usuário depois de
   confirmar que o sorteio do PRÊMIO em si estava correto (68/20/8/3.5/0.5%, ver entrada anterior).

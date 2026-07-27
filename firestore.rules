@@ -79,6 +79,22 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == uid;
         allow write: if false;
       }
+
+      // Estado dos resgates gratuitos de diamante — Diário/Semanal/Mensal (2026-07-27), mesmo
+      // padrão de casePurchases acima: só as Cloud Functions claimDailyDiamonds/
+      // claimWeeklyDiamonds/claimMonthlyDiamonds (Admin SDK) escrevem aqui, o client só LÊ pra
+      // decidir o que mostrar (botão habilitado/contagem regressiva). Documento SEPARADO do
+      // `users/{uid}` principal DE PROPÓSITO: aquele doc aceita `allow read, write` irrestrito do
+      // dono (regra na linha 12 acima, TODO de segurança pré-existente pra coins/diamonds/
+      // nextCharacterPurchaseCount — ver WalletService.cs) — se os campos de período
+      // (dailyLastPeriod/weeklyLastPeriod/monthlyLastPeriod) morassem lá, um cliente malicioso
+      // poderia escrevê-los direto pra uma data antiga e resgatar de novo no mesmo período, já
+      // que a Cloud Function só valida contra o que estiver GRAVADO no documento (não tem como
+      // ela sozinha impedir a escrita, se a escrita em si já for permitida pela regra).
+      match /rewardsState/{stateId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
     }
 
     // opponents_index (Fatia 5, implementado em 2026-07-15; lido pela busca de adversário na

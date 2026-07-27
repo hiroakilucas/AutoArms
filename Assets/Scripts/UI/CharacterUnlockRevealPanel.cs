@@ -102,7 +102,7 @@ public class CharacterUnlockRevealPanel : MonoBehaviour
         ibRt.sizeDelta = new Vector2(IconSize + 14f, IconSize + 14f);
         ibRt.anchoredPosition = new Vector2(0f, 130f);
         iconBorder = iconBorderGo.AddComponent<Image>();
-        iconBorder.sprite = UIShapeUtil.RoundedRect(theme.tierBronze, 12f);
+        iconBorder.sprite = UIShapeUtil.RoundedRect(theme.TierColor(1), 12f);
         iconBorder.type = Image.Type.Sliced;
 
         var iconGo = new GameObject("Icon");
@@ -122,7 +122,7 @@ public class CharacterUnlockRevealPanel : MonoBehaviour
         nameTxt.alignment = TextAlignmentOptions.Center;
         nameTxt.fontStyle = FontStyles.Bold;
 
-        tierTxt = MakeLabel(cardGo.transform, new Vector2(0f, -40f), CardWidth - 40f, 26f, 18, theme.tierBronze);
+        tierTxt = MakeLabel(cardGo.transform, new Vector2(0f, -40f), CardWidth - 40f, 26f, 18, theme.TierColor(1));
         tierTxt.alignment = TextAlignmentOptions.Center;
         tierTxt.fontStyle = FontStyles.Bold;
 
@@ -304,12 +304,8 @@ public class CharacterUnlockRevealPanel : MonoBehaviour
         SetBusy(false);
     }
 
-    private Color TierColor(int tier) => tier switch
-    {
-        1 => theme.tierBronze,
-        2 => theme.tierSilver,
-        _ => theme.tierGold,
-    };
+    // Delegado a UITheme.TierColor (2026-07-27) — mesma cor por tier de qualquer outra tela.
+    private Color TierColor(int tier) => theme.TierColor(tier);
 
     public void Hide()
     {

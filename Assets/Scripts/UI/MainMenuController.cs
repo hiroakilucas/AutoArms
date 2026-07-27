@@ -22,6 +22,16 @@ public class MainMenuController : MonoBehaviour
     // mobile, ícone+fonte dobrados). Independente do CharacterPanel agora — ver BuildCurrencyHud.
     private TMP_Text _hudCoinText, _hudDiamondText;
 
+    // Bolinha vermelha de "algo disponível" no botão LOJA (2026-07-27, pedido do usuário) —
+    // agrega os DOIS indicadores que já existem dentro da Loja: "Chibers Aleatório" afordável
+    // (`NextCharacterService.CanAffordNextPurchase`, aba PERSONAGENS) OU qualquer um dos 3
+    // resgates gratuitos de diamante disponível (`DailyRewardsService.AnyClaimAvailable`, aba
+    // DIAMANTES) — reavaliada em `RefreshEconomyHuds()` (chamada sempre que a economia é
+    // recarregada nesta tela). Precisa de `PlayerEconomyState.NextCharacterPurchaseCount`/estado
+    // de resgates carregados também (só a Loja carregava isso antes) — ver
+    // `RefreshEconomyOnMenuLoad`.
+    private GameObject _lojaBadgeGo;
+
     // Exposto pra MainMenuCharacterPreview conseguir buscar o UITheme via FindObjectOfType,
     // sem precisar de um campo [SerializeField] próprio — ver comentário em
     // MainMenuCharacterPreview.ResolveTheme() pra motivo (campo próprio já quebrou 2x, sempre
@@ -221,11 +231,24 @@ public class MainMenuController : MonoBehaviour
         // LoadEconomyRoutine: sem isto, quem abre 01_MainMenu direto no Editor (sem passar por
         // 00_Login) nunca carrega desbloqueios/passe/progressão nenhuma vez na sessão.
         Task shopStateTask = ShopStateService.LoadAsync(uid);
-        await Task.WhenAll(walletTask, energyTask, shopStateTask);
+        // Bolinha vermelha do botão LOJA (2026-07-27) — precisa do MESMO contador persistido que
+        // a Loja usa pra calcular o preço da próxima compra de "Chibers Aleatório"
+        // (NextCharacterService.CanAffordNextPurchase); antes só ShopController.
+        // LoadPersistedShopStateAsync carregava isto, então PlayerEconomyState.
+        // NextCharacterPurchaseCount ficava parado no valor da última visita à Loja (ou 0, se
+        // nunca visitada nesta sessão) enquanto o jogador estava no Main Menu.
+        Task<int> nextCharacterCountTask = WalletService.LoadNextCharacterPurchaseCountAsync(uid);
+        // Mesma bolinha do botão LOJA, agora agregando os resgates gratuitos de diamante
+        // (2026-07-27) — DailyRewardsService.RefreshStatusAsync sincroniza PlayerEconomyState.
+        // *DiamondsAvailable/*NextResetUtc a partir do servidor, mesmo padrão do resto deste
+        // método (nunca o relógio local).
+        Task dailyRewardsTask = DailyRewardsService.RefreshStatusAsync(uid);
+        await Task.WhenAll(walletTask, energyTask, shopStateTask, nextCharacterCountTask, dailyRewardsTask);
 
         var (coins, diamonds) = walletTask.Result;
         var (energyCurrent, energyMax) = energyTask.Result;
         PlayerEconomyState.Set(coins, diamonds, energyCurrent, energyMax);
+        PlayerEconomyState.NextCharacterPurchaseCount = nextCharacterCountTask.Result;
 
         RefreshEconomyHuds();
     }
@@ -427,6 +450,28 @@ public class MainMenuController : MonoBehaviour
         labelTxt.ForceMeshUpdate();
 
         btnGo.AddComponent<UIButtonShadowStyle>();
+
+        _lojaBadgeGo = BuildAvailableBadge(btnGo.transform);
+    }
+
+    // Bolinha vermelha reutilizável (2026-07-27) — mesmo círculo/estilo do badge equivalente em
+    // `ShopController.BuildAvailableBadge` (`UIShapeUtil.RoundedRect` com raio = metade do lado),
+    // sem componente compartilhado entre as duas classes só por isso (cena/GameObject diferentes).
+    // Começa inativo — `RefreshEconomyHuds` decide quando ativar, a partir do saldo real.
+    private GameObject BuildAvailableBadge(Transform parent)
+    {
+        var badgeGo = new GameObject("AvailableBadge");
+        badgeGo.transform.SetParent(parent, false);
+        var rt = badgeGo.AddComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.sizeDelta = new Vector2(28f, 28f);
+        rt.anchoredPosition = new Vector2(-8f, -8f);
+        var img = badgeGo.AddComponent<Image>();
+        img.sprite = UIShapeUtil.RoundedRect(theme.danger, 14f);
+        img.raycastTarget = false;
+        badgeGo.SetActive(false);
+        return badgeGo;
     }
 
     // Fase 1 (placeholder) da Loja — cena 06_Loja, ver ShopController.cs/MONETIZACAO.md.
@@ -659,6 +704,12 @@ public class MainMenuController : MonoBehaviour
     {
         if (_hudCoinText != null) _hudCoinText.text = PlayerEconomyState.Coins.ToString();
         if (_hudDiamondText != null) _hudDiamondText.text = PlayerEconomyState.Diamonds.ToString();
+        // Agregado (2026-07-27) — "algo pra ver na Loja", não só "Chibers Aleatório": Chibers
+        // Aleatório afordável OU qualquer um dos 3 resgates gratuitos de diamante disponível. Os
+        // dois lados já centralizam a própria disponibilidade (NextCharacterService/
+        // DailyRewardsService) — este OR não duplica nenhum cálculo, só combina os dois.
+        if (_lojaBadgeGo != null)
+            _lojaBadgeGo.SetActive(NextCharacterService.CanAffordNextPurchase() || DailyRewardsService.AnyClaimAvailable);
 
         var preview = FindObjectOfType<MainMenuCharacterPreview>();
         if (preview != null) preview.RefreshEnergyHud();

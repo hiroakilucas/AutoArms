@@ -12,6 +12,28 @@ using UnityEngine;
 // partir do contador persistido do jogador) e aplica o resultado que o servidor decidiu.
 public static class NextCharacterService
 {
+    // Tabela de preço (Coins) da N-ésima compra de "Chibers Aleatório" (unlockNumber 1-based) —
+    // extraída de ShopController (2026-07-27, era `CharacterSlotPriceTable`/`CharacterSlotCost`
+    // privados de lá) pra ser reaproveitada também pelo indicador de "compra disponível" (bolinha
+    // vermelha, ver CLAUDE.md) do botão Loja no Main Menu — sem essa extração, o Main Menu
+    // precisaria duplicar a tabela pra saber o preço da próxima compra. Só pra EXIBIÇÃO — o preço
+    // real/cobrança sempre é decidido em purchaseNextCharacter.ts (PRICE_TABLE lá), mantida em
+    // sincronia manual com esta.
+    public static readonly int[] PriceTable = { 25, 50, 100, 200, 400, 800, 1200, 1400, 1600, 1800, 2000, 2200 };
+    private const int PriceStepAfterTable = 200;
+
+    public static int NextPurchaseCost(int unlockNumber) => unlockNumber <= PriceTable.Length
+        ? PriceTable[unlockNumber - 1]
+        : PriceTable[PriceTable.Length - 1] + PriceStepAfterTable * (unlockNumber - PriceTable.Length);
+
+    // Bolinha vermelha de "compra disponível" (2026-07-27, pedido do usuário) — verdadeiro quando
+    // `PlayerEconomyState.Coins` (mesmo campo lido por qualquer outro HUD de moeda do jogo, nunca
+    // recalculado de forma independente) já cobre o preço da PRÓXIMA compra. Lida diretamente do
+    // canal estático em vez de receber parâmetro — mesmo padrão de leitura síncrona já usado por
+    // CharacterPanel/MainMenuCharacterPreview pra desenhar HUD a partir de PlayerEconomyState.
+    public static bool CanAffordNextPurchase() =>
+        PlayerEconomyState.Coins >= NextPurchaseCost(PlayerEconomyState.NextCharacterPurchaseCount + 1);
+
     // Mesma região das outras Cloud Functions do projeto.
     private const string FunctionsRegion = "southamerica-east1";
 

@@ -63,4 +63,23 @@ public class UITheme : ScriptableObject
             default: return rarityNormal;
         }
     }
+
+    // Cor de borda por tier de Skill/Arma/Pet (T1/T2/T3) — fonte única, centralizada aqui
+    // (2026-07-27) porque a mesma lógica estava duplicada em 3 lugares (CharacterPanel.TierColor,
+    // ArsenalSlotUI.TierColor, CharacterUnlockRevealPanel.TierColor), cada um com seu próprio
+    // switch. Alinhada à mesma progressão de cor da raridade de personagem (cinza/verde/azul, ver
+    // MONETIZACAO.md seção 8) em vez do antigo bronze/prata/ouro (`tierBronze`/`tierSilver`/
+    // `tierGold` continuam existindo só para a cor de tag de `WeaponType`, ver `CharacterPanel.
+    // TypeColor` — usos independentes, não são mais lidos para borda de tier). T4/T5 (Legendary/
+    // Imortal, laranja/vermelho) reservados para quando essas evoluções existirem de verdade —
+    // adicionar `case 4`/`case 5` aqui quando chegar a hora, sem precisar tocar nos consumidores.
+    public Color TierColor(int tier)
+    {
+        switch (tier)
+        {
+            case 1: return rarityNormal;
+            case 2: return rarityUncommon;
+            default: return rarityRare;
+        }
+    }
 }

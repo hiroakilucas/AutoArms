@@ -48,6 +48,46 @@ public static class PlayerEconomyState
     // cada carregamento de cena.
     public static int NextCharacterPurchaseCount;
 
+    // Resgates gratuitos de diamante (Diário/Semanal/Mensal, aba Diamantes da Loja, 2026-07-27) —
+    // espelham `users/{uid}/rewardsState/diamonds` (populado por `DailyRewardsService.
+    // RefreshStatusAsync`, mesmo espírito de `NextCharacterPurchaseCount`/campos de energia acima:
+    // cache em memória de sessão, nunca a fonte de verdade — a decisão real de crédito é sempre
+    // revalidada no servidor via Cloud Function no momento do resgate). `*NextResetUtc` alimenta a
+    // contagem regressiva local (`FormatCountdownUntil` abaixo) entre uma sincronização e outra.
+    public static bool DailyDiamondsAvailable;
+    public static DateTime DailyDiamondsNextResetUtc;
+    public static bool WeeklyDiamondsAvailable;
+    public static DateTime WeeklyDiamondsNextResetUtc;
+    public static bool MonthlyDiamondsAvailable;
+    public static DateTime MonthlyDiamondsNextResetUtc;
+
+    // Formatador genérico de contagem regressiva (2026-07-27, extraído do espírito de
+    // FormatEnergyCountdown pra não depender de campos específicos de energia) — usado pelos 3
+    // timers de resgate de diamante (Semanal/Mensal passam a maior parte do tempo com dias de
+    // sobra; H:MM:SS direto ficava ilegível tipo "144:00:00"). "Disponível agora" quando o alvo
+    // já passou (em vez de deixar o timer virar negativo/travar em 0:00:00 — aqui não existe um
+    // "onDone" equivalente ao de energia, o botão já reabilita sozinho na próxima
+    // RefreshStatusAsync, mas o texto não deve parecer travado até lá).
+    //
+    // >= 1 dia de sobra: mostra em dias ("N dias"/"1 dia", arredondado pra CIMA — pedido do
+    // usuário: "converta essas horas em dias"). < 1 dia: volta pro H:MM:SS de sempre ("quando
+    // faltar um dia você coloca as horas") — só nesse trecho final é que a contagem precisa ser
+    // precisa ao segundo; em dias, arredondar pra cima é suficiente e mais legível.
+    public static string FormatCountdownUntil(DateTime targetUtc)
+    {
+        TimeSpan remaining = targetUtc - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero) return "Disponível agora";
+
+        if (remaining.TotalDays >= 1)
+        {
+            int days = (int)Math.Ceiling(remaining.TotalDays);
+            return days == 1 ? "1 dia" : $"{days} dias";
+        }
+
+        int totalHours = (int)remaining.TotalHours;
+        return $"{totalHours}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
+    }
+
     public static void Set(int coins, int diamonds, int energyCurrent, int energyMax)
     {
         Coins = coins;

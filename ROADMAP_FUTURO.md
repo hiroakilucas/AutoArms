@@ -25,9 +25,11 @@
   zera a cada level-up novo (implícito — é estado local de `ShowLevelUpChoice`, não sobrevive entre
   chamadas), como pedido.
 - [ ] **Reset de Build**: o jogador pode pagar diamantes para resetar todos os atributos e skills ganhos por level up, voltando aos stats base do nível atual e redistribuindo os pontos manualmente. Custo fixo alto ou progressivo por nível. Permite experimentar builds diferentes sem criar um novo personagem.
-  - **Ainda não implementado** — não confundir com "Resetar Personagem" (`CharacterPanel`,
-    2026-07-21), um mecanismo PARALELO/diferente: reseta pro Level 1 (não mantém o nível atual) e
-    GERA moeda (não custa diamante). Este item de Reset de Build continua em aberto.
+  - **Ainda não implementado** — não confundir com "Renascimento" (`CharacterPanel`, ver
+    CLAUDE.md), um mecanismo PARALELO/diferente: reseta pro Level 1 (não mantém o nível atual),
+    CREDITA moeda (não custa diamante) e concede itens novos pela raridade. Este item de Reset de
+    Build continua em aberto (o antigo "Resetar Personagem", que também mantinha essa mesma
+    distinção, foi removido em 2026-07-27 — Renascimento cobre o mesmo papel).
 - [ ] **Personagens/skins desbloqueáveis por passe ou compra**: além de comprar personagens direto com diamante (já listado acima), passes/pacotes podem liberar novos personagens ou skins de personagem. Diferente de uma skin puramente visual, cada um desses pode conceder **status iniciais a mais** (HP/STR/AGI/SPD acima do roll aleatório padrão de level 1) ou **skills iniciais a mais** (1+ skill já equipada desde o level 1, sem precisar tirar no level-up) — vantagem real de progressão, não só cosmética.
   - **Skill/arma específica com nível (1, 2 ou 3)**: o bônus de skill ou arma inicial não é só "tem ou não tem" — vem num **nível** (1/2/3), onde nível maior = versão mais forte da mesma skill/arma (precisa definir a escala numérica de cada nível, ex: nível 1 = valor atual da skill, nível 2 = +50%, nível 3 = dobro — só um exemplo, não decidido). Tanto a **chance de nascer com skill/arma específica** quanto o **nível sorteado** dependem da **raridade do personagem**, que por sua vez é ligada à dificuldade/forma de obtenção (comprado direto com diamante = raridade mais baixa, chance baixa de bônus e tende a nível 1; só obtido via pacote/passe/evento especial ou conquista difícil = raridade mais alta, chance maior de vir com skill/arma específica e mais chance de nível 2-3). Precisa definir: tabela de raridades (quantos tiers, nomes), probabilidades por raridade, e a escala de poder de cada nível.
 - [ ] **Passe Diário A — Diamantes + libera 2x** (30 dias): recompensa diária de diamantes por logar/jogar; durante a vigência do passe, libera o botão de velocidade 2x no `CombatHUD` (hoje sempre disponível pra todo mundo — passa a ser um benefício exclusivo de quem tem o passe ativo, ou currently-free pode virar gratuito só até essa monetização entrar).

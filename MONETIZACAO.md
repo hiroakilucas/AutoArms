@@ -61,12 +61,16 @@ daquela raridade — considerando toda a coleção do jogador (não só compras
 desse gacha), incluindo personagens obtidos por level up normal, evento ou
 passe.
 
-## 6. Moeda (soft currency) — "Próximo Personagem" (compra real, 2026-07-26)
+## 6. Moeda (soft currency) — "Chibers Aleatório" (compra real, 2026-07-26; renomeado de "Próximo
+Personagem" em 2026-07-27, junto com os 3 cards cash da seção 5: "Personagem Raro/Legendary/
+Imortal" → "Chibers Raro/Lendário/Imortal")
 Substitui "Case Geral" (diamante, seção 13 antiga) — mesmo sorteio ponderado de raridade (seção
 7 abaixo), mesma regra de não-repetição da seção 5, mas pago em Coins com preço escalando por um
 contador PERSISTIDO por jogador (`users/{uid}.nextCharacterPurchaseCount`, Cloud Function
 `purchaseNextCharacter`) em vez de preço fixo por pacote. Tabela FINAL (substitui a antiga
-100/200/400/600/800/1000/+400):
+100/200/400/600/800/1000/+400) — espelhada no cliente em `NextCharacterService.PriceTable`
+(extraída de `ShopController` em 2026-07-27 pra ser reaproveitada pelo indicador da seção 14
+abaixo):
 | Compra | Custo (moeda) | | Compra | Custo (moeda) |
 |---|---|---|---|---|
 | 1ª | 25 | | 7ª | 1200 |
@@ -96,10 +100,16 @@ contador PERSISTIDO por jogador (`users/{uid}.nextCharacterPurchaseCount`, Cloud
 | Legendary | Laranja |
 | Imortal | Vermelho |
 
-Nota para o futuro (não implementar agora): alinhar cor de tier de arma/pet
-à mesma progressão — T1 cinza, T2 verde, T3 azul — deixando espaço para
-T4/T5 (laranja/vermelho). Substitui bronze/prata/ouro do Arsenal quando
-essa migração for priorizada.
+**Cor de tier de skill/arma/pet alinhada a esta mesma progressão desde 2026-07-27** —
+`UITheme.TierColor(int tier)` (T1 cinza/`rarityNormal`, T2 verde/`rarityUncommon`, T3 azul/
+`rarityRare`) substituiu o antigo bronze/prata/ouro em todos os locais que mostram essa borda:
+Main Menu/Chibers/02_SelectCharacter (`CharacterPanel`), botão Arsenal (`ArsenalSlotUI`), tela de
+escolha de skill no level-up (`CombatResultPanel.MakeLevelUpCard`, borda nova — não existia
+nenhuma antes) e o reveal de case-opening/Renascimento (`CharacterUnlockRevealPanel`). T4/T5
+(Legendary/Imortal, laranja/vermelho) continuam reservados pra quando essas evoluções existirem
+de verdade — `tierBronze`/`tierSilver`/`tierGold` (`UITheme`) não foram removidos, só pararam de
+ser lidos pra essa borda (ainda usados pela cor de tag de `WeaponType.Heavy` no popup de detalhe
+de arma, ver `CharacterPanel.TypeColor`).
 
 ## 9. Estrutura da tela de loja (UI)
 5 abas: Diamantes · Desbloqueios · Passes · Progressão · Personagens
@@ -128,13 +138,14 @@ Implementado 2026-07-21 (`CombatResultPanel.ShowLevelUpChoice`) — desenho fina
 sorteio novo = 50 diamantes, 2º = 100, 3º = 200), travado depois do 3º uso por level-up, em vez de
 dobrar indefinidamente. Refaz as N caixas do level-up (não só 2) com a mesma roleta de revelação.
 
-## 12. Resetar Personagem (gera moeda — não é o "Reset de Build" do roadmap)
+## 12. Resetar Personagem — REMOVIDO (2026-07-27), substituído por Renascimento
 
-Implementado 2026-07-21 (`CharacterPanel`, botão no painel de detalhamento) — mecanismo PARALELO
-ao "Reset de Build" ainda não implementado (`ROADMAP_FUTURO.md` Fase 4): reseta o personagem pro
-Level 1 (não mantém o nível atual) e GERA `nível anterior × CharacterResetSettings.coinsPerLevel`
-(10) moedas, em vez de custar diamante. Popup de confirmação explícita antes de executar (ação
-destrutiva).
+Implementado 2026-07-21, removido por completo 2026-07-27 — o "Renascimento" (Reset Nível 10+,
+ver `CharacterPanel`/CLAUDE.md) tornou esta feature obsoleta: cobre o mesmo papel (reset pro
+Level 1 + crédito de moeda) em todos os aspectos, com a vantagem de também conceder skills/armas/
+pets pela raridade do personagem. `CharacterResetSettings` (ScriptableObject/asset) foi removido
+junto. Ainda não confundir com "Reset de Build" (`ROADMAP_FUTURO.md` Fase 4, continua em aberto —
+mantém o nível atual e custa diamante, diferente do Renascimento).
 
 ## 13. Case opening (compra de personagens, cash + moeda) — implementado 2026-07-23
 
@@ -148,7 +159,8 @@ servidor). Ver `ARQUITETURA.md` ("Modelo de roster multi-personagem") pro desenh
   concede um documento novo em `users/{uid}/characters`. Limite de compras (10/3/1) continua **por
   jogador** (`users/{uid}/casePurchases/{packageId}`), não um estoque global.
 - **"Case Geral" (4º pacote, moeda/diamante, `case_moeda_geral`) foi REMOVIDO em 2026-07-26** —
-  substituído por "Próximo Personagem" (seção 6), que passou a fazer o MESMO sorteio ponderado
+  substituído por "Chibers Aleatório" (seção 6, nome atual — era "Próximo Personagem"), que
+  passou a fazer o MESMO sorteio ponderado
   entre as 5 raridades (`rollWeightedPool`/`DEFAULT_TIER_WEIGHTS`, extraído pra
   `functions/src/caseRoll.ts` e reaproveitado por `purchaseCase.ts`/`purchaseNextCharacter.ts`
   sem duplicar), só que pago em Coins com preço por contador-do-jogador em vez de diamante a
@@ -185,6 +197,87 @@ servidor). Ver `ARQUITETURA.md` ("Modelo de roster multi-personagem") pro desenh
   refresh sem tocar no personagem de verdade. Botão de refresh some quando os 2 usos acabam, ou
   fica desabilitado (com aviso de saldo insuficiente) sem travar o fluxo. Ver
   `UnlockRerollService.cs`/`functions/src/rerollUnlock.ts`.
+
+## 14. Indicador de "compra disponível" (bolinha vermelha) — implementado 2026-07-27
+
+Puramente visual/client-side (sem Cloud Function nova) — aparece simultaneamente em 3 lugares
+sempre que `PlayerEconomyState.Coins >= NextCharacterService.NextPurchaseCost(NextCharacterPurchaseCount + 1)`
+(mesmo contador/tabela da seção 6, `NextCharacterService.CanAffordNextPurchase()`, extraído de
+`ShopController` pra ser lido também pelo Main Menu): botão "LOJA" do Main Menu
+(`MainMenuController.BuildAvailableBadge`), aba PERSONAGENS da Loja e o próprio card "Chibers
+Aleatório" (`ShopController.BuildAvailableBadge`/`_personagensTabBadge`, ambos reavaliados a cada
+`RebuildGrid()`). Reativo por reavaliação (recalculado toda vez que `PlayerEconomyState.Coins`
+muda dentro de cada controller), não por um evento único de "sumir ao comprar" — some sozinho se
+o saldo cair abaixo do preço, não só quando a compra acontece. Lê sempre o mesmo canal estático
+já populado por leituras reais do Firestore (`WalletService`/`PlayerEconomyState`), nunca um
+saldo recalculado à parte — `MainMenuController.RefreshEconomyOnMenuLoad` passou a carregar
+também `NextCharacterPurchaseCount` (antes só a Loja carregava isso).
+
+**Atualização (2026-07-27, mesmo dia — resgates de diamante, seção 15 abaixo)**: o botão "LOJA"
+passou a agregar (OR) este indicador com `DailyRewardsService.AnyClaimAvailable` — significa
+"tem algo pra ver/pegar na Loja" de forma geral, não só o card específico desta seção. A aba
+PERSONAGENS e o card "Chibers Aleatório" continuam isolados (só este indicador); a aba DIAMANTES
+ganhou o PRÓPRIO indicador equivalente, isolado ao dela (ver seção 15) — o padrão/mecanismo é o
+mesmo, reaproveitado em vez de duplicado, mas cada aba mostra só a própria condição.
+
+## 15. Resgates gratuitos de diamante — Diário/Semanal/Mensal (aba Diamantes) — implementado 2026-07-27
+
+Pedido do usuário — 3 cards no topo da aba Diamantes, antes dos 8 pacotes pagos.
+
+| Tipo | Recompensa | Libera |
+|---|---|---|
+| Diário | 5 diamantes | Toda meia-noite (00:00) |
+| Semanal | 30 diamantes | Toda segunda-feira (00:00) |
+| Mensal | 100 diamantes | Todo dia 1º do mês (00:00) |
+
+**Fuso horário ÚNICO/GLOBAL: America/Sao_Paulo (Horário de Brasília)**, independente de onde o
+jogador está fisicamente. Calculado no servidor via `Intl.DateTimeFormat` com o timeZone IANA
+(não um offset hardcoded) — Brasil não observa horário de verão desde 2019, mas isso continua
+correto de graça se essa política mudar de novo.
+
+**100% server-authoritative** (mesma regra inegociável de "moeda premium", ver ARQUITETURA.md) —
+3 Cloud Functions (`claimDailyDiamonds`/`claimWeeklyDiamonds`/`claimMonthlyDiamonds`,
+`functions/src/dailyDiamondRewards.ts`, núcleo compartilhado `claimReward` parametrizado por
+tipo, mesmo espírito de `rerollShared.ts`) validam server-side, contra o timestamp do PRÓPRIO
+servidor de Cloud Functions (não precisa do truque de round-trip via Firestore que o client usa —
+a function já roda no servidor), se o jogador já resgatou dentro do período atual antes de
+creditar. Nunca credita diamante direto pelo cliente.
+
+**Estado de período em documento separado** — `users/{uid}/rewardsState/diamonds`
+(`dailyLastPeriod`/`weeklyLastPeriod`/`monthlyLastPeriod`), com regra própria no
+`firestore.rules` (`allow read` do dono, `allow write: if false`, mesmo padrão de
+`casePurchases/{packageId}`). Deliberadamente SEPARADO do `users/{uid}` principal — aquele doc
+aceita `allow read, write` irrestrito do dono hoje (TODO de segurança pré-existente pra
+coins/diamonds/nextCharacterPurchaseCount, ver `WalletService.cs`); se os campos de período
+morassem lá, um cliente malicioso poderia escrevê-los direto pra uma data antiga e resgatar de
+novo no mesmo dia/semana/mês, já que a Cloud Function só valida contra o que estiver GRAVADO no
+documento (protegê-la sozinha não bastaria se o dado que ela consulta pudesse ser forjado).
+
+**Cliente** (`DailyRewardsService.cs`): `ClaimAsync(type)` chama a Cloud Function certa e aplica
+o saldo já persistido (nunca `WalletService.AddDiamondsAsync`, que é o caminho client-writable de
+outros fluxos). `RefreshStatusAsync(uid)` sincroniza `PlayerEconomyState.*DiamondsAvailable`/
+`*NextResetUtc` a partir do Firestore — reaproveita o MESMO truque de "hora do servidor sem Cloud
+Function" que `EnergyService` já usava (campo descartável com `FieldValue.ServerTimestamp` +
+leitura forçando `Source.Server`), extraído pra `FirestoreService.ReadServerNowAsync`
+(generalizado por documento/campo, 2026-07-27) pra não duplicar a lógica de retry entre os dois.
+Período/próximo reset calculados client-side com offset FIXO de UTC-3 (documentado no código:
+Brasil sem DST hoje; `TimeZoneInfo` teria IDs diferentes entre plataformas pro mesmo fuso IANA,
+problema conhecido do Unity/mobile) — só pra decidir O QUE MOSTRAR (botão habilitado/contagem
+regressiva); a decisão de crédito de verdade sempre revalida contra o relógio real do servidor de
+Cloud Functions, então uma eventual divergência entre os dois cálculos nunca duplicaria uma
+recompensa, só mostraria o botão certo/errado por alguns instantes até a próxima sincronização.
+
+**UI**: botão "RESGATAR" (`ShopCardUI` ganhou um `buyLabel` customizável — era sempre "COMPRAR"
+hardcoded); disponível = ativo; já resgatado = desabilitado + contagem regressiva VIVA
+(`CountdownLabel`, mesmo componente do timer de energia do Main Menu — `StatusText` exposto em
+`ShopCardUI` só pra permitir anexar o componente por fora) que recalcula a partir do timestamp de
+servidor (nunca do relógio do device) e se auto-corrige (re-sync + `RebuildGrid`) assim que chega
+em zero, mesmo princípio de `PlayerEconomyState.EnergyCountdownAtZero`.
+
+**Indicador de bolinha vermelha**: reaproveita o padrão da seção 14 em vez de duplicar —
+`DailyRewardsService.AnyClaimAvailable` (OR dos 3 tipos) aparece na aba DIAMANTES e em cada botão
+individual disponível; agregado (OR) com `NextCharacterService.CanAffordNextPurchase()` no botão
+"LOJA" do Main Menu.
 
 ## Itens em aberto
 - ~~Definir se skip/1.5x/passe é debitado em diamante ou pago direto em cash~~ — resolvido: cash

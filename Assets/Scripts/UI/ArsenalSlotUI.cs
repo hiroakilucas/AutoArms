@@ -5,9 +5,9 @@ using UnityEngine.UI;
 // grade de ARMAS quanto pela de SKILLS em 03_Arsenal (ArsenalController) — evita duplicar a
 // lógica de borda/estado entre as duas grades. Construído 100% via código com
 // UIShapeUtil.RoundedRect (mesmo padrão de CharacterPanel/CharacterCardUI), sem depender de
-// prefab nem de sprites de borda prontos — bronze/prata/ouro são cor sólida via UITheme.tierBronze/
-// tierSilver/tierGold (mesmos tokens já usados no popup de detalhe de skill/arma do
-// CharacterPanel) até existir arte definitiva.
+// prefab nem de sprites de borda prontos — cinza/verde/azul (T1/T2/T3) são cor sólida via
+// UITheme.TierColor (2026-07-27, mesma fonte usada em qualquer outra tela) até existir arte
+// definitiva.
 public class ArsenalSlotUI : MonoBehaviour
 {
     public enum Tier { None, T1, T2, T3 }
@@ -112,11 +112,14 @@ public class ArsenalSlotUI : MonoBehaviour
         }
     }
 
+    // Delegado a UITheme.TierColor (2026-07-27, ver comentário lá) — mesma cor por tier de
+    // qualquer outra tela (cinza/verde/azul), em vez do bronze/prata/ouro próprio que este slot
+    // tinha antes. `Tier.None` continua com a cor neutra de "bloqueado" própria deste componente.
     private static Color TierColor(UITheme theme, Tier tier) => tier switch
     {
-        Tier.T1 => theme.tierBronze,
-        Tier.T2 => theme.tierSilver,
-        Tier.T3 => theme.tierGold,
+        Tier.T1 => theme.TierColor(1),
+        Tier.T2 => theme.TierColor(2),
+        Tier.T3 => theme.TierColor(3),
         _ => NoTierBorderColor,
     };
 }
